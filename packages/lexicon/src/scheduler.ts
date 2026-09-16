@@ -29,6 +29,13 @@ export function scheduleReview(current: StoredCardState, rating: ReviewRating, n
   return fromFsrsCard(next);
 }
 
+export function estimateRetention(cards: StoredCardState[], now: Date): number | null {
+  const reviewed = cards.filter((card) => card.state !== State.New);
+  if (reviewed.length === 0) return null;
+  const total = reviewed.reduce((sum, card) => sum + scheduler.get_retrievability(toFsrsCard(card), now, false), 0);
+  return total / reviewed.length;
+}
+
 function toFsrsCard(card: StoredCardState): Card {
   return {
     due: new Date(card.dueAt),

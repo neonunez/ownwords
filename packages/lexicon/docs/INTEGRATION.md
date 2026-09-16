@@ -69,3 +69,9 @@ Russian suggestions impossible at the integration boundary.
 same `(owner, equivalent, direction)` card. A rating of `Again` also creates a short, session-scoped revisit; later
 successful review completes it. Submission IDs are owner-scoped idempotency keys, and optimistic card revisions
 serialize concurrent reviews.
+
+`GET /progress?language=<tag>` returns one row per direction with `retention` and `nextDueAt`, never card counts.
+`retention` is the mean FSRS retrievability, at the injected clock's current time, of reviewed eligible cards; it is
+`null` when no eligible card in that direction has been reviewed, because new cards have no memory estimate.
+`nextDueAt` is the earliest due time of any eligible card, including new ones, so a past value means practice is due
+now; it is `null` when the direction has no eligible cards.

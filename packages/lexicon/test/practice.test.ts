@@ -249,15 +249,48 @@ describe('review idempotency, concurrency, history, and wrong-answer revisits', 
     assert.equal(secondBody.page.nextCursor, null);
   });
 
-  it('reports progress separately by language and direction', async () => {
+  it('reports FSRS retention and next due time separately by direction', async () => {
     const ctx = await context();
     await createVerifiedEntry(ctx);
     const app = appFor(ctx, 'user-a');
-    const response = await jsonRequest(app, '/api/v1/lexicon/progress?language=ru', {}, ctx.db);
-    assert.equal(response.status, 200);
-    const progress = (await response.json() as any).data;
-    assert.deepEqual(progress.map((item: any) => item.direction), ['recognize', 'produce']);
-    assert.deepEqual(progress.map((item: any) => item.total), [1, 1]);
-    assert.deepEqual(progress.map((item: any) => item.new), [1, 1]);
+    const progress = async (ownerApp = app): Promise<any[]> => {
+      const response = await jsonRequest(ownerApp, '/api/v1/lexicon/progress?language=ru', {}, ctx.db);
+      assert.equal(response.status, 200);
+      return (await response.json() as any).data;
+    };
+
+    const empty = await progress(appFor(ctx, 'user-b'));
+    assert.deepEqual(empty, [
+      { languageTag: 'ru', direction: 'recognize', retention: null, nextDueAt: null },
+      { languageTag: 'ru', direction: 'produce', retention: null, nextDueAt: null },
+    ]);
+
+    const created = ctx.clock.now().toISOString();
+    const unreviewed = await progress();
+    assert.deepEqual(unreviewed.map((item) => item.direction), ['recognize', 'produce']);
+    assert.deepEqual(unreviewed.map((item) => item.retention), [null, null]);
+    assert.deepEqual(unreviewed.map((item) => item.nextDueAt), [created, created]);
+    assert.equal(unreviewed.some((item) => 'total' in item || 'due' in item || 'new' in item), false);
+
+    const cardId = (await due(ctx, 'user-a', 'session-a')).data[0].card.id;
+    const review = await jsonRequest(
+      app,
+      '/api/v1/lexicon/practice/reviews',
+      { method: 'POST', json: { submissionId: 'progress-1', cardId, sessionId: 'session-a', rating: 3 } },
+      ctx.db,
+    );
+    assert.equal(review.status, 201);
+    const reviewedDueAt = (await review.json() as any).data.card.dueAt;
+
+    const fresh = await progress();
+    assert.equal(fresh[0].retention, null);
+    assert.equal(fresh[0].nextDueAt, created);
+    assert.equal(fresh[1].retention, 1);
+    assert.equal(fresh[1].nextDueAt, reviewedDueAt);
+
+    ctx.clock.advance(30 * 24 * 60 * 60 * 1000);
+    const later = await progress();
+    assert.ok(later[1].retention > 0 && later[1].retention < 1);
+    assert.equal(later[1].nextDueAt, reviewedDueAt);
   });
 });

@@ -3,7 +3,7 @@ import { all, changed, decodeJson, encodeJson, first, run } from './db.js';
 import { answersMatch, normalizeSearchText } from './normalize.js';
 import { cryptoIdGenerator, iso, systemClock } from './runtime.js';
 import { appendCardStatements, createEntry, isPracticeEligible } from './service.js';
-import { scheduleReview, type StoredCardState } from './scheduler.js';
+import { estimateRetention, scheduleReview, type StoredCardState } from './scheduler.js';
 import {
   DisabledTranslationProvider,
   ProviderDisabledError,
@@ -725,41 +725,35 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
   app.get('/progress', async (c) => {
     const ownerId = c.get('userId');
     const language = languageTag(new URL(c.req.url).searchParams.get('language'), 'language');
-    const now = iso(clock.now());
-    const rows = await all<{
-      direction: PracticeDirection;
-      total: number;
-      due: number;
-      new_count: number;
-      average_stability: number | null;
-    }>(
+    const now = clock.now();
+    const rows = await all<CardRow>(
       c.env.DB
         .prepare(
-          `SELECT p.direction, COUNT(*) AS total,
-                  SUM(CASE WHEN p.due_at <= ? THEN 1 ELSE 0 END) AS due,
-                  SUM(CASE WHEN p.reps = 0 THEN 1 ELSE 0 END) AS new_count,
-                  AVG(CASE WHEN p.reps > 0 THEN p.stability ELSE NULL END) AS average_stability
+          `SELECT p.id, p.equivalent_id, p.language_tag, p.direction, p.due_at, p.stability,
+                  p.difficulty, p.elapsed_days, p.scheduled_days, p.learning_steps, p.reps,
+                  p.lapses, p.state, p.last_review_at, p.revision
              FROM lexicon_practice_cards p
              JOIN lexicon_equivalents q ON q.id = p.equivalent_id AND q.owner_id = p.owner_id
              JOIN lexicon_senses s ON s.id = q.sense_id AND s.owner_id = q.owner_id
              JOIN lexicon_entries e ON e.id = s.entry_id AND e.owner_id = s.owner_id
             WHERE p.owner_id = ? AND p.language_tag = ?
               AND q.status IN ('confirmed', 'manual') AND q.fit <> 'false_friend'
-              AND q.deleted_at IS NULL AND s.deleted_at IS NULL AND e.deleted_at IS NULL
-            GROUP BY p.direction ORDER BY p.direction`,
+              AND q.deleted_at IS NULL AND s.deleted_at IS NULL AND e.deleted_at IS NULL`,
         )
-        .bind(now, ownerId, language),
+        .bind(ownerId, language),
     );
     return c.json({
       data: directions.map((direction) => {
-        const row = rows.find((item) => item.direction === direction);
+        const cards = rows.filter((row) => row.direction === direction).map(toStoredCard);
+        const nextDueAt = cards.reduce<string | null>(
+          (earliest, card) => (earliest === null || card.dueAt < earliest ? card.dueAt : earliest),
+          null,
+        );
         return {
           languageTag: language,
           direction,
-          total: row?.total ?? 0,
-          due: row?.due ?? 0,
-          new: row?.new_count ?? 0,
-          averageStabilityDays: row?.average_stability ?? null,
+          retention: estimateRetention(cards, now),
+          nextDueAt,
         };
       }),
     });
