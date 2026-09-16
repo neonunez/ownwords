@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "ownwords-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "BETTER_AUTH_URL": "https://app.example.com",
+    "TRUSTED_ORIGINS": "https://app.example.com",
+    "PASSKEY_RP_ID": "app.example.com",
+    "PASSKEY_RP_ORIGIN": "https://app.example.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ownwords-production",
+      "database_id": "replace-with-the-production-d1-id",
+      "migrations_dir": "../../.wrangler/migrations"
+    }
+  ]
+}

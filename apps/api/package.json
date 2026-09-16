@@ -1,0 +1,29 @@
+{
+  "name": "@ownwords/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "db:compose": "node scripts/compose-migrations.mjs",
+    "db:migrate:local": "npm run db:compose && wrangler d1 migrations apply ownwords-local --local",
+    "dev": "wrangler dev",
+    "pretest": "npm run db:compose",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "1.7.5",
+    "better-auth": "1.7.5",
+    "hono": "4.13.8",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.10",
+    "@cloudflare/workers-types": "5.20260915.1",
+    "@types/node": "22.20.3",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.132.0"
+  }
+}

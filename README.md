@@ -2,7 +2,7 @@
 
 **Practise the words you actually use — in every language you speak — and learn a new one in the same app.**
 
-This repository holds the product definition. No application code yet.
+This repository holds the product definition and the backend implementation now under development.
 
 ---
 
