@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+import { bodyLimit } from "hono/body-limit";
 import { setCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -195,6 +197,110 @@ export async function consumeSignupAuthorization(
   if (results.some((result) => !result.success || result.meta.changes !== 1)) {
     throw new Error("Invitation authorization could not be consumed");
   }
+}
+
+const issueSchema = z
+  .object({
+    email: z.string().trim().min(3).max(254).email(),
+    expiresInSeconds: z
+      .number()
+      .int()
+      .min(3600)
+      .max(30 * 24 * 3600)
+      .default(7 * 24 * 3600),
+  })
+  .strict();
+
+export function createInvitationAdminRoutes(
+  now: () => number = Date.now,
+): Hono<AppEnv> {
+  const routes = new Hono<AppEnv>();
+  routes.use("*", async (c, next) => {
+    const configured = c.env.INVITATION_ADMIN_TOKEN;
+    const authorization = c.req.header("Authorization");
+    const supplied = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7)
+      : "";
+    if (
+      !configured ||
+      !/^[a-f0-9]{64}$/.test(configured) ||
+      !/^[a-f0-9]{64}$/.test(supplied) ||
+      !timingSafeEqual(
+        new TextEncoder().encode(configured),
+        new TextEncoder().encode(supplied),
+      )
+    ) {
+      return errorResponse(
+        403,
+        "admin_forbidden",
+        "Invitation administration is not authorized",
+      );
+    }
+    await next();
+  });
+  routes.use(
+    "*",
+    bodyLimit({
+      maxSize: 4096,
+      onError: () =>
+        errorResponse(
+          413,
+          "request_too_large",
+          "The request body is too large",
+        ),
+    }),
+  );
+  routes.post("/", async (c) => {
+    const parsed = issueSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return errorResponse(
+        400,
+        "invalid_request",
+        "A valid email and invitation lifetime are required",
+      );
+    }
+    const id = crypto.randomUUID();
+    const code = randomToken();
+    const createdAt = now();
+    const expiresAt = createdAt + parsed.data.expiresInSeconds * 1000;
+    const email = normalizeEmail(parsed.data.email);
+    await c.env.DB.prepare(
+      `INSERT INTO invitations (id, code_hash, email, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+      .bind(id, await sha256(code), email, expiresAt, createdAt)
+      .run();
+    return c.json(
+      {
+        data: { id, code, email, expiresAt: new Date(expiresAt).toISOString() },
+      },
+      201,
+    );
+  });
+  routes.delete("/:id", async (c) => {
+    const id = z.string().uuid().safeParse(c.req.param("id"));
+    if (!id.success)
+      return errorResponse(
+        400,
+        "invalid_request",
+        "A valid invitation ID is required",
+      );
+    const result = await c.env.DB.prepare(
+      `UPDATE invitations SET revoked_at = COALESCE(revoked_at, ?)
+       WHERE id = ? AND accepted_at IS NULL`,
+    )
+      .bind(now(), id.data)
+      .run();
+    if (result.meta.changes !== 1) {
+      return errorResponse(
+        404,
+        "invitation_unavailable",
+        "The invitation is missing or already accepted",
+      );
+    }
+    return c.json({ data: { revoked: true } });
+  });
+  return routes;
 }
 
 export function createInvitationRoutes(

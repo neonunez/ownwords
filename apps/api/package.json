@@ -9,7 +9,7 @@
     "db:migrate:local": "npm run db:compose && wrangler d1 migrations apply ownwords-local --local",
     "dev": "wrangler dev",
     "pretest": "npm run db:compose",
-    "test": "vitest run",
+    "test": "node --test scripts/compose-migrations.test.mjs && vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

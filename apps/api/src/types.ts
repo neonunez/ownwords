@@ -8,6 +8,7 @@ export interface Bindings {
   PASSKEY_RP_ORIGIN?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  INVITATION_ADMIN_TOKEN?: string;
 }
 
 export interface VerifiedSession {

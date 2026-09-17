@@ -5,3 +5,4 @@ BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 # Optional locally. Google sign-in routes are unavailable until both are set.
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+INVITATION_ADMIN_TOKEN=

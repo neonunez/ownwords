@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { createAuth } from "./auth.js";
 import { ConfigurationError } from "./config.js";
 import { errorResponse } from "./errors.js";
-import { createInvitationRoutes } from "./invitations.js";
+import {
+  createInvitationAdminRoutes,
+  createInvitationRoutes,
+} from "./invitations.js";
 import { createOnboardingRoutes } from "./onboarding.js";
 import { apiCors, privateNoStore, requireTrustedOrigin } from "./security.js";
 import { createSessionMiddleware } from "./session.js";
@@ -24,6 +27,7 @@ export function createApp(dependencies: AppDependencies = {}): Hono<AppEnv> {
   app.use("/api/*", requireTrustedOrigin);
 
   app.route("/api/v1/invitations", createInvitationRoutes(now));
+  app.route("/api/v1/admin/invitations", createInvitationAdminRoutes(now));
 
   app.all("/api/auth/*", (c) => createAuth(c.env, now).handler(c.req.raw));
 

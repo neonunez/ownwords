@@ -12,7 +12,7 @@ import {
   redeemInvitation,
   sha256,
 } from "../src/invitations.js";
-import { jsonRequest } from "./helpers.js";
+import { insertUser, jsonRequest, sessionCookie } from "./helpers.js";
 
 const app = createApp();
 
@@ -162,6 +162,315 @@ describe("invitation redemption", () => {
     await expect(limited.json()).resolves.toEqual({
       error: { code: "rate_limited", message: "Too many invitation attempts" },
     });
+  });
+});
+
+describe("invitation administration", () => {
+  const adminHeaders = () => ({
+    ...jsonRequest("POST").headers,
+    Authorization: `Bearer ${"ab".repeat(32)}`,
+  });
+
+  it("issues an invitation with a hashed code and returns it once", async () => {
+    const response = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ email: "Family@Example.com" }),
+      },
+      env,
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json<{
+      data: { id: string; code: string; email: string; expiresAt: string };
+    }>();
+    expect(body.data.email).toBe("family@example.com");
+    expect(body.data.code.length).toBeGreaterThanOrEqual(20);
+    await expect(
+      env.DB.prepare("SELECT code_hash FROM invitations WHERE id = ?")
+        .bind(body.data.id)
+        .first<{ code_hash: string }>(),
+    ).resolves.toMatchObject({ code_hash: await sha256(body.data.code) });
+
+    const redeemed = await app.request(
+      "http://service.test/api/v1/invitations/redeem",
+      jsonRequest("POST", {
+        code: body.data.code,
+        email: "family@example.com",
+      }),
+      env,
+    );
+    expect(redeemed.status).toBe(200);
+  });
+
+  it("rejects anonymous, non-admin users, and malformed tokens", async () => {
+    const anonymous = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: jsonRequest("POST").headers,
+        body: JSON.stringify({ email: "anon@example.com" }),
+      },
+      env,
+    );
+    expect(anonymous.status).toBe(403);
+
+    for (const token of [
+      "not-a-hex-admin-token-at-all",
+      `${"cd".repeat(31)}0`,
+      `${"ab".repeat(31)}0`,
+    ]) {
+      const response = await app.request(
+        "http://service.test/api/v1/admin/invitations",
+        {
+          method: "POST",
+          headers: {
+            ...jsonRequest("POST").headers,
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ email: "x@example.com" }),
+        },
+        env,
+      );
+      expect(response.status).toBe(403);
+    }
+  });
+
+  it("does not promote the first signup or trust client-supplied roles", async () => {
+    const now = Date.now();
+    await insertUser(env.DB, "regular-user", "regular@example.com", now);
+    const cookie = await sessionCookie(
+      env.DB,
+      "regular-user",
+      "regular-session-token",
+      now + 60_000,
+      now,
+    );
+    const before = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM invitations",
+    ).first();
+    const response = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: {
+          ...jsonRequest("POST").headers,
+          Cookie: cookie,
+          "X-Role": "admin",
+        },
+        body: JSON.stringify({ email: "still@example.com", role: "admin" }),
+      },
+      env,
+    );
+    expect(response.status).toBe(403);
+    await expect(
+      env.DB.prepare("SELECT COUNT(*) AS count FROM invitations").first(),
+    ).resolves.toEqual(before);
+  });
+
+  it("honors trusted-origin enforcement and revocation of unaccepted invitations", async () => {
+    const issueResponse = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ email: "revoke@example.com" }),
+      },
+      env,
+    );
+    expect(issueResponse.status).toBe(201);
+    const { data } = await issueResponse.json<{
+      data: { id: string; code: string };
+    }>();
+
+    const crossOrigin = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: { ...adminHeaders(), Origin: "https://evil.example" },
+        body: JSON.stringify({ email: "evil@example.com" }),
+      },
+      env,
+    );
+    expect(crossOrigin.status).toBe(403);
+
+    const revoke = await app.request(
+      "http://service.test/api/v1/admin/invitations/" + data.id,
+      {
+        method: "DELETE",
+        headers: {
+          ...jsonRequest("DELETE").headers,
+          Authorization: `Bearer ${"ab".repeat(32)}`,
+        },
+      },
+      env,
+    );
+    expect(revoke.status).toBe(200);
+
+    const redeem = await app.request(
+      "http://service.test/api/v1/invitations/redeem",
+      jsonRequest("POST", { code: data.code, email: "revoke@example.com" }),
+      env,
+    );
+    expect(redeem.status).toBe(403);
+
+    const again = await app.request(
+      "http://service.test/api/v1/admin/invitations/" + data.id,
+      {
+        method: "DELETE",
+        headers: {
+          ...jsonRequest("DELETE").headers,
+          Authorization: `Bearer ${"ab".repeat(32)}`,
+        },
+      },
+      env,
+    );
+    expect(again.status).toBe(200);
+  });
+
+  it("requires an exactly configured 64-hex token and rejects expiry past 30 days", async () => {
+    const tooLong = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          email: "long@example.com",
+          expiresInSeconds: 40 * 24 * 3600,
+        }),
+      },
+      env,
+    );
+    expect(tooLong.status).toBe(400);
+  });
+
+  it("fails closed without a valid configured secret and after rotation", async () => {
+    for (const configured of [
+      undefined,
+      "",
+      "replace-me",
+      "zz".repeat(32),
+      "cd".repeat(32),
+    ]) {
+      const response = await app.request(
+        "http://service.test/api/v1/admin/invitations",
+        {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({ email: "disabled@example.com" }),
+        },
+        { ...env, INVITATION_ADMIN_TOKEN: configured },
+      );
+      expect(response.status).toBe(403);
+    }
+  });
+
+  it("bounds input and requires Origin even with the correct token", async () => {
+    for (const body of [
+      "{",
+      JSON.stringify({ email: "bad" }),
+      JSON.stringify({ email: "ok@example.com", role: "admin" }),
+    ]) {
+      const response = await app.request(
+        "http://service.test/api/v1/admin/invitations",
+        { method: "POST", headers: adminHeaders(), body },
+        env,
+      );
+      expect(response.status).toBe(400);
+    }
+    const oversized = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      { method: "POST", headers: adminHeaders(), body: "a".repeat(4097) },
+      env,
+    );
+    expect(oversized.status).toBe(413);
+    const missingOrigin = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: { Authorization: adminHeaders().Authorization },
+        body: "{}",
+      },
+      env,
+    );
+    expect(missingOrigin.status).toBe(403);
+    const preflight = await app.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://evil.example",
+          "Access-Control-Request-Headers": "Authorization",
+        },
+      },
+      env,
+    );
+    expect(preflight.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(preflight.headers.get("Access-Control-Allow-Headers")).not.toContain(
+      "Authorization",
+    );
+  });
+
+  it("expires issued invitations and invalidates redeemed authorizations on revocation", async () => {
+    let now = Date.now();
+    const timedApp = createApp({ now: () => now });
+    const issue = await timedApp.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          email: "timed@example.com",
+          expiresInSeconds: 3600,
+        }),
+      },
+      env,
+    );
+    expect(issue.status).toBe(201);
+    expect(issue.headers.get("Cache-Control")).toBe("no-store");
+    const { data } = await issue.json<{
+      data: { id: string; code: string; expiresAt: string };
+    }>();
+    expect(Date.parse(data.expiresAt)).toBe(now + 3600000);
+    const authorization = await redeemInvitation(
+      env.DB,
+      data.code,
+      "timed@example.com",
+      now,
+    );
+    expect(authorization).not.toBeNull();
+    const revoke = await timedApp.request(
+      `http://service.test/api/v1/admin/invitations/${data.id}`,
+      { method: "DELETE", headers: adminHeaders() },
+      env,
+    );
+    expect(revoke.status).toBe(200);
+    await expect(
+      findSignupAuthorization(
+        env.DB,
+        authorization!.token,
+        "timed@example.com",
+        now,
+      ),
+    ).resolves.toBeNull();
+    const second = await timedApp.request(
+      "http://service.test/api/v1/admin/invitations",
+      {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          email: "expired@example.com",
+          expiresInSeconds: 3600,
+        }),
+      },
+      env,
+    );
+    const expired = await second.json<{ data: { code: string } }>();
+    now += 3600000;
+    await expect(
+      redeemInvitation(env.DB, expired.data.code, "expired@example.com", now),
+    ).resolves.toBeNull();
   });
 });
 

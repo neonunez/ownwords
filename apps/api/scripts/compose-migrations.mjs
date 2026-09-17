@@ -1,73 +1,62 @@
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const outputDirectory = path.join(repositoryRoot, ".wrangler", "migrations");
-const sources = [
-  {
-    directory: path.join(repositoryRoot, "apps", "api", "migrations"),
-    prefix: "0001",
-  },
-  {
-    directory: path.join(repositoryRoot, "packages", "lexicon", "migrations"),
-    prefix: "0100",
-  },
-  {
-    directory: path.join(repositoryRoot, "packages", "learning", "migrations"),
-    prefix: "0200",
-  },
-];
-
-const migrations = [];
-for (const source of sources) {
-  let entries;
-  try {
-    entries = await readdir(source.directory, { withFileTypes: true });
-  } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "ENOENT"
-    )
-      continue;
-    throw error;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".sql")) continue;
-    if (
-      !entry.name.startsWith(source.prefix) ||
-      !/^\d{4}[_-][a-z0-9_-]+\.sql$/i.test(entry.name)
-    ) {
-      throw new Error(
-        `Unexpected migration name ${entry.name} in ${source.directory}`,
-      );
+export async function composeMigrations(repositoryRoot) {
+  const outputDirectory = path.join(repositoryRoot, ".wrangler", "migrations");
+  const sources = [
+    { directory: "apps/api/migrations", min: 1, max: 99 },
+    { directory: "packages/lexicon/migrations", min: 100, max: 199 },
+    { directory: "packages/learning/migrations", min: 200, max: 299 },
+  ];
+  const migrations = [];
+  const numbers = new Set();
+  for (const source of sources) {
+    const directory = path.join(repositoryRoot, source.directory);
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === "ENOENT") continue;
+      throw error;
     }
-    migrations.push({
-      name: entry.name,
-      source: path.join(source.directory, entry.name),
-    });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".sql")) continue;
+      const match = /^(\d{4})[_-][a-z0-9_-]+\.sql$/i.exec(entry.name);
+      const number = Number(match?.[1]);
+      if (!match || number < source.min || number > source.max) {
+        throw new Error(
+          `Unexpected migration name ${entry.name} in ${directory}`,
+        );
+      }
+      if (numbers.has(number)) {
+        throw new Error(`Duplicate migration number ${match[1]}`);
+      }
+      numbers.add(number);
+      migrations.push({
+        name: entry.name,
+        source: path.join(directory, entry.name),
+      });
+    }
   }
-}
-
-migrations.sort((left, right) => left.name.localeCompare(right.name));
-for (let index = 1; index < migrations.length; index += 1) {
-  if (migrations[index]?.name === migrations[index - 1]?.name) {
-    throw new Error(`Duplicate migration name ${migrations[index]?.name}`);
+  if (!numbers.has(1)) throw new Error("Core migration 0001 is missing");
+  migrations.sort((left, right) => left.name.localeCompare(right.name));
+  await rm(outputDirectory, { recursive: true, force: true });
+  await mkdir(outputDirectory, { recursive: true });
+  for (const migration of migrations) {
+    await cp(migration.source, path.join(outputDirectory, migration.name));
   }
-}
-if (!migrations.some((migration) => migration.name.startsWith("0001"))) {
-  throw new Error("Core migration 0001 is missing");
+  return migrations.map(({ name }) => name);
 }
 
-await rm(outputDirectory, { recursive: true, force: true });
-await mkdir(outputDirectory, { recursive: true });
-for (const migration of migrations) {
-  await cp(migration.source, path.join(outputDirectory, migration.name));
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  const migrations = await composeMigrations(
+    fileURLToPath(new URL("../../../", import.meta.url)),
+  );
+  process.stdout.write(
+    `Composed ${migrations.length} migration(s) in deterministic filename order.\n`,
+  );
 }
-
-process.stdout.write(
-  `Composed ${migrations.length} migration(s) in deterministic filename order.\n`,
-);

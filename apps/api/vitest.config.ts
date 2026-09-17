@@ -13,6 +13,7 @@ export default defineConfig({
         bindings: {
           BETTER_AUTH_SECRET: "test-only-secret-with-at-least-32-characters",
           ENVIRONMENT: "test",
+          INVITATION_ADMIN_TOKEN: "ab".repeat(32),
           TEST_MIGRATIONS: await readD1Migrations(
             path.join(projectDirectory, "..", "..", ".wrangler", "migrations"),
           ),
@@ -21,6 +22,7 @@ export default defineConfig({
     })),
   ],
   test: {
+    include: ["test/**/*.test.ts"],
     setupFiles: ["./test/setup.ts"],
   },
 });
