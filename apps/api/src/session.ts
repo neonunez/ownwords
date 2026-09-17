@@ -25,7 +25,6 @@ export function createSessionMiddleware(now: () => number = Date.now) {
     }
 
     c.set("userId", session.userId);
-    c.set("session", session satisfies VerifiedSession);
     await next();
   });
 }

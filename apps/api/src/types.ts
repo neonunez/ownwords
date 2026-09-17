@@ -18,7 +18,6 @@ export interface VerifiedSession {
 
 export interface Variables {
   userId: string;
-  session: VerifiedSession;
 }
 
 export type AppEnv = {
