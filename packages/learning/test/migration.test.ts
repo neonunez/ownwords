@@ -54,4 +54,34 @@ describe("0200 learning migration", () => {
     ).get()).toEqual({ count: 0 });
     expect(test.sqlite.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   });
+
+  it("binds user progress rows to the single pinned course version", async () => {
+    const test = new TestD1();
+    databases.push(test);
+    await ingestCourseVersion(test.db, fixture());
+    await publishCourseVersion(test.db, "russian-zero", 1);
+    const next = structuredClone(fixture()) as { version: number };
+    next.version = 2;
+    await ingestCourseVersion(test.db, next);
+    await publishCourseVersion(test.db, "russian-zero", 2);
+    test.sqlite.exec(
+      `INSERT INTO learning_user_course_progress
+       (user_id, course_id, course_version, current_lesson_id, current_step_id, started_at, updated_at)
+       VALUES ('alice', 'russian-zero', 1, NULL, NULL, 't', 't')`,
+    );
+    expect(() => test.sqlite.exec(
+      `INSERT INTO learning_user_course_progress
+       (user_id, course_id, course_version, current_lesson_id, current_step_id, started_at, updated_at)
+       VALUES ('alice', 'russian-zero', 2, NULL, NULL, 't', 't')`,
+    )).toThrow(/UNIQUE constraint failed/);
+    expect(() => test.sqlite.exec(
+      "UPDATE learning_user_course_progress SET course_version = 2 WHERE user_id = 'alice'",
+    )).toThrow(/course enrollment version is immutable/);
+    expect(() => test.sqlite.exec(
+      `INSERT INTO learning_user_lesson_progress
+       (user_id, course_id, course_version, lesson_id, status, current_step_id,
+        farthest_step_position, started_at, completed_at, updated_at)
+       VALUES ('alice', 'russian-zero', 2, 'hello', 'in_progress', 'hello-hear', 1, 't', NULL, 't')`,
+    )).toThrow(/FOREIGN KEY constraint failed/);
+  });
 });

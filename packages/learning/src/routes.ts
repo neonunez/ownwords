@@ -16,10 +16,6 @@ const category = z.enum([
 ]);
 const progressBody = z.object({ stepId: routeId }).strict();
 
-interface VersionRow {
-  status: "draft" | "published";
-}
-
 interface LessonRow {
   lesson_id: string;
   unit_id: string;
@@ -80,13 +76,38 @@ function parseVersion(value: string): number {
   return version;
 }
 
-async function requirePublished(db: D1Database, courseId: string, version: number): Promise<void> {
-  const row = await first<VersionRow>(
+async function enrolledVersion(db: D1Database, userId: string, courseId: string): Promise<number | null> {
+  const row = await first<{ course_version: number }>(
     db.prepare(
-      "SELECT status FROM learning_course_versions WHERE course_id = ? AND version = ? AND status = 'published'",
+      "SELECT course_version FROM learning_user_course_progress WHERE user_id = ? AND course_id = ?",
+    ).bind(userId, courseId),
+  );
+  return row?.course_version ?? null;
+}
+
+function versionConflict(): LearningError {
+  return new LearningError(
+    409,
+    "COURSE_VERSION_MISMATCH",
+    "Progress for this course belongs to a different content version",
+  );
+}
+
+/** A published version is usable unless the user already started another version of the course. */
+async function requireCourseVersion(
+  db: D1Database,
+  userId: string,
+  courseId: string,
+  version: number,
+): Promise<void> {
+  const row = await first<{ version: number }>(
+    db.prepare(
+      "SELECT version FROM learning_course_versions WHERE course_id = ? AND version = ? AND status = 'published'",
     ).bind(courseId, version),
   );
   if (!row) throw new LearningError(404, "CONTENT_NOT_FOUND", "Published content was not found");
+  const enrolled = await enrolledVersion(db, userId, courseId);
+  if (enrolled !== null && enrolled !== version) throw versionConflict();
 }
 
 async function requireLesson(
@@ -267,8 +288,8 @@ async function flushLexiconSync(
 }
 
 export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono<LearningEnv> {
-  if (!options?.lexiconImporter || !options.practiceSource) {
-    throw new Error("Learning routes require Lexicon and practice adapters");
+  if (!options?.lexiconImporter) {
+    throw new Error("Learning routes require a Lexicon importer");
   }
   const clock = options.clock ?? (() => new Date());
   const app = new Hono<LearningEnv>();
@@ -291,17 +312,19 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
       published_at: string;
     }>(
       c.env.DB.prepare(
-        `SELECT course.course_id, course.language_tag, course.title, course.description,
+        `SELECT course.course_id, course.language_tag, version.title, version.description,
                 version.version, version.published_at
          FROM learning_courses course
+         LEFT JOIN learning_user_course_progress enrollment
+           ON enrollment.user_id = ? AND enrollment.course_id = course.course_id
          JOIN learning_course_versions version ON version.course_id = course.course_id
          WHERE version.status = 'published'
-           AND version.version = (
+           AND version.version = COALESCE(enrollment.course_version, (
              SELECT MAX(latest.version) FROM learning_course_versions latest
              WHERE latest.course_id = course.course_id AND latest.status = 'published'
-           )
+           ))
          ORDER BY course.course_id`,
-      ),
+      ).bind(c.get("userId")),
     );
     return c.json({ courses: courses.map((row) => ({
       id: row.course_id,
@@ -317,10 +340,10 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
     const courseId = parseRouteId(c.req.param("courseId"), "Course id");
     const version = parseVersion(c.req.param("version"));
     const userId = c.get("userId");
-    await requirePublished(c.env.DB, courseId, version);
+    await requireCourseVersion(c.env.DB, userId, courseId, version);
     const course = await first<{ language_tag: string; title: string; description: string; published_at: string }>(
       c.env.DB.prepare(
-        `SELECT course.language_tag, course.title, course.description, version.published_at
+        `SELECT course.language_tag, version.title, version.description, version.published_at
          FROM learning_courses course
          JOIN learning_course_versions version ON version.course_id = course.course_id
          WHERE course.course_id = ? AND version.version = ? AND version.status = 'published'`,
@@ -385,7 +408,7 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
     const lessonId = parseRouteId(c.req.param("lessonId"), "Lesson id");
     const version = parseVersion(c.req.param("version"));
     const userId = c.get("userId");
-    await requirePublished(c.env.DB, courseId, version);
+    await requireCourseVersion(c.env.DB, userId, courseId, version);
     await requireLesson(c.env.DB, courseId, version, lessonId);
     await requireUnlocked(c.env.DB, userId, courseId, version, lessonId);
     const lesson = await first<{ title: string; unit_id: string }>(
@@ -459,7 +482,7 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
     if (!Number.isSafeInteger(offset) || offset < 0) {
       throw new LearningError(400, "INVALID_CURSOR", "Cursor is invalid");
     }
-    await requirePublished(c.env.DB, courseId, version);
+    await requireCourseVersion(c.env.DB, c.get("userId"), courseId, version);
     const rows = await all<{
       reference_id: string;
       position: number;
@@ -502,31 +525,14 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
   app.get("/courses/:courseId/resume", async (c) => {
     const courseId = parseRouteId(c.req.param("courseId"), "Course id");
     const userId = c.get("userId");
-    const requestedVersion = c.req.query("version");
-    let version: number;
-    if (requestedVersion !== undefined) {
-      version = parseVersion(requestedVersion);
-    } else {
-      const active = await first<{ course_version: number }>(
-        c.env.DB.prepare(
-          `SELECT progress.course_version
-           FROM learning_user_course_progress progress
-           JOIN learning_course_versions version
-             ON version.course_id = progress.course_id AND version.version = progress.course_version
-           WHERE progress.user_id = ? AND progress.course_id = ? AND version.status = 'published'
-           ORDER BY progress.updated_at DESC, progress.course_version DESC LIMIT 1`,
-        ).bind(userId, courseId),
-      );
-      const latest = active ?? await first<{ course_version: number }>(
-        c.env.DB.prepare(
-          `SELECT version AS course_version FROM learning_course_versions
-           WHERE course_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1`,
-        ).bind(courseId),
-      );
-      if (!latest) throw new LearningError(404, "CONTENT_NOT_FOUND", "Published content was not found");
-      version = latest.course_version;
-    }
-    await requirePublished(c.env.DB, courseId, version);
+    const latest = await first<{ version: number }>(
+      c.env.DB.prepare(
+        `SELECT version FROM learning_course_versions
+         WHERE course_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1`,
+      ).bind(courseId),
+    );
+    if (!latest) throw new LearningError(404, "CONTENT_NOT_FOUND", "Published content was not found");
+    const version = await enrolledVersion(c.env.DB, userId, courseId) ?? latest.version;
     const lessons = await all<LessonRow>(
       c.env.DB.prepare(
         `SELECT lesson.lesson_id, lesson.unit_id, lesson.position AS lesson_position,
@@ -581,7 +587,7 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
     const userId = c.get("userId");
     const parsed = progressBody.safeParse(await parseJsonBody(c.req.raw));
     if (!parsed.success) throw new LearningError(400, "INVALID_PROGRESS", "Progress payload is invalid");
-    await requirePublished(c.env.DB, courseId, version);
+    await requireCourseVersion(c.env.DB, userId, courseId, version);
     await requireLesson(c.env.DB, courseId, version, lessonId);
     await requireUnlocked(c.env.DB, userId, courseId, version, lessonId);
     const step = await first<{ position: number }>(
@@ -618,14 +624,22 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
       ).bind(userId, courseId, version, lessonId, parsed.data.stepId, step.position, timestamp, timestamp);
     const courseStatement = c.env.DB.prepare(
       `INSERT INTO learning_user_course_progress
-       (user_id, course_id, course_version, current_lesson_id, current_step_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id, course_id, course_version) DO UPDATE SET
+       (user_id, course_id, course_version, current_lesson_id, current_step_id, started_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, course_id) DO UPDATE SET
          current_lesson_id = excluded.current_lesson_id,
          current_step_id = excluded.current_step_id,
-         updated_at = excluded.updated_at`,
-    ).bind(userId, courseId, version, lessonId, parsed.data.stepId, timestamp);
-    const results = await c.env.DB.batch([lessonStatement, courseStatement]);
+         updated_at = excluded.updated_at
+       WHERE learning_user_course_progress.course_version = excluded.course_version`,
+    ).bind(userId, courseId, version, lessonId, parsed.data.stepId, timestamp, timestamp);
+    let results: D1Result[];
+    try {
+      results = await c.env.DB.batch([courseStatement, lessonStatement]);
+    } catch (error) {
+      const enrolled = await enrolledVersion(c.env.DB, userId, courseId);
+      if (enrolled !== null && enrolled !== version) throw versionConflict();
+      throw error;
+    }
     if (results.some((result) => !result.success)) throw new Error("Progress transaction failed");
     return c.json(progressResponse({ courseId, version, lessonId, stepId: parsed.data.stepId, status: "in_progress" }));
   });
@@ -635,7 +649,7 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
     const lessonId = parseRouteId(c.req.param("lessonId"), "Lesson id");
     const version = parseVersion(c.req.param("version"));
     const userId = c.get("userId");
-    await requirePublished(c.env.DB, courseId, version);
+    await requireCourseVersion(c.env.DB, userId, courseId, version);
     await requireLesson(c.env.DB, courseId, version, lessonId);
     await requireUnlocked(c.env.DB, userId, courseId, version, lessonId);
     const progress = await first<{ status: "in_progress" | "completed"; farthest_step_position: number; completed_at: string | null }>(
@@ -702,30 +716,6 @@ export function createLearningRoutes(options: CreateLearningRoutesOptions): Hono
       completedAt: progress.completed_at ?? timestamp,
       lexiconSync: { status: pendingItems === 0 ? "synced" : "pending", pendingItems },
     } }, pendingItems === 0 ? 200 : 202);
-  });
-
-  app.get("/practice", async (c) => {
-    const courseId = parseRouteId(c.req.query("courseId") ?? "", "Course id");
-    const limit = Number(c.req.query("limit") ?? 20);
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
-      throw new LearningError(400, "INVALID_LIMIT", "Limit must be between 1 and 100");
-    }
-    const course = await first<{ language_tag: string }>(
-      c.env.DB.prepare(
-        `SELECT course.language_tag FROM learning_courses course
-         WHERE course.course_id = ? AND EXISTS (
-           SELECT 1 FROM learning_course_versions version
-           WHERE version.course_id = course.course_id AND version.status = 'published'
-         )`,
-      ).bind(courseId),
-    );
-    if (!course) throw new LearningError(404, "CONTENT_NOT_FOUND", "Published content was not found");
-    const prompts = await options.practiceSource.listDue({
-      userId: c.get("userId"),
-      languageTag: course.language_tag,
-      limit,
-    });
-    return c.json({ practice: prompts });
   });
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Route was not found" } }, 404));

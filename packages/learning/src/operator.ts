@@ -18,8 +18,6 @@ export interface IngestResult {
 interface CourseRow {
   course_id: string;
   language_tag: string;
-  title: string;
-  description: string;
 }
 
 interface VersionRow {
@@ -44,19 +42,14 @@ export async function ingestCourseVersion(
   const pack = validateContentPack(input);
   const hash = await contentHash(pack);
   const existingCourse = await first<CourseRow>(
-    db.prepare("SELECT course_id, language_tag, title, description FROM learning_courses WHERE course_id = ?")
+    db.prepare("SELECT course_id, language_tag FROM learning_courses WHERE course_id = ?")
       .bind(pack.course.id),
   );
 
-  if (
-    existingCourse &&
-    (existingCourse.language_tag !== pack.course.languageTag ||
-      existingCourse.title !== pack.course.title ||
-      existingCourse.description !== pack.course.description)
-  ) {
+  if (existingCourse && existingCourse.language_tag !== pack.course.languageTag) {
     throw new ContentTransitionError(
       "COURSE_IDENTITY_MISMATCH",
-      "Existing stable course metadata does not match the import",
+      "Existing stable course language does not match the import",
     );
   }
 
@@ -92,14 +85,14 @@ export async function ingestCourseVersion(
   if (!existingCourse) {
     statements.push(
       db.prepare(
-        "INSERT INTO learning_courses (course_id, language_tag, title, description, created_at) VALUES (?, ?, ?, ?, ?)",
-      ).bind(pack.course.id, pack.course.languageTag, pack.course.title, pack.course.description, timestamp),
+        "INSERT INTO learning_courses (course_id, language_tag, created_at) VALUES (?, ?, ?)",
+      ).bind(pack.course.id, pack.course.languageTag, timestamp),
     );
   }
   statements.push(
     db.prepare(
-      "INSERT INTO learning_course_versions (course_id, version, status, content_hash, created_at, published_at) VALUES (?, ?, 'draft', ?, ?, NULL)",
-    ).bind(pack.course.id, pack.version, hash, timestamp),
+      "INSERT INTO learning_course_versions (course_id, version, status, title, description, content_hash, created_at, published_at) VALUES (?, ?, 'draft', ?, ?, ?, ?, NULL)",
+    ).bind(pack.course.id, pack.version, pack.course.title, pack.course.description, hash, timestamp),
   );
 
   for (const unit of pack.units) {

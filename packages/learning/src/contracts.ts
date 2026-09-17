@@ -54,26 +54,7 @@ export interface LexiconCourseImportService {
   }): Promise<{ entryId: string; created: boolean }>;
 }
 
-export interface LearningPracticePrompt {
-  id: string;
-  format: "cloze" | "flashcard";
-  payload: Readonly<Record<string, unknown>>;
-}
-
-/**
- * Adapter to the shared Lexicon scheduler. Learning deliberately owns no due
- * date or review-state tables.
- */
-export interface LearningPracticeSource {
-  listDue(input: {
-    userId: string;
-    languageTag: string;
-    limit: number;
-  }): Promise<readonly LearningPracticePrompt[]>;
-}
-
 export interface CreateLearningRoutesOptions {
   lexiconImporter: LexiconCourseImportService;
-  practiceSource: LearningPracticeSource;
   clock?: () => Date;
 }

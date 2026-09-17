@@ -3,8 +3,6 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE learning_courses (
   course_id TEXT PRIMARY KEY,
   language_tag TEXT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT NOT NULL,
   created_at TEXT NOT NULL
 ) STRICT;
 
@@ -12,6 +10,8 @@ CREATE TABLE learning_course_versions (
   course_id TEXT NOT NULL,
   version INTEGER NOT NULL CHECK (version > 0),
   status TEXT NOT NULL CHECK (status IN ('draft', 'published')),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
   content_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
   published_at TEXT,
@@ -140,8 +140,10 @@ CREATE TABLE learning_user_course_progress (
   course_version INTEGER NOT NULL,
   current_lesson_id TEXT,
   current_step_id TEXT,
+  started_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  PRIMARY KEY (user_id, course_id, course_version),
+  PRIMARY KEY (user_id, course_id),
+  UNIQUE (user_id, course_id, course_version),
   FOREIGN KEY (course_id, course_version)
     REFERENCES learning_course_versions(course_id, version) ON DELETE RESTRICT,
   FOREIGN KEY (course_id, course_version, current_lesson_id)
@@ -164,6 +166,8 @@ CREATE TABLE learning_user_lesson_progress (
   completed_at TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, course_id, course_version, lesson_id),
+  FOREIGN KEY (user_id, course_id, course_version)
+    REFERENCES learning_user_course_progress(user_id, course_id, course_version) ON DELETE RESTRICT,
   FOREIGN KEY (course_id, course_version, lesson_id)
     REFERENCES learning_lessons(course_id, course_version, lesson_id) ON DELETE RESTRICT,
   FOREIGN KEY (course_id, course_version, current_step_id)
@@ -186,6 +190,8 @@ CREATE TABLE learning_lexicon_sync (
   last_attempt_at TEXT,
   synced_at TEXT,
   PRIMARY KEY (user_id, course_id, course_version, item_id),
+  FOREIGN KEY (user_id, course_id, course_version)
+    REFERENCES learning_user_course_progress(user_id, course_id, course_version) ON DELETE RESTRICT,
   FOREIGN KEY (course_id, course_version, item_id)
     REFERENCES learning_content_items(course_id, course_version, item_id) ON DELETE RESTRICT,
   FOREIGN KEY (course_id, course_version, lesson_id)
@@ -241,6 +247,8 @@ WHEN OLD.status <> 'draft'
   OR NEW.status <> 'published'
   OR NEW.course_id <> OLD.course_id
   OR NEW.version <> OLD.version
+  OR NEW.title <> OLD.title
+  OR NEW.description <> OLD.description
   OR NEW.content_hash <> OLD.content_hash
   OR NEW.created_at <> OLD.created_at
   OR NEW.published_at IS NULL
@@ -253,6 +261,16 @@ BEFORE DELETE ON learning_course_versions
 WHEN OLD.status = 'published'
 BEGIN
   SELECT RAISE(ABORT, 'published version is immutable');
+END;
+
+CREATE TRIGGER learning_course_enrollment_guard
+BEFORE UPDATE ON learning_user_course_progress
+WHEN NEW.user_id <> OLD.user_id
+  OR NEW.course_id <> OLD.course_id
+  OR NEW.course_version <> OLD.course_version
+  OR NEW.started_at <> OLD.started_at
+BEGIN
+  SELECT RAISE(ABORT, 'course enrollment version is immutable');
 END;
 
 -- Published version content is append-, update-, and delete-protected at the

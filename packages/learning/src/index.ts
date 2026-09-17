@@ -7,7 +7,5 @@ export type {
   LearningBindings,
   LearningEnv,
   LearningItemIdentity,
-  LearningPracticePrompt,
-  LearningPracticeSource,
   LearningVariables,
 } from "./contracts";

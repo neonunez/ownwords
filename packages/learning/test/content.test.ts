@@ -73,6 +73,36 @@ describe("content validation and ingestion", () => {
     });
   });
 
+  it("accepts corrected title and description in a new version but not a changed course language", async () => {
+    const test = database();
+    await ingestCourseVersion(test.db, pack());
+    await publishCourseVersion(test.db, "russian-zero", 1);
+
+    const relanguaged = structuredClone(pack());
+    relanguaged.version = 2;
+    relanguaged.course.languageTag = "uk";
+    for (const item of relanguaged.items) item.languageTag = "uk";
+    await expect(ingestCourseVersion(test.db, relanguaged)).rejects.toMatchObject({
+      code: "COURSE_IDENTITY_MISMATCH",
+    });
+
+    const corrected = structuredClone(pack());
+    corrected.version = 2;
+    corrected.course.title = "Corrected title";
+    corrected.course.description = "Corrected description.";
+    await expect(ingestCourseVersion(test.db, corrected)).resolves.toMatchObject({ outcome: "created" });
+    await publishCourseVersion(test.db, "russian-zero", 2);
+    expect(test.sqlite.prepare(
+      "SELECT version, title, description FROM learning_course_versions WHERE course_id = 'russian-zero' ORDER BY version",
+    ).all()).toEqual([
+      { version: 1, title: "Synthetic Russian Test Course", description: pack().course.description },
+      { version: 2, title: "Corrected title", description: "Corrected description." },
+    ]);
+    expect(() => test.sqlite.exec(
+      "UPDATE learning_course_versions SET title = 'changed' WHERE course_id = 'russian-zero' AND version = 1",
+    )).toThrow(/unsupported content version transition/);
+  });
+
   it("allows explicit draft discard but never published deletion", async () => {
     const test = database();
     await ingestCourseVersion(test.db, pack());
