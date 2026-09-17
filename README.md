@@ -2,7 +2,8 @@
 
 **Practise the words you actually use — in every language you speak — and learn a new one in the same app.**
 
-This repository holds the product definition and the backend implementation now under development.
+This repository holds the product definition and the backend implementation now under development (see
+[`packages/learning`](packages/learning/README.md) for versioned course content and learner progress).
 
 ---
 
