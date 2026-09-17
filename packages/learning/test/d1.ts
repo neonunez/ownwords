@@ -53,9 +53,13 @@ class TestStatement {
     return { success: true, results, meta: meta() } as unknown as D1Result<T>;
   }
 
-  async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+  runSync<T = Record<string, unknown>>(): D1Result<T> {
     const result = this.prepared().run(...this.sqliteBindings());
     return { success: true, results: [], meta: meta(Number(result.changes)) } as unknown as D1Result<T>;
+  }
+
+  async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+    return this.runSync<T>();
   }
 
   async raw<T = unknown[]>(): Promise<T[]> {
@@ -78,10 +82,7 @@ export class TestD1 {
       batch: async <T = unknown>(statements: D1PreparedStatement[]) => {
         this.sqlite.exec("BEGIN IMMEDIATE");
         try {
-          const results: D1Result<T>[] = [];
-          for (const statement of statements) {
-            results.push(await (statement as unknown as TestStatement).run<T>());
-          }
+          const results = statements.map((statement) => (statement as unknown as TestStatement).runSync<T>());
           this.sqlite.exec("COMMIT");
           return results;
         } catch (error) {

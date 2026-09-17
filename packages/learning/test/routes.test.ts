@@ -256,18 +256,45 @@ describe("authenticated learning routes", () => {
 describe("course version pinning", () => {
   it("pins exactly one version when first progress races across versions", async () => {
     await publishVersionTwo();
-    const responses = await Promise.all([1, 2].map((version) => request(
-      `/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/progress`,
-      json("PUT", { stepId: "hello-hear" }),
-      "alice-token",
-    )));
-    const statuses = responses.map((response) => response.status).sort();
-    expect(statuses).toEqual([200, 409]);
-    const loser = responses.find((response) => response.status === 409);
-    expect(await loser?.json()).toMatchObject({ error: { code: "COURSE_VERSION_MISMATCH" } });
+    const database = test.db;
+    const waiting: Array<() => void> = [];
+    const batchOutcomes: unknown[] = [];
+    const gated = Object.create(database) as D1Database;
+    gated.batch = async <T = unknown>(statements: D1PreparedStatement[]) => {
+      await new Promise<void>((release) => {
+        waiting.push(release);
+        if (waiting.length === 2) waiting.shift()?.();
+      });
+      try {
+        const results = await database.batch<T>(statements);
+        batchOutcomes.push("committed");
+        return results;
+      } catch (error) {
+        batchOutcomes.push(error);
+        throw error;
+      } finally {
+        waiting.shift()?.();
+      }
+    };
+    const race = (version: number) => Promise.resolve(app.request(
+      `http://test/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/progress`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: "Bearer alice-token" },
+        body: JSON.stringify({ stepId: "hello-hear" }),
+      },
+      { DB: gated },
+    ));
+    const [winner, loser] = await Promise.all([race(1), race(2)]);
+    expect(winner.status).toBe(200);
+    expect(loser.status).toBe(409);
+    expect(await loser.json()).toMatchObject({ error: { code: "COURSE_VERSION_MISMATCH" } });
+    expect(batchOutcomes).toEqual(["committed", expect.objectContaining({
+      message: expect.stringMatching(/FOREIGN KEY constraint failed/),
+    })]);
     expect(test.sqlite.prepare(
-      "SELECT COUNT(*) AS count FROM learning_user_course_progress WHERE user_id = 'alice'",
-    ).get()).toEqual({ count: 1 });
+      "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
+    ).get()).toEqual({ course_version: 1, current_step_id: "hello-hear" });
     expect(test.sqlite.prepare(
       "SELECT COUNT(DISTINCT course_version) AS count FROM learning_user_lesson_progress WHERE user_id = 'alice'",
     ).get()).toEqual({ count: 1 });
