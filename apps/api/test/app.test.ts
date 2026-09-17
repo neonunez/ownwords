@@ -19,6 +19,7 @@ beforeAll(async () => {
     insertUser(env.DB, "user-spoof-target", "spoof-target@example.com"),
     insertUser(env.DB, "user-spoof-source", "spoof-source@example.com"),
     insertUser(env.DB, "user-unauthorized", "unauthorized@example.com"),
+    insertUser(env.DB, "user-stable", "stable@example.com"),
   ]);
 });
 
@@ -326,6 +327,81 @@ describe("onboarding profiles", () => {
       russianCourseAudio: true,
       translationSuggestions: false,
     });
+  });
+
+  it("keeps language-profile identity stable across re-saves and drops removed languages", async () => {
+    const cookie = await sessionCookie(
+      env.DB,
+      "user-stable",
+      "stable-profile-token",
+      Date.now() + 60_000,
+    );
+    type Language = { id: string; tag: string; kind: string; level: string };
+    const save = async (languages: unknown[]): Promise<Language[]> => {
+      const response = await app.request(
+        "http://service.test/api/v1/onboarding",
+        {
+          ...jsonRequest("PUT", {
+            languages,
+            preferences: {
+              explanationLanguage: "en",
+              russianCourseAudio: true,
+              translationSuggestions: true,
+            },
+          }),
+          headers: { ...jsonRequest("PUT").headers, Cookie: cookie },
+        },
+        env,
+      );
+      expect(response.status).toBe(200);
+      const payload = await response.json<{
+        data: { profile: { languages: Language[] } };
+      }>();
+      return payload.data.profile.languages;
+    };
+
+    const created = await save([
+      { tag: "pt-br", kind: "maintain", level: "b2" },
+      { tag: "ru", kind: "learn", level: "a0" },
+    ]);
+    expect(created.map(({ tag }) => tag)).toEqual(["pt-BR", "ru"]);
+    const createdAt = await env.DB.prepare(
+      `SELECT language_tag AS tag, created_at AS createdAt
+       FROM language_profiles WHERE user_id = ? ORDER BY order_index`,
+    )
+      .bind("user-stable")
+      .all<{ tag: string; createdAt: number }>();
+
+    const unchanged = await save([
+      { tag: "pt-BR", kind: "maintain", level: "b2" },
+      { tag: "ru", kind: "learn", level: "a0" },
+    ]);
+    expect(unchanged).toEqual(created);
+
+    const updated = await save([
+      { tag: "ru", kind: "learn", level: "a2" },
+      { tag: "pt-BR", kind: "maintain", level: "c1" },
+    ]);
+    expect(updated).toEqual([
+      { ...created[1], level: "a2" },
+      { ...created[0], level: "c1" },
+    ]);
+    await expect(
+      env.DB.prepare(
+        `SELECT language_tag AS tag, created_at AS createdAt
+         FROM language_profiles WHERE user_id = ? ORDER BY language_tag`,
+      )
+        .bind("user-stable")
+        .all<{ tag: string; createdAt: number }>()
+        .then(({ results }) => results),
+    ).resolves.toEqual(
+      [...createdAt.results].sort((a, b) => a.tag.localeCompare(b.tag)),
+    );
+
+    const reduced = await save([
+      { tag: "pt-BR", kind: "maintain", level: "c1" },
+    ]);
+    expect(reduced).toEqual([{ ...created[0], level: "c1" }]);
   });
 
   it("scopes profiles to the verified session user", async () => {

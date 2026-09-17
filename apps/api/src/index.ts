@@ -8,7 +8,6 @@ export type {
   AppEnv,
   Bindings,
   DomainEnv,
-  SessionVerifier,
   Variables,
   VerifiedSession,
 } from "./types.js";

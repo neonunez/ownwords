@@ -9,10 +9,9 @@ import {
 import { createOnboardingRoutes } from "./onboarding.js";
 import { apiCors, privateNoStore, requireTrustedOrigin } from "./security.js";
 import { createSessionMiddleware } from "./session.js";
-import type { AppEnv, SessionVerifier } from "./types.js";
+import type { AppEnv } from "./types.js";
 
 export interface AppDependencies {
-  sessionVerifier?: SessionVerifier;
   now?: () => number;
 }
 
@@ -31,10 +30,7 @@ export function createApp(dependencies: AppDependencies = {}): Hono<AppEnv> {
 
   app.all("/api/auth/*", (c) => createAuth(c.env, now).handler(c.req.raw));
 
-  const requireSession = createSessionMiddleware(
-    dependencies.sessionVerifier,
-    now,
-  );
+  const requireSession = createSessionMiddleware(now);
   app.use("/api/v1/profile", requireSession);
   app.use("/api/v1/onboarding", requireSession);
   app.route("/api/v1", createOnboardingRoutes(now));

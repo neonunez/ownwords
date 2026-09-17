@@ -31,8 +31,3 @@ export type DomainEnv = {
   Bindings: { DB: D1Database };
   Variables: { userId: string };
 };
-
-export type SessionVerifier = (
-  headers: Headers,
-  env: Bindings,
-) => Promise<VerifiedSession | null>;

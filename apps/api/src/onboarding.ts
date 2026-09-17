@@ -149,13 +149,24 @@ async function replaceOnboarding(
         now,
         now,
       ),
-    db.prepare("DELETE FROM language_profiles WHERE user_id = ?").bind(userId),
+    db
+      .prepare(
+        `DELETE FROM language_profiles
+         WHERE user_id = ?
+           AND language_tag NOT IN (${input.languages.map(() => "?").join(", ")})`,
+      )
+      .bind(userId, ...input.languages.map((language) => language.tag)),
     ...input.languages.map((language, index) =>
       db
         .prepare(
           `INSERT INTO language_profiles
             (id, user_id, language_tag, kind, level, order_index, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, language_tag) DO UPDATE SET
+             kind = excluded.kind,
+             level = excluded.level,
+             order_index = excluded.order_index,
+             updated_at = excluded.updated_at`,
         )
         .bind(
           crypto.randomUUID(),
