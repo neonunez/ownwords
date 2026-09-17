@@ -246,11 +246,7 @@ export function createInvitationAdminRoutes(
   routes.post("/", async (c) => {
     const parsed = issueSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
-      return errorResponse(
-        400,
-        "invalid_request",
-        "A valid email is required",
-      );
+      return errorResponse(400, "invalid_request", "A valid email is required");
     }
     const id = crypto.randomUUID();
     const code = randomToken();
