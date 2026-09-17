@@ -7,6 +7,7 @@ import { errorResponse } from "./errors.js";
 import type { AppEnv, Bindings } from "./types.js";
 
 const SIGNUP_AUTHORIZATION_TTL_MS = 15 * 60 * 1000;
+const INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS_PER_WINDOW = 10;
 
@@ -200,15 +201,7 @@ export async function consumeSignupAuthorization(
 }
 
 const issueSchema = z
-  .object({
-    email: z.string().trim().min(3).max(254).email(),
-    expiresInSeconds: z
-      .number()
-      .int()
-      .min(3600)
-      .max(30 * 24 * 3600)
-      .default(7 * 24 * 3600),
-  })
+  .object({ email: z.string().trim().min(3).max(254).email() })
   .strict();
 
 export function createInvitationAdminRoutes(
@@ -256,13 +249,13 @@ export function createInvitationAdminRoutes(
       return errorResponse(
         400,
         "invalid_request",
-        "A valid email and invitation lifetime are required",
+        "A valid email is required",
       );
     }
     const id = crypto.randomUUID();
     const code = randomToken();
     const createdAt = now();
-    const expiresAt = createdAt + parsed.data.expiresInSeconds * 1000;
+    const expiresAt = createdAt + INVITATION_LIFETIME_MS;
     const email = normalizeEmail(parsed.data.email);
     await c.env.DB.prepare(
       `INSERT INTO invitations (id, code_hash, email, expires_at, created_at)

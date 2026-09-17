@@ -15,6 +15,7 @@ import {
 import { insertUser, jsonRequest, sessionCookie } from "./helpers.js";
 
 const app = createApp();
+const INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function insertInvitation(
   id: string,
@@ -329,20 +330,41 @@ describe("invitation administration", () => {
     expect(again.status).toBe(200);
   });
 
-  it("requires an exactly configured 64-hex token and rejects expiry past 30 days", async () => {
-    const tooLong = await app.request(
+  it("fixes the invitation lifetime at seven days and rejects client-supplied lifetimes", async () => {
+    const now = Date.UTC(2026, 0, 2, 3, 4, 5);
+    const timedApp = createApp({ now: () => now });
+    const issued = await timedApp.request(
       "http://service.test/api/v1/admin/invitations",
       {
         method: "POST",
         headers: adminHeaders(),
-        body: JSON.stringify({
-          email: "long@example.com",
-          expiresInSeconds: 40 * 24 * 3600,
-        }),
+        body: JSON.stringify({ email: "fixed@example.com" }),
       },
       env,
     );
-    expect(tooLong.status).toBe(400);
+    expect(issued.status).toBe(201);
+    const { data } = await issued.json<{ data: { expiresAt: string } }>();
+    expect(Date.parse(data.expiresAt)).toBe(now + INVITATION_LIFETIME_MS);
+
+    for (const expiresInSeconds of [40 * 24 * 3600, 3600]) {
+      const supplied = await timedApp.request(
+        "http://service.test/api/v1/admin/invitations",
+        {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({ email: "long@example.com", expiresInSeconds }),
+        },
+        env,
+      );
+      expect(supplied.status).toBe(400);
+    }
+    await expect(
+      env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM invitations WHERE email = ?",
+      )
+        .bind("long@example.com")
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
   });
 
   it("fails closed without a valid configured secret and after rotation", async () => {
@@ -420,10 +442,7 @@ describe("invitation administration", () => {
       {
         method: "POST",
         headers: adminHeaders(),
-        body: JSON.stringify({
-          email: "timed@example.com",
-          expiresInSeconds: 3600,
-        }),
+        body: JSON.stringify({ email: "timed@example.com" }),
       },
       env,
     );
@@ -432,7 +451,7 @@ describe("invitation administration", () => {
     const { data } = await issue.json<{
       data: { id: string; code: string; expiresAt: string };
     }>();
-    expect(Date.parse(data.expiresAt)).toBe(now + 3600000);
+    expect(Date.parse(data.expiresAt)).toBe(now + INVITATION_LIFETIME_MS);
     const authorization = await redeemInvitation(
       env.DB,
       data.code,
@@ -459,15 +478,12 @@ describe("invitation administration", () => {
       {
         method: "POST",
         headers: adminHeaders(),
-        body: JSON.stringify({
-          email: "expired@example.com",
-          expiresInSeconds: 3600,
-        }),
+        body: JSON.stringify({ email: "expired@example.com" }),
       },
       env,
     );
     const expired = await second.json<{ data: { code: string } }>();
-    now += 3600000;
+    now += INVITATION_LIFETIME_MS;
     await expect(
       redeemInvitation(env.DB, expired.data.code, "expired@example.com", now),
     ).resolves.toBeNull();
