@@ -1,0 +1,7 @@
+:root{
+--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;--space-16:64px;
+--gutter:20px;--stack:16px;
+/* layout */
+--screen-w:390px;--control-h:44px;--control-h-lg:52px;--tabbar-h:56px;--topbar-h:52px;--list-row-h:64px;
+--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}

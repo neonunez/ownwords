@@ -1,0 +1,6 @@
+:root{
+--radius-xs:6px;--radius-sm:10px;--radius-md:14px;--radius-lg:20px;--radius-xl:28px;--radius-pill:999px;
+--border-w:1px;
+--ring:0 0 0 3px var(--accent-ring) /* @kind shadow */;
+--blur-bar:saturate(1.4) blur(18px) /* @kind other */;
+}
