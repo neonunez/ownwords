@@ -17,14 +17,24 @@ let test: TestD1;
 let importer: LexiconCourseImportService;
 let app: Hono<LearningEnv>;
 
-function request(path: string, init: RequestInit = {}, token?: string): Promise<Response> {
+function request(
+  path: string,
+  init: RequestInit = {},
+  token?: string,
+): Promise<Response> {
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
-  return Promise.resolve(app.request(`http://test${path}`, { ...init, headers }, { DB: test.db }));
+  return Promise.resolve(
+    app.request(`http://test${path}`, { ...init, headers }, { DB: test.db }),
+  );
 }
 
 function json(method: string, body: unknown): RequestInit {
-  return { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+  return {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
 }
 
 async function recordLesson(
@@ -43,7 +53,10 @@ async function recordLesson(
   }
 }
 
-async function completeHello(userToken = "alice-token", version = 1): Promise<Response> {
+async function completeHello(
+  userToken = "alice-token",
+  version = 1,
+): Promise<Response> {
   await recordLesson(userToken, "hello", ["hello-hear", "hello-use"], version);
   return request(
     `/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/complete`,
@@ -52,15 +65,22 @@ async function completeHello(userToken = "alice-token", version = 1): Promise<Re
   );
 }
 
-async function publishVersionTwo(course: Record<string, unknown> = {}): Promise<void> {
-  const next = structuredClone(fixture()) as { version: number; course: Record<string, unknown> };
+async function publishVersionTwo(
+  course: Record<string, unknown> = {},
+): Promise<void> {
+  const next = structuredClone(fixture()) as {
+    version: number;
+    course: Record<string, unknown>;
+  };
   next.version = 2;
   Object.assign(next.course, course);
   await ingestCourseVersion(test.db, next);
   await publishCourseVersion(test.db, "russian-zero", 2);
 }
 
-function createRoot(options: Parameters<typeof createLearningRoutes>[0]): Hono<LearningEnv> {
+function createRoot(
+  options: Parameters<typeof createLearningRoutes>[0],
+): Hono<LearningEnv> {
   const root = new Hono<LearningEnv>();
   root.use("/api/v1/learning/*", async (c, next) => {
     const authorization = c.req.header("authorization");
@@ -76,9 +96,23 @@ function createRoot(options: Parameters<typeof createLearningRoutes>[0]): Hono<L
 
 beforeEach(async () => {
   test = new TestD1();
-  await ingestCourseVersion(test.db, fixture(), new Date("2026-01-01T00:00:00Z"));
-  await publishCourseVersion(test.db, "russian-zero", 1, new Date("2026-01-02T00:00:00Z"));
-  importer = { importCourseEntry: vi.fn(async () => ({ entryId: "fixture-entry", created: true })) };
+  await ingestCourseVersion(
+    test.db,
+    fixture(),
+    new Date("2026-01-01T00:00:00Z"),
+  );
+  await publishCourseVersion(
+    test.db,
+    "russian-zero",
+    1,
+    new Date("2026-01-02T00:00:00Z"),
+  );
+  importer = {
+    importCourseEntry: vi.fn(async () => ({
+      entryId: "fixture-entry",
+      created: true,
+    })),
+  };
 });
 
 afterEach(() => test.close());
@@ -97,7 +131,9 @@ describe("authenticated learning routes", () => {
     expect(await missing.json()).toEqual({
       error: { code: "UNAUTHENTICATED", message: "Authentication is required" },
     });
-    const fabricated = await request("/api/v1/learning/courses", { headers: { "x-user-id": "alice" } });
+    const fabricated = await request("/api/v1/learning/courses", {
+      headers: { "x-user-id": "alice" },
+    });
     expect(fabricated.status).toBe(401);
   });
 
@@ -107,7 +143,9 @@ describe("authenticated learning routes", () => {
     await ingestCourseVersion(test.db, draft);
     const list = await request("/api/v1/learning/courses", {}, "alice-token");
     expect(list.status).toBe(200);
-    expect(await list.json()).toMatchObject({ courses: [{ id: "russian-zero", version: 1 }] });
+    expect(await list.json()).toMatchObject({
+      courses: [{ id: "russian-zero", version: 1 }],
+    });
     const hidden = await request(
       "/api/v1/learning/courses/russian-zero/versions/2",
       {},
@@ -135,18 +173,20 @@ describe("authenticated learning routes", () => {
           { items: [{ itemId: "privet", role: "introduced" }] },
           { items: [{ itemId: "privet", role: "reviewed" }] },
         ],
-        contentItems: [{
-          id: "privet",
-          languageTag: "ru",
-          displayText: "привет",
-          stressText: "приве́т",
-          license: { spdxId: "CC0-1.0" },
-          provenance: { sourceName: "Ownwords tests" },
-          audio: {
-            kind: "recorded",
-            url: "https://audio.example.invalid/synthetic/privet.ogg",
+        contentItems: [
+          {
+            id: "privet",
+            languageTag: "ru",
+            displayText: "привет",
+            stressText: "приве́т",
+            license: { spdxId: "CC0-1.0" },
+            provenance: { sourceName: "Ownwords tests" },
+            audio: {
+              kind: "recorded",
+              url: "https://audio.example.invalid/synthetic/privet.ogg",
+            },
           },
-        }],
+        ],
       },
     });
   });
@@ -180,27 +220,45 @@ describe("authenticated learning routes", () => {
     );
     expect(locked.status).toBe(403);
     expect((await completeHello()).status).toBe(200);
-    const alice = await request("/api/v1/learning/courses/russian-zero/resume", {}, "alice-token");
-    expect(await alice.json()).toMatchObject({ resume: { lessonId: "goodbye", stepId: "goodbye-rule" } });
-    const bob = await request("/api/v1/learning/courses/russian-zero/resume", {}, "bob-token");
-    expect(await bob.json()).toMatchObject({ resume: { lessonId: "hello", stepId: "hello-hear" } });
+    const alice = await request(
+      "/api/v1/learning/courses/russian-zero/resume",
+      {},
+      "alice-token",
+    );
+    expect(await alice.json()).toMatchObject({
+      resume: { lessonId: "goodbye", stepId: "goodbye-rule" },
+    });
+    const bob = await request(
+      "/api/v1/learning/courses/russian-zero/resume",
+      {},
+      "bob-token",
+    );
+    expect(await bob.json()).toMatchObject({
+      resume: { lessonId: "hello", stepId: "hello-hear" },
+    });
   });
 
   it("persists completion and retries failed Lexicon callbacks without duplicates", async () => {
     let fail = true;
-    const callback = vi.fn<LexiconCourseImportService["importCourseEntry"]>(async () => {
-      if (fail) throw new Error("synthetic Lexicon outage");
-      return { entryId: "fixture-entry", created: false };
-    });
+    const callback = vi.fn<LexiconCourseImportService["importCourseEntry"]>(
+      async () => {
+        if (fail) throw new Error("synthetic Lexicon outage");
+        return { entryId: "fixture-entry", created: false };
+      },
+    );
     importer.importCourseEntry = callback;
     const firstCompletion = await completeHello();
     expect(firstCompletion.status).toBe(202);
     expect(await firstCompletion.json()).toMatchObject({
       completion: { lexiconSync: { status: "pending", pendingItems: 1 } },
     });
-    expect(test.sqlite.prepare(
-      "SELECT status FROM learning_user_lesson_progress WHERE user_id = 'alice' AND lesson_id = 'hello'",
-    ).get()).toEqual({ status: "completed" });
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT status FROM learning_user_lesson_progress WHERE user_id = 'alice' AND lesson_id = 'hello'",
+        )
+        .get(),
+    ).toEqual({ status: "completed" });
 
     fail = false;
     const retry = await request(
@@ -210,13 +268,15 @@ describe("authenticated learning routes", () => {
     );
     expect(retry.status).toBe(200);
     expect(callback).toHaveBeenCalledTimes(2);
-    expect(callback).toHaveBeenLastCalledWith(expect.objectContaining({
-      ownerId: "alice",
-      courseId: "russian-zero",
-      courseVersion: "1",
-      itemId: "privet",
-      senses: [expect.objectContaining({ gloss: "synthetic test greeting" })],
-    }));
+    expect(callback).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        ownerId: "alice",
+        courseId: "russian-zero",
+        courseVersion: "1",
+        itemId: "privet",
+        senses: [expect.objectContaining({ gloss: "synthetic test greeting" })],
+      }),
+    );
     const repeated = await request(
       "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
       { method: "POST" },
@@ -232,23 +292,37 @@ describe("authenticated learning routes", () => {
       {},
       "alice-token",
     );
-    expect(await before.json()).toMatchObject({ references: [{ locked: true, body: null }] });
+    expect(await before.json()).toMatchObject({
+      references: [{ locked: true, body: null }],
+    });
     await completeHello();
     const after = await request(
       "/api/v1/learning/references?courseId=russian-zero&version=1&category=grammar",
       {},
       "alice-token",
     );
-    expect(await after.json()).toMatchObject({ references: [{ locked: false, body: { summary: "Test only" } }] });
+    expect(await after.json()).toMatchObject({
+      references: [{ locked: false, body: { summary: "Test only" } }],
+    });
   });
 
   it("mounts and serves content without any practice adapter", async () => {
     app = createRoot({ lexiconImporter: importer });
-    const courses = await request("/api/v1/learning/courses", {}, "alice-token");
+    const courses = await request(
+      "/api/v1/learning/courses",
+      {},
+      "alice-token",
+    );
     expect(courses.status).toBe(200);
-    expect(await courses.json()).toMatchObject({ courses: [{ id: "russian-zero", version: 1 }] });
+    expect(await courses.json()).toMatchObject({
+      courses: [{ id: "russian-zero", version: 1 }],
+    });
     await recordLesson("alice-token", "hello", ["hello-hear"]);
-    const practice = await request("/api/v1/learning/practice?courseId=russian-zero", {}, "alice-token");
+    const practice = await request(
+      "/api/v1/learning/practice?courseId=russian-zero",
+      {},
+      "alice-token",
+    );
     expect(practice.status).toBe(404);
   });
 });
@@ -276,46 +350,91 @@ describe("course version pinning", () => {
         waiting.shift()?.();
       }
     };
-    const race = (version: number) => Promise.resolve(app.request(
-      `http://test/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/progress`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json", authorization: "Bearer alice-token" },
-        body: JSON.stringify({ stepId: "hello-hear" }),
-      },
-      { DB: gated },
-    ));
+    const race = (version: number) =>
+      Promise.resolve(
+        app.request(
+          `http://test/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/progress`,
+          {
+            method: "PUT",
+            headers: {
+              "content-type": "application/json",
+              authorization: "Bearer alice-token",
+            },
+            body: JSON.stringify({ stepId: "hello-hear" }),
+          },
+          { DB: gated },
+        ),
+      );
     const [winner, loser] = await Promise.all([race(1), race(2)]);
     expect(winner.status).toBe(200);
     expect(loser.status).toBe(409);
-    expect(await loser.json()).toMatchObject({ error: { code: "COURSE_VERSION_MISMATCH" } });
-    expect(batchOutcomes).toEqual(["committed", expect.objectContaining({
-      message: expect.stringMatching(/FOREIGN KEY constraint failed/),
-    })]);
-    expect(test.sqlite.prepare(
-      "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
-    ).get()).toEqual({ course_version: 1, current_step_id: "hello-hear" });
-    expect(test.sqlite.prepare(
-      "SELECT COUNT(DISTINCT course_version) AS count FROM learning_user_lesson_progress WHERE user_id = 'alice'",
-    ).get()).toEqual({ count: 1 });
+    expect(await loser.json()).toMatchObject({
+      error: { code: "COURSE_VERSION_MISMATCH" },
+    });
+    expect(batchOutcomes).toEqual([
+      "committed",
+      expect.objectContaining({
+        message: expect.stringMatching(/FOREIGN KEY constraint failed/),
+      }),
+    ]);
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
+        )
+        .get(),
+    ).toEqual({ course_version: 1, current_step_id: "hello-hear" });
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT COUNT(DISTINCT course_version) AS count FROM learning_user_lesson_progress WHERE user_id = 'alice'",
+        )
+        .get(),
+    ).toEqual({ count: 1 });
   });
 
   it("keeps started users on their version after a newer version is published", async () => {
     expect((await completeHello()).status).toBe(200);
     await publishVersionTwo();
 
-    const aliceCourses = await request("/api/v1/learning/courses", {}, "alice-token");
-    expect(await aliceCourses.json()).toMatchObject({ courses: [{ id: "russian-zero", version: 1 }] });
-    const bobCourses = await request("/api/v1/learning/courses", {}, "bob-token");
-    expect(await bobCourses.json()).toMatchObject({ courses: [{ id: "russian-zero", version: 2 }] });
+    const aliceCourses = await request(
+      "/api/v1/learning/courses",
+      {},
+      "alice-token",
+    );
+    expect(await aliceCourses.json()).toMatchObject({
+      courses: [{ id: "russian-zero", version: 1 }],
+    });
+    const bobCourses = await request(
+      "/api/v1/learning/courses",
+      {},
+      "bob-token",
+    );
+    expect(await bobCourses.json()).toMatchObject({
+      courses: [{ id: "russian-zero", version: 2 }],
+    });
 
-    const resume = await request("/api/v1/learning/courses/russian-zero/resume", {}, "alice-token");
+    const resume = await request(
+      "/api/v1/learning/courses/russian-zero/resume",
+      {},
+      "alice-token",
+    );
     expect(await resume.json()).toMatchObject({
       resume: { version: 1, lessonId: "goodbye", stepId: "goodbye-rule" },
     });
-    const outline = await request("/api/v1/learning/courses/russian-zero/versions/1", {}, "alice-token");
+    const outline = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1",
+      {},
+      "alice-token",
+    );
     expect(await outline.json()).toMatchObject({
-      course: { units: [{ lessons: [{ id: "hello", status: "completed" }, { id: "goodbye" }] }] },
+      course: {
+        units: [
+          {
+            lessons: [{ id: "hello", status: "completed" }, { id: "goodbye" }],
+          },
+        ],
+      },
     });
     const goodbye = await request(
       "/api/v1/learning/courses/russian-zero/versions/1/lessons/goodbye",
@@ -328,7 +447,9 @@ describe("course version pinning", () => {
       {},
       "alice-token",
     );
-    expect(await references.json()).toMatchObject({ references: [{ locked: false }] });
+    expect(await references.json()).toMatchObject({
+      references: [{ locked: false }],
+    });
   });
 
   it("rejects reads and writes against a version the user did not start", async () => {
@@ -338,17 +459,33 @@ describe("course version pinning", () => {
       ["/courses/russian-zero/versions/2", {}],
       ["/courses/russian-zero/versions/2/lessons/hello", {}],
       ["/references?courseId=russian-zero&version=2&category=grammar", {}],
-      ["/courses/russian-zero/versions/2/lessons/hello/progress", json("PUT", { stepId: "hello-hear" })],
-      ["/courses/russian-zero/versions/2/lessons/hello/complete", { method: "POST" }],
+      [
+        "/courses/russian-zero/versions/2/lessons/hello/progress",
+        json("PUT", { stepId: "hello-hear" }),
+      ],
+      [
+        "/courses/russian-zero/versions/2/lessons/hello/complete",
+        { method: "POST" },
+      ],
     ];
     for (const [path, init] of paths) {
-      const response = await request(`/api/v1/learning${path}`, init, "alice-token");
+      const response = await request(
+        `/api/v1/learning${path}`,
+        init,
+        "alice-token",
+      );
       expect(response.status).toBe(409);
-      expect(await response.json()).toMatchObject({ error: { code: "COURSE_VERSION_MISMATCH" } });
+      expect(await response.json()).toMatchObject({
+        error: { code: "COURSE_VERSION_MISMATCH" },
+      });
     }
-    expect(test.sqlite.prepare(
-      "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
-    ).get()).toEqual({ course_version: 1, current_step_id: "hello-use" });
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
+        )
+        .get(),
+    ).toEqual({ course_version: 1, current_step_id: "hello-use" });
   });
 
   it("imports each course item into Lexicon once across published versions", async () => {
@@ -371,21 +508,36 @@ describe("course version pinning", () => {
     );
     expect(repeated.status).toBe(200);
     expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ courseVersion: "1", itemId: "privet" }));
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ courseVersion: "1", itemId: "privet" }),
+    );
   });
 
   it("serves corrected course metadata from the version each user sees", async () => {
     await recordLesson("alice-token", "hello", ["hello-hear"]);
-    await publishVersionTwo({ title: "Corrected Synthetic Russian", description: "Corrected synthetic description." });
+    await publishVersionTwo({
+      title: "Corrected Synthetic Russian",
+      description: "Corrected synthetic description.",
+    });
     const alice = await request("/api/v1/learning/courses", {}, "alice-token");
     expect(await alice.json()).toMatchObject({
       courses: [{ version: 1, title: "Synthetic Russian Test Course" }],
     });
     const bob = await request("/api/v1/learning/courses", {}, "bob-token");
     expect(await bob.json()).toMatchObject({
-      courses: [{ version: 2, title: "Corrected Synthetic Russian", description: "Corrected synthetic description." }],
+      courses: [
+        {
+          version: 2,
+          title: "Corrected Synthetic Russian",
+          description: "Corrected synthetic description.",
+        },
+      ],
     });
-    const bobOutline = await request("/api/v1/learning/courses/russian-zero/versions/2", {}, "bob-token");
+    const bobOutline = await request(
+      "/api/v1/learning/courses/russian-zero/versions/2",
+      {},
+      "bob-token",
+    );
     expect(await bobOutline.json()).toMatchObject({
       course: { languageTag: "ru", title: "Corrected Synthetic Russian" },
     });

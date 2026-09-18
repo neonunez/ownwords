@@ -1,5 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { contentHash, ContentValidationError, validateContentPack } from "../src/content";
+import {
+  contentHash,
+  ContentValidationError,
+  validateContentPack,
+} from "../src/content";
 
 async function main(): Promise<void> {
   const [command, file] = process.argv.slice(2);
@@ -13,7 +17,9 @@ async function main(): Promise<void> {
   try {
     input = JSON.parse(await readFile(file, "utf8")) as unknown;
   } catch (error) {
-    console.error(`Could not read valid JSON: ${error instanceof Error ? error.message : "unknown error"}`);
+    console.error(
+      `Could not read valid JSON: ${error instanceof Error ? error.message : "unknown error"}`,
+    );
     process.exitCode = 1;
     return;
   }

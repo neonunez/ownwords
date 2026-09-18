@@ -13,14 +13,25 @@ export class LearningError extends Error {
   }
 }
 
-export function errorResponse(c: Context<LearningEnv>, error: unknown): Response {
+export function errorResponse(
+  c: Context<LearningEnv>,
+  error: unknown,
+): Response {
   if (error instanceof LearningError) {
-    return c.json({ error: { code: error.code, message: error.message } }, error.status);
+    return c.json(
+      { error: { code: error.code, message: error.message } },
+      error.status,
+    );
   }
 
   console.error("learning route failed", error);
   return c.json(
-    { error: { code: "INTERNAL_ERROR", message: "The request could not be completed" } },
+    {
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "The request could not be completed",
+      },
+    },
     500,
   );
 }

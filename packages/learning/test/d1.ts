@@ -25,7 +25,11 @@ class TestStatement {
   ) {}
 
   bind(...values: Bound[]): D1PreparedStatement {
-    return new TestStatement(this.database, this.sql, values) as unknown as D1PreparedStatement;
+    return new TestStatement(
+      this.database,
+      this.sql,
+      values,
+    ) as unknown as D1PreparedStatement;
   }
 
   private prepared(): StatementSync {
@@ -43,7 +47,8 @@ class TestStatement {
   }
 
   async first<T = Record<string, unknown>>(column?: string): Promise<T | null> {
-    const row = this.prepared().get(...this.sqliteBindings()) as Record<string, unknown> | undefined;
+    const row = this.prepared().get(...this.sqliteBindings()) as
+      Record<string, unknown> | undefined;
     if (!row) return null;
     return (column ? row[column] : row) as T;
   }
@@ -55,7 +60,11 @@ class TestStatement {
 
   runSync<T = Record<string, unknown>>(): D1Result<T> {
     const result = this.prepared().run(...this.sqliteBindings());
-    return { success: true, results: [], meta: meta(Number(result.changes)) } as unknown as D1Result<T>;
+    return {
+      success: true,
+      results: [],
+      meta: meta(Number(result.changes)),
+    } as unknown as D1Result<T>;
   }
 
   async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
@@ -75,14 +84,19 @@ export class TestD1 {
 
   constructor() {
     this.sqlite.exec("PRAGMA foreign_keys = ON");
-    const migrationPath = fileURLToPath(new URL("../migrations/0200_learning.sql", import.meta.url));
+    const migrationPath = fileURLToPath(
+      new URL("../migrations/0200_learning.sql", import.meta.url),
+    );
     this.sqlite.exec(readFileSync(migrationPath, "utf8"));
     this.db = {
-      prepare: (sql: string) => new TestStatement(this.sqlite, sql) as unknown as D1PreparedStatement,
+      prepare: (sql: string) =>
+        new TestStatement(this.sqlite, sql) as unknown as D1PreparedStatement,
       batch: async <T = unknown>(statements: D1PreparedStatement[]) => {
         this.sqlite.exec("BEGIN IMMEDIATE");
         try {
-          const results = statements.map((statement) => (statement as unknown as TestStatement).runSync<T>());
+          const results = statements.map((statement) =>
+            (statement as unknown as TestStatement).runSync<T>(),
+          );
           this.sqlite.exec("COMMIT");
           return results;
         } catch (error) {
@@ -95,7 +109,9 @@ export class TestD1 {
         return { count: 0, duration: 0 };
       },
       dump: async () => new ArrayBuffer(0),
-      withSession: () => { throw new Error("not needed by learning tests"); },
+      withSession: () => {
+        throw new Error("not needed by learning tests");
+      },
     } as unknown as D1Database;
   }
 
@@ -105,6 +121,8 @@ export class TestD1 {
 }
 
 export function fixture(): unknown {
-  const path = fileURLToPath(new URL("./fixtures/synthetic-russian.json", import.meta.url));
+  const path = fileURLToPath(
+    new URL("./fixtures/synthetic-russian.json", import.meta.url),
+  );
   return JSON.parse(readFileSync(path, "utf8")) as unknown;
 }

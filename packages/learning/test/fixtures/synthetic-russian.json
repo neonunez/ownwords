@@ -23,15 +23,21 @@
               "id": "hello-hear",
               "position": 1,
               "kind": "hear",
-              "payload": { "instruction": "Listen to the synthetic fixture recording metadata." },
-              "items": [{ "itemId": "privet", "role": "introduced", "position": 1 }]
+              "payload": {
+                "instruction": "Listen to the synthetic fixture recording metadata."
+              },
+              "items": [
+                { "itemId": "privet", "role": "introduced", "position": 1 }
+              ]
             },
             {
               "id": "hello-use",
               "position": 2,
               "kind": "use",
               "payload": { "instruction": "Select the fixture greeting." },
-              "items": [{ "itemId": "privet", "role": "reviewed", "position": 1 }]
+              "items": [
+                { "itemId": "privet", "role": "reviewed", "position": 1 }
+              ]
             }
           ]
         },
@@ -45,8 +51,12 @@
               "id": "goodbye-rule",
               "position": 1,
               "kind": "rule",
-              "payload": { "lines": ["This is synthetic test-author content."] },
-              "items": [{ "itemId": "poka", "role": "introduced", "position": 1 }]
+              "payload": {
+                "lines": ["This is synthetic test-author content."]
+              },
+              "items": [
+                { "itemId": "poka", "role": "introduced", "position": 1 }
+              ]
             },
             {
               "id": "goodbye-practice",
@@ -69,14 +79,28 @@
       "gloss": "synthetic test greeting",
       "stressText": "приве́т",
       "grammaticalMetadata": { "fixture": true },
-      "license": { "spdxId": "CC0-1.0", "sourceName": "Ownwords synthetic test fixture" },
-      "provenance": { "sourceName": "Ownwords tests", "author": "Ownwords test authors", "note": "Synthetic, not curriculum." },
+      "license": {
+        "spdxId": "CC0-1.0",
+        "sourceName": "Ownwords synthetic test fixture"
+      },
+      "provenance": {
+        "sourceName": "Ownwords tests",
+        "author": "Ownwords test authors",
+        "note": "Synthetic, not curriculum."
+      },
       "audio": {
         "kind": "recorded",
         "url": "https://audio.example.invalid/synthetic/privet.ogg",
         "mediaType": "audio/ogg",
-        "license": { "spdxId": "CC0-1.0", "sourceName": "Ownwords synthetic test fixture" },
-        "provenance": { "sourceName": "Ownwords tests", "author": "Ownwords test authors", "note": "Metadata-only fake recording URL." },
+        "license": {
+          "spdxId": "CC0-1.0",
+          "sourceName": "Ownwords synthetic test fixture"
+        },
+        "provenance": {
+          "sourceName": "Ownwords tests",
+          "author": "Ownwords test authors",
+          "note": "Metadata-only fake recording URL."
+        },
         "durationMs": 800
       }
     },
@@ -88,17 +112,73 @@
       "gloss": "synthetic test farewell",
       "stressText": "пока́",
       "grammaticalMetadata": { "fixture": true },
-      "license": { "spdxId": "CC0-1.0", "sourceName": "Ownwords synthetic test fixture" },
-      "provenance": { "sourceName": "Ownwords tests", "author": "Ownwords test authors", "note": "Synthetic, not curriculum." }
+      "license": {
+        "spdxId": "CC0-1.0",
+        "sourceName": "Ownwords synthetic test fixture"
+      },
+      "provenance": {
+        "sourceName": "Ownwords tests",
+        "author": "Ownwords test authors",
+        "note": "Synthetic, not curriculum."
+      }
     }
   ],
   "references": [
-    { "id": "alphabet-a", "category": "alphabet", "position": 1, "title": "Fixture letter", "body": { "letter": "А" }, "introducedUnitId": "sounds-one" },
-    { "id": "grammar-a", "category": "grammar", "position": 1, "title": "Fixture grammar", "body": { "summary": "Test only" }, "introducedUnitId": "sounds-one", "unlockLessonId": "hello" },
-    { "id": "verbs-a", "category": "verbs", "position": 1, "title": "Fixture verb", "body": { "summary": "Test only" }, "unlockLessonId": "hello" },
-    { "id": "phrases-a", "category": "phrases", "position": 1, "title": "Fixture phrase", "body": { "summary": "Test only" }, "unlockLessonId": "hello" },
-    { "id": "intonation-a", "category": "intonation", "position": 1, "title": "Fixture intonation", "body": { "summary": "Test only" } },
-    { "id": "numbers-a", "category": "numbers", "position": 1, "title": "Fixture number", "body": { "summary": "Test only" } },
-    { "id": "vocabulary-privet", "category": "course_vocabulary", "position": 1, "title": "Fixture vocabulary", "body": { "gloss": "test greeting" }, "contentItemId": "privet", "unlockLessonId": "hello" }
+    {
+      "id": "alphabet-a",
+      "category": "alphabet",
+      "position": 1,
+      "title": "Fixture letter",
+      "body": { "letter": "А" },
+      "introducedUnitId": "sounds-one"
+    },
+    {
+      "id": "grammar-a",
+      "category": "grammar",
+      "position": 1,
+      "title": "Fixture grammar",
+      "body": { "summary": "Test only" },
+      "introducedUnitId": "sounds-one",
+      "unlockLessonId": "hello"
+    },
+    {
+      "id": "verbs-a",
+      "category": "verbs",
+      "position": 1,
+      "title": "Fixture verb",
+      "body": { "summary": "Test only" },
+      "unlockLessonId": "hello"
+    },
+    {
+      "id": "phrases-a",
+      "category": "phrases",
+      "position": 1,
+      "title": "Fixture phrase",
+      "body": { "summary": "Test only" },
+      "unlockLessonId": "hello"
+    },
+    {
+      "id": "intonation-a",
+      "category": "intonation",
+      "position": 1,
+      "title": "Fixture intonation",
+      "body": { "summary": "Test only" }
+    },
+    {
+      "id": "numbers-a",
+      "category": "numbers",
+      "position": 1,
+      "title": "Fixture number",
+      "body": { "summary": "Test only" }
+    },
+    {
+      "id": "vocabulary-privet",
+      "category": "course_vocabulary",
+      "position": 1,
+      "title": "Fixture vocabulary",
+      "body": { "gloss": "test greeting" },
+      "contentItemId": "privet",
+      "unlockLessonId": "hello"
+    }
   ]
 }

@@ -4,9 +4,7 @@ export async function first<T>(
   return statement.first<T>();
 }
 
-export async function all<T>(
-  statement: D1PreparedStatement,
-): Promise<T[]> {
+export async function all<T>(statement: D1PreparedStatement): Promise<T[]> {
   const result = await statement.all<T>();
   if (!result.success) {
     throw new Error("D1 query failed");
