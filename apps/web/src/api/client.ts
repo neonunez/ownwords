@@ -20,10 +20,12 @@ import type {
   Lesson,
   NewEntry,
   Page,
+  PracticeScope,
   Preferences,
   ProgressSummary,
   ReferenceTopic,
   ReviewSubmission,
+  Starter,
   SuggestionResult,
 } from './types';
 
@@ -75,11 +77,16 @@ export interface OwnwordsClient {
 
   retryTranslation(entryId: string, senseId: string, equivalentId: string): Promise<Entry>;
 
+  /** The gloss is required; a blank one is refused rather than stored. */
   addSense(entryId: string, gloss: string): Promise<Entry>;
+
+  /** The three expressions an empty Lexicon offers, and adding one of them. */
+  listStarters(): Promise<Starter[]>;
+  addStarter(starterId: string): Promise<Entry>;
 
   /* ---- practice and progress ------------------------------------------- */
 
-  getDueQueue(scope: { mode: 'maintain' | 'learn' }): Promise<DueQueue>;
+  getDueQueue(scope: PracticeScope): Promise<DueQueue>;
   submitReview(submission: ReviewSubmission): Promise<void>;
   getProgress(): Promise<ProgressSummary>;
 

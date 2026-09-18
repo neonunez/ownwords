@@ -7,10 +7,11 @@ import { Empty, Failed, Loading } from '../ScreenState';
 import { useAsync } from '../../shell/useAsync';
 import { useClient } from '../../shell/ClientProvider';
 import { useScreen } from '../../shell/useScreen';
+import { useToast } from '../../shell/ToastProvider';
 import { FrameLayer } from '../../shell/OverlayHost';
-import type { Entry, EntryQuery, Language } from '../../../api/types';
+import type { Entry, EntryQuery, Language, Starter } from '../../../api/types';
 
-type Filter = 'all' | 'unverified' | 'expressions' | string;
+type Filter = 'all' | 'unverified' | 'words' | 'expressions' | 'weak' | 'strong' | string;
 
 /** The worst state on an entry is the one the row shows. */
 function rowState(entry: Entry): StateKind | undefined {
@@ -26,7 +27,9 @@ function queryFor(filter: Filter, search: string): EntryQuery {
   const query: EntryQuery = {};
   if (search.trim()) query.search = search.trim();
   if (filter === 'unverified') query.unverifiedOnly = true;
+  else if (filter === 'words') query.kind = 'word';
   else if (filter === 'expressions') query.kind = 'expression';
+  else if (filter === 'weak' || filter === 'strong') query.mastery = filter;
   else if (filter !== 'all') query.language = filter;
   return query;
 }
@@ -51,7 +54,10 @@ export function LexiconScreen() {
       { key: 'all', label: 'All', lang: undefined },
       ...byLanguage,
       { key: 'unverified', label: 'Unverified', lang: undefined },
+      { key: 'words', label: 'Words', lang: undefined },
       { key: 'expressions', label: 'Expressions', lang: undefined },
+      { key: 'weak', label: 'Needs practice', lang: undefined },
+      { key: 'strong', label: 'Well known', lang: undefined },
     ];
   }, [languages.data]);
 
@@ -147,11 +153,20 @@ export function LexiconScreen() {
               Add “{search.trim()}”
             </Button>
           </Empty>
-        ) : (
-          <Empty message="Your Lexicon is empty. Store the first thing you keep reaching for, and practice can start today.">
-            <Button variant="secondary" icon="plus" onClick={() => navigate('/maintain/add')}>
-              Add your first entry
+        ) : filter !== 'all' ? (
+          <Empty message="Nothing in your Lexicon fits this filter yet.">
+            <Button variant="secondary" onClick={() => setFilter('all')}>
+              Show everything
             </Button>
+          </Empty>
+        ) : (
+          <Empty message="Your Lexicon is empty. Tap a starter expression, or store the first thing you keep reaching for, and practice can start today.">
+            <div style={{ display: 'grid', gap: 8 }}>
+              <Starters onAdded={page.reload} />
+              <Button variant="ghost" icon="plus" onClick={() => navigate('/maintain/add')}>
+                Add your first entry
+              </Button>
+            </div>
           </Empty>
         )}
       </Screen>
@@ -175,6 +190,45 @@ export function LexiconScreen() {
           />
         </div>
       </FrameLayer>
+    </>
+  );
+}
+
+/** The one-tap starter expressions an empty Lexicon offers. */
+function Starters({ onAdded }: { onAdded: () => void }) {
+  const client = useClient();
+  const { showToast } = useToast();
+  const starters = useAsync(() => client.listStarters(), [client]);
+  const [adding, setAdding] = useState(false);
+
+  const add = (starter: Starter) => {
+    setAdding(true);
+    client.addStarter(starter.id).then(
+      () => {
+        showToast(`Added “${starter.headword}”. It is ready to practise.`, { icon: 'check' });
+        onAdded();
+      },
+      () => {
+        setAdding(false);
+        showToast('That starter could not be added. Nothing was lost.');
+      },
+    );
+  };
+
+  return (
+    <>
+      {starters.data?.map((starter) => (
+        <Button
+          key={starter.id}
+          variant="secondary"
+          icon="plus"
+          lang={starter.language}
+          disabled={adding}
+          onClick={() => add(starter)}
+        >
+          {starter.headword}
+        </Button>
+      ))}
     </>
   );
 }

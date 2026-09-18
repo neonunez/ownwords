@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderScreen } from '../../test/utils';
+import { createDemoClient } from '../../api/demo/demoClient';
 import { LexiconScreen } from './maintain/LexiconScreen';
 import { EntryScreen } from './maintain/EntryScreen';
 import { AddEntryScreen } from './maintain/AddEntryScreen';
@@ -37,6 +38,31 @@ describe('the Lexicon', () => {
     await userEvent.type(screen.getByRole('searchbox', { name: 'Search your Lexicon' }), 'zzz');
     expect(await screen.findByText(/Nothing in your Lexicon matches/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add “zzz”/ })).toBeInTheDocument();
+  });
+
+  it('filters to words, and by mastery', async () => {
+    renderScreen(<LexiconScreen />, { route: '/maintain/lexicon' });
+    await screen.findByRole('button', { name: /ni de coña/ });
+    await userEvent.click(screen.getByRole('button', { name: 'Words' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /ni de coña/ })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: /sobremesa/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Well known' }));
+    await waitFor(() => expect(screen.getByText('1 of 6 entries')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /sobremesa/ })).toBeInTheDocument();
+  });
+
+  it('offers three one-tap starter expressions when it is empty', async () => {
+    renderScreen(<LexiconScreen />, { route: '/maintain/lexicon', demo: { entries: [] } });
+    expect(await screen.findByText(/Your Lexicon is empty\./)).toBeInTheDocument();
+    for (const headword of ['no way', 'it depends', 'to let it slide']) {
+      expect(await screen.findByRole('button', { name: headword })).toBeInTheDocument();
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'no way' }));
+    expect(await screen.findByText('1 entry')).toBeInTheDocument();
+    expect(screen.queryByText(/Your Lexicon is empty\./)).not.toBeInTheDocument();
   });
 
   it('filters to the entries nobody has reviewed', async () => {
@@ -85,6 +111,21 @@ describe('an entry', () => {
     await screen.findByRole('dialog', { name: 'How well does it fit?' });
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('adds another sense only once it has a gloss', async () => {
+    const { container } = renderScreen(<EntryScreen />, at);
+    await screen.findByText('actually');
+    await userEvent.click(screen.getByRole('button', { name: 'Add another sense' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Add another sense' });
+    const save = within(sheet).getByRole('button', { name: 'Add this sense' });
+    expect(save).toBeDisabled();
+    await userEvent.type(within(sheet).getByRole('textbox', { name: /What does it mean/ }), '   ');
+    expect(save).toBeDisabled();
+
+    await userEvent.type(within(sheet).getByRole('textbox', { name: /What does it mean/ }), 'as it happens');
+    await userEvent.click(save);
+    expect(await within(container).findByText('Sense 3 · as it happens')).toBeInTheDocument();
   });
 
   it('offers a retry when a translation failed, and says nothing was dropped', async () => {
@@ -179,7 +220,9 @@ describe('practice', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
     }
     expect(await screen.findByText('That is everything due.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Practise what is coming' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Practise what is coming' }));
+    expect(await screen.findByText('after-dinner conversation')).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 ahead of time')).toBeInTheDocument();
   });
 
   it('lets the Flashcards tab keep its format', async () => {
@@ -193,6 +236,21 @@ describe('practice', () => {
 });
 
 describe('progress', () => {
+  it('says practice is due in words, never as a count', async () => {
+    renderScreen(<ProgressScreen />, { route: '/maintain/progress' });
+    expect(await screen.findByText('Practice is due')).toBeInTheDocument();
+    expect(screen.queryByText(/\d+ due/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing is due once Maintain practice is done, whatever Learn holds', async () => {
+    const client = createDemoClient({ suggestionDelaysMs: {} });
+    for (const card of (await client.getDueQueue({ mode: 'maintain' })).cards) {
+      await client.submitReview({ cardId: card.cardId, rating: 'good', format: 'cloze', submissionId: card.cardId });
+    }
+    renderScreen(<ProgressScreen />, { route: '/maintain/progress', client });
+    expect(await screen.findByText(/Nothing is due\./)).toBeInTheDocument();
+  });
+
   it('reports retention and never a streak or a point', async () => {
     renderScreen(<ProgressScreen />, { route: '/maintain/progress' });
     expect(await screen.findByRole('heading', { name: 'Progress' })).toBeInTheDocument();

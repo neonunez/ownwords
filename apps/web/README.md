@@ -4,10 +4,12 @@ The installable Ownwords app: the Maintain and Learn front end, built from the
 Ownwords design system and the product requirements in the repository's root
 `README.md`.
 
-It is a TypeScript React application, served as a static bundle, installable
-on a phone and usable offline once installed. It talks to the backend through
-one typed interface, which today is answered from local fixtures — see
-[docs/backend-boundary.md](docs/backend-boundary.md).
+It is a TypeScript React application, served as a static bundle and
+installable on a phone. Once installed, its shell opens without a network; the
+collection, practice, progress and the course are backend data, and Ownwords
+is online-first, so reading and changing them needs a connection. It talks to
+the backend through one typed interface, which today is answered from local
+fixtures — see [docs/backend-boundary.md](docs/backend-boundary.md).
 
 ## Running it
 
@@ -17,8 +19,9 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-Node 22.5 or newer. Nothing else is required: no backend, no account, no keys,
-no network at runtime.
+Node 22.5 or newer. While the demo client answers, nothing else is required:
+no backend, no account, no keys, no network at runtime. Once the HTTP client
+replaces it, every data flow needs the backend and a connection.
 
 | Command | What it does |
 | --- | --- |
@@ -70,12 +73,15 @@ of `styles/tokens/colors.css`.
 
 Both modes are built, with the flows the design package specifies:
 
-- **Maintain** — Progress (retention per language and direction, and what is
-  coming), Lexicon (search, filters, per-language mastery, entry capture with
-  optional auto-translation and a review step), the entry screen (senses,
-  equivalents, fit labels, translation states, "fix this translation",
-  retry after a failure), Practice (complete the phrase, with a prompt before
-  the answer) and Flashcards.
+- **Maintain** — Progress (retention per language and direction, whether
+  practice is due, and what is coming, with no card counts), Lexicon (search,
+  filters by language, mastery, "unverified" and words vs expressions,
+  per-language mastery, three one-tap starter expressions when it is empty,
+  entry capture with optional auto-translation and a review step), the entry
+  screen (senses, a new sense only once it has a gloss, equivalents, fit
+  labels, translation states, "fix this translation", retry after a failure),
+  Practice (complete the phrase, with a prompt before the answer, and practice
+  ahead once nothing is due) and Flashcards.
 - **Learn** — Course (resume card, units, can-do milestones), the lesson
   (hear it, a rule of four lines, use it, a perception drill), Alphabet (all
   33 letters, with the ones that look Latin but are not marked in words as
@@ -112,12 +118,20 @@ The product's rules, and how they are kept:
 `npm run test:e2e` runs axe over nine screens plus the side panel, in light
 and dark, and expects no violations.
 
-## Installing and offline
+## Installing, and the offline shell
 
 The build emits `manifest.webmanifest` and a Workbox service worker that
 precaches the shell. Installed, the app opens standalone and in portrait, and
 the shell, the fonts and the icons come from the cache when the network is
 gone.
+
+That is all that works offline. Ownwords is online-first and offline use is
+not a goal for the first release: the service worker precaches only the built
+bundle, caches nothing at runtime, and never serves `/api/` from its fallback,
+so no backend answer is ever kept or replayed. With the HTTP client in place,
+a screen opened without a connection shows its written failure and a retry,
+and the collection, practice, progress and the course come back once the
+backend can be reached.
 
 A new build never replaces a running one silently. The waiting worker stays
 waiting, the app says "A new version of Ownwords is ready" and offers a
@@ -158,6 +172,8 @@ screenshots) and the specimen pages that depend on them.
 
 Everything on screen comes from `src/api/demo/fixtures.ts`. It is the sample
 collection the design package's UI kit used, written into the typed shapes the
-backend will answer, and it lives in memory for one session. The demo
+backend will answer, and it lives in memory for one session. Storing a
+collection, scheduling practice and keeping progress are the backend's; the
+connected flows need it, and nothing entered here is kept. The demo
 translator returns canned equivalents after a short, visible wait, so the
 waiting state is real rather than decorative.

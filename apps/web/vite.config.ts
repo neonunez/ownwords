@@ -23,8 +23,9 @@ export default defineConfig({
       includeAssets: ['icons/apple-touch-icon.png', 'icons/icon.svg', 'icons/icon-maskable.svg'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
-        // Hashed build assets are safe to precache; stale caches from older
-        // builds are deleted on activation so no old shell can survive.
+        // Only the built shell is precached, and nothing is cached at runtime:
+        // Ownwords is online-first, so backend answers are never kept. Stale
+        // caches from older builds are deleted on activation.
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: false,

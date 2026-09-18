@@ -11,12 +11,17 @@ import type {
   AlphabetLetter,
   Course,
   Entry,
+  Equivalent,
   Language,
   Lesson,
+  PracticeCard,
   Preferences,
   ReferenceTopic,
-  UpcomingItem,
+  Starter,
 } from '../types';
+
+/** A card as the demo scheduler holds it; the entry supplies headword and note. */
+export type DemoCard = Omit<PracticeCard, 'headword' | 'note'>;
 
 export const demoLanguages: Language[] = [
   { code: 'en', name: 'English', role: 'native', level: 'native' },
@@ -182,13 +187,13 @@ export const demoEntries: Entry[] = [
 ];
 
 /** The cards the scheduler has picked, in the order it picked them. */
-export const demoDue = [
+export const demoDue: DemoCard[] = [
   {
     cardId: 'c1',
     entryId: 'e1',
     language: 'es',
     promptLanguage: 'en',
-    direction: 'produce' as const,
+    direction: 'produce',
     prompt: 'We didn’t have flour, so we ___ oats.',
     answer: 'made do with',
     hint: 'to make do with · arreglárselas con',
@@ -198,7 +203,7 @@ export const demoDue = [
     entryId: 'e2',
     language: 'en',
     promptLanguage: 'es',
-    direction: 'recognise' as const,
+    direction: 'recognise',
     prompt: 'ni de coña',
     answer: 'no way',
     hint: 'A flat refusal, among friends.',
@@ -208,7 +213,7 @@ export const demoDue = [
     entryId: 'e5',
     language: 'es',
     promptLanguage: 'en',
-    direction: 'produce' as const,
+    direction: 'produce',
     prompt: 'to take for granted',
     answer: 'dar por sentado',
     hint: null,
@@ -218,17 +223,96 @@ export const demoDue = [
     entryId: 'e3',
     language: 'ru',
     promptLanguage: 'en',
-    direction: 'recognise' as const,
+    direction: 'recognise',
     prompt: 'на са́мом де́ле',
     answer: 'actually',
     hint: 'You reach for it when you correct somebody gently.',
   },
 ];
 
-export const demoComingUp: UpcomingItem[] = [
-  { when: 'this evening', headword: 'actually', language: 'ru', direction: 'recognise' },
-  { when: 'tomorrow', headword: 'sobremesa', language: 'en', direction: 'produce' },
-  { when: 'in three days', headword: 'ni de coña', language: 'ru', direction: 'produce' },
+/** The cards the scheduler will pick next, soonest first. */
+export const demoUpcoming: (DemoCard & { when: string })[] = [
+  {
+    cardId: 'c5',
+    entryId: 'e6',
+    language: 'ru',
+    promptLanguage: 'en',
+    direction: 'produce',
+    prompt: 'milk',
+    answer: 'молоко́',
+    hint: 'From Unit 2.',
+    when: 'this evening',
+  },
+  {
+    cardId: 'c6',
+    entryId: 'e4',
+    language: 'es',
+    promptLanguage: 'en',
+    direction: 'produce',
+    prompt: 'after-dinner conversation',
+    answer: 'sobremesa',
+    hint: 'The talk after the meal.',
+    when: 'tomorrow',
+  },
+  {
+    cardId: 'c7',
+    entryId: 'e3',
+    language: 'es',
+    promptLanguage: 'es',
+    direction: 'produce',
+    prompt: '___, creo que fue el martes.',
+    answer: 'en realidad',
+    hint: 'To soften a correction.',
+    when: 'in two days',
+  },
+  {
+    cardId: 'c8',
+    entryId: 'e2',
+    language: 'ru',
+    promptLanguage: 'es',
+    direction: 'produce',
+    prompt: 'ni de coña',
+    answer: 'ни за что́',
+    hint: 'A flat refusal.',
+    when: 'in three days',
+  },
+];
+
+/** What an empty Lexicon offers, with equivalents vetted in every demo language. */
+export const demoStarters: (Starter & { kind: 'expression'; equivalents: Omit<Equivalent, 'id'>[] })[] = [
+  {
+    id: 'st1',
+    headword: 'no way',
+    note: 'a flat refusal',
+    language: 'en',
+    kind: 'expression',
+    equivalents: [
+      { language: 'es', text: 'ni hablar', fit: 'exact', state: 'confirmed' },
+      { language: 'ru', text: 'ни за что́', fit: 'exact', state: 'confirmed' },
+    ],
+  },
+  {
+    id: 'st2',
+    headword: 'it depends',
+    note: 'when there is no single answer',
+    language: 'en',
+    kind: 'expression',
+    equivalents: [
+      { language: 'es', text: 'depende', fit: 'exact', state: 'confirmed' },
+      { language: 'ru', text: 'э́то зави́сит', fit: 'exact', state: 'confirmed' },
+    ],
+  },
+  {
+    id: 'st3',
+    headword: 'to let it slide',
+    note: 'when it is not worth the argument',
+    language: 'en',
+    kind: 'expression',
+    equivalents: [
+      { language: 'es', text: 'dejarlo pasar', fit: 'exact', state: 'confirmed' },
+      { language: 'ru', text: 'не придава́ть значе́ния', fit: 'broader', state: 'confirmed' },
+    ],
+  },
 ];
 
 export const demoCourse: Course = {

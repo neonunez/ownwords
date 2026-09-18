@@ -51,8 +51,10 @@ export function PracticeScreen({
   const [phase, setPhase] = useState<Phase>('ask');
   const [typed, setTyped] = useState('');
   const [flipped, setFlipped] = useState(false);
+  // Once the due queue is done, the person may practise what is coming next.
+  const [ahead, setAhead] = useState(false);
 
-  const state = useAsync(() => client.getDueQueue({ mode }), [client, mode]);
+  const state = useAsync(() => client.getDueQueue({ mode, ahead }), [client, mode, ahead]);
 
   const queue = answered ?? state.data?.cards ?? [];
   const card = queue[0] ?? null;
@@ -87,11 +89,12 @@ export function PracticeScreen({
     setPhase(phase === 'hint' ? 'shown' : 'hint');
   };
 
-  const restart = () => {
+  const practiseAhead = () => {
     setAnswered(null);
     setPhase('ask');
     setTyped('');
     setFlipped(false);
+    setAhead(true);
     state.reload();
   };
 
@@ -139,18 +142,24 @@ export function PracticeScreen({
           <Card tone="soft" padding={24} style={{ textAlign: 'center' }}>
             <Mascot expression="happy" size={80} bob style={{ margin: '0 auto 12px' }} />
             <p style={{ margin: 0, font: 'var(--type-title)' }}>That is everything due.</p>
-            {comingUp[0] && (
-              <p style={{ margin: '6px 0 16px', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
-                Next up:{' '}
-                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}>
-                  {comingUp[0].headword}
-                </span>{' '}
-                in {comingUp[0].language.toUpperCase()}, {comingUp[0].when}.
+            {comingUp[0] ? (
+              <>
+                <p style={{ margin: '6px 0 16px', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
+                  Next up:{' '}
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}>
+                    {comingUp[0].headword}
+                  </span>{' '}
+                  in {comingUp[0].language.toUpperCase()}, {comingUp[0].when}.
+                </p>
+                <Button variant="secondary" onClick={practiseAhead}>
+                  Practise what is coming
+                </Button>
+              </>
+            ) : (
+              <p style={{ margin: '6px 0 0', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
+                Nothing else is coming up yet.
               </p>
             )}
-            <Button variant="secondary" onClick={restart}>
-              Practise what is coming
-            </Button>
           </Card>
         ) : (
           <>
@@ -165,7 +174,7 @@ export function PracticeScreen({
               }}
             >
               <span>
-                {position} of {total} due
+                {position} of {total} {ahead ? 'ahead of time' : 'due'}
               </span>
               <span>
                 {card.language.toUpperCase()} · {card.direction}

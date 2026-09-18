@@ -27,6 +27,19 @@ describe('reading the collection', () => {
     expect(page.items.every((entry) => entry.kind === 'expression')).toBe(true);
   });
 
+  it('filters to words', async () => {
+    const page = await client.listEntries({ kind: 'word' });
+    expect(page.items.map((entry) => entry.headword).sort()).toEqual(['actually', 'sobremesa', 'молоко́']);
+  });
+
+  it('filters by mastery band', async () => {
+    const strong = await client.listEntries({ mastery: 'strong' });
+    expect(strong.items.map((entry) => entry.headword)).toEqual(['sobremesa']);
+    const weak = await client.listEntries({ mastery: 'weak' });
+    expect(weak.items.map((entry) => entry.headword)).toContain('to take for granted');
+    expect(weak.items.map((entry) => entry.headword)).not.toContain('sobremesa');
+  });
+
   it('reports a missing entry rather than inventing one', async () => {
     await expect(client.getEntry('nope')).rejects.toBeInstanceOf(OwnwordsError);
   });
@@ -65,6 +78,46 @@ describe('fixing a translation', () => {
     const after = updated.senses[0]!.equivalents.find((candidate) => candidate.id === failed.id)!;
     expect(after.state).toBe('suggested');
     expect(after.text).not.toBe('');
+  });
+});
+
+describe('adding a sense', () => {
+  it('stores the gloss the person gave it', async () => {
+    const updated = await client.addSense('e2', '  a joke that went too far ');
+    expect(updated.senses.map((sense) => sense.gloss)).toEqual(['no way', 'a joke that went too far']);
+  });
+
+  it('refuses a blank gloss and stores nothing', async () => {
+    await expect(client.addSense('e2', '   ')).rejects.toBeInstanceOf(OwnwordsError);
+    expect((await client.getEntry('e2')).senses).toHaveLength(1);
+  });
+});
+
+describe('starting from an empty Lexicon', () => {
+  it('offers three starter expressions', async () => {
+    const empty = createDemoClient({ suggestionDelaysMs: {}, entries: [] });
+    const starters = await empty.listStarters();
+    expect(starters).toHaveLength(3);
+  });
+
+  it('adds a starter with vetted equivalents and makes it due at once', async () => {
+    const empty = createDemoClient({ suggestionDelaysMs: {}, entries: [] });
+    expect((await empty.getDueQueue({ mode: 'maintain' })).cards).toEqual([]);
+
+    const [starter] = await empty.listStarters();
+    const entry = await empty.addStarter(starter!.id);
+    expect(entry.headword).toBe(starter!.headword);
+    expect(entry.senses[0]!.equivalents.every((equivalent) => equivalent.state === 'confirmed')).toBe(true);
+    expect((await empty.listEntries()).items).toHaveLength(1);
+
+    const maintain = await empty.getDueQueue({ mode: 'maintain' });
+    const learn = await empty.getDueQueue({ mode: 'learn' });
+    expect(maintain.cards.map((card) => card.entryId)).toEqual([entry.id]);
+    expect(learn.cards.map((card) => card.entryId)).toEqual([entry.id]);
+  });
+
+  it('refuses a starter it never offered', async () => {
+    await expect(client.addStarter('nope')).rejects.toBeInstanceOf(OwnwordsError);
   });
 });
 
@@ -126,6 +179,36 @@ describe('practice', () => {
     expect(after.cards.map((one) => one.cardId)).toContain(card.cardId);
   });
 
+  it('keeps Maintain practice away from the language being learned', async () => {
+    const due = await client.getDueQueue({ mode: 'maintain' });
+    const ahead = await client.getDueQueue({ mode: 'maintain', ahead: true });
+    expect([...due.cards, ...ahead.cards].some((card) => card.language === 'ru')).toBe(false);
+    expect(due.comingUp.some((item) => item.language === 'ru')).toBe(false);
+  });
+
+  it('offers the cards coming up next once everything due is done', async () => {
+    const due = await client.getDueQueue({ mode: 'maintain' });
+    for (const card of due.cards) {
+      await client.submitReview({ cardId: card.cardId, rating: 'good', format: 'cloze', submissionId: card.cardId });
+    }
+    const empty = await client.getDueQueue({ mode: 'maintain' });
+    expect(empty.cards).toEqual([]);
+    expect(empty.comingUp.map((item) => item.headword)).toEqual(['sobremesa', 'actually']);
+
+    const ahead = await client.getDueQueue({ mode: 'maintain', ahead: true });
+    expect(ahead.cards.map((card) => card.headword)).toEqual(['sobremesa', 'actually']);
+    expect(ahead.estimate).not.toBe('');
+  });
+
+  it('stops offering a card coming up once it has been practised ahead', async () => {
+    const ahead = await client.getDueQueue({ mode: 'learn', ahead: true });
+    expect(ahead.cards.every((card) => card.language === 'ru')).toBe(true);
+    const first = ahead.cards[0]!;
+    await client.submitReview({ cardId: first.cardId, rating: 'good', format: 'cloze', submissionId: 'c' });
+    const due = await client.getDueQueue({ mode: 'learn' });
+    expect(due.comingUp.map((item) => item.headword)).not.toContain(first.headword);
+  });
+
   it('retires a card that was answered', async () => {
     const before = await client.getDueQueue({ mode: 'maintain' });
     const card = before.cards[0]!;
@@ -142,7 +225,28 @@ describe('progress', () => {
       (row) => row.language === 'ru' && row.direction === 'produce',
     )!;
     expect(russianProduce.retention).toBeNull();
-    expect(Object.keys(summary)).not.toContain('cardCount');
+
+    const numbers: string[] = [];
+    const walk = (value: unknown, path: string) => {
+      if (typeof value === 'number') numbers.push(path);
+      else if (value && typeof value === 'object') {
+        for (const [key, inner] of Object.entries(value)) walk(inner, `${path}.${key}`);
+      }
+    };
+    walk(summary, 'summary');
+    expect(numbers.every((path) => path.endsWith('.retention'))).toBe(true);
+  });
+
+  it('says what Maintain practice is due, and not what Learn practice is', async () => {
+    expect((await client.getProgress()).estimate).not.toBe('');
+    const due = await client.getDueQueue({ mode: 'maintain' });
+    for (const card of due.cards) {
+      await client.submitReview({ cardId: card.cardId, rating: 'good', format: 'cloze', submissionId: card.cardId });
+    }
+    expect((await client.getDueQueue({ mode: 'learn' })).cards).not.toEqual([]);
+    const summary = await client.getProgress();
+    expect(summary.estimate).toBe('');
+    expect(summary.comingUp.some((item) => item.language === 'ru')).toBe(false);
   });
 });
 

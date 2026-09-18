@@ -70,13 +70,13 @@ export function ProgressScreen() {
     <>
       <TopBar title="Progress" large mode="Maintain" onMenu={openPanel} />
       <Screen>
-        {progress.dueNow > 0 ? (
+        {progress.estimate ? (
           <Card tone="accent" padding={18} onClick={() => navigate('/maintain/practice')}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <Mascot size={56} color="var(--fg-on-accent)" eye="var(--accent)" />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', font: 'var(--type-title)', fontSize: '1.5rem' }}>
-                  {progress.dueNow} due now
+                  Practice is due
                 </span>
                 <span
                   style={{
@@ -152,6 +152,11 @@ export function ProgressScreen() {
         <Section title="Coming up next">
           <Card tone="sunken" padding={14}>
             <div style={{ display: 'grid', gap: 10 }}>
+              {progress.comingUp.length === 0 && (
+                <p style={{ margin: 0, font: 'var(--type-body)', fontSize: '.9375rem', color: 'var(--fg-2)' }}>
+                  Nothing else is scheduled yet.
+                </p>
+              )}
               {progress.comingUp.map((item) => (
                 <div
                   key={`${item.headword}-${item.language}-${item.direction}`}

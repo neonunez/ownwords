@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test.describe('installing and working offline', () => {
+test.describe('installing, and the offline shell', () => {
   test('serves a manifest that installs as a standalone app', async ({ page, request }) => {
     await page.goto('/');
     const href = await page.locator('link[rel="manifest"]').getAttribute('href');

@@ -34,14 +34,15 @@ domain packages, so the HTTP client is a translation layer and not a redesign.
 
 | `OwnwordsClient` method | Route it will call | Package |
 | --- | --- | --- |
-| `listEntries` | `GET /api/v1/lexicon/entries` | `@ownwords/lexicon` |
+| `listEntries` | `GET /api/v1/lexicon/entries` (`mastery` is a `weak` or `strong` band) | `@ownwords/lexicon` |
 | `getEntry` | `GET /entries/:entryId` | `@ownwords/lexicon` |
 | `createEntry` | `POST /entries` | `@ownwords/lexicon` |
-| `addSense` | `POST /entries/:entryId/senses` | `@ownwords/lexicon` |
+| `addSense` | `POST /entries/:entryId/senses` (a blank gloss is refused) | `@ownwords/lexicon` |
+| `listStarters`, `addStarter` | not yet defined: the three vetted starter expressions an empty Lexicon offers | `@ownwords/lexicon` |
 | `requestSuggestions` | `POST /entries/:entryId/senses/:senseId/suggestions` | `@ownwords/lexicon` |
 | `updateEquivalent` | `PATCH /entries/:entryId/senses/:senseId/equivalents/:equivalentId` | `@ownwords/lexicon` |
 | `retryTranslation` | `POST /entries/:entryId/senses/:senseId/suggestions` | `@ownwords/lexicon` |
-| `getDueQueue` | `GET /practice/due` | `@ownwords/lexicon` |
+| `getDueQueue` | `GET /practice/due`; `ahead: true` asks for the cards coming up next, a scope the package has yet to expose | `@ownwords/lexicon` |
 | `submitReview` | `POST /practice/reviews` | `@ownwords/lexicon` |
 | `getProgress` | `GET /progress` | `@ownwords/lexicon` |
 | `getCourse` | `GET /courses/:courseId/resume` and `GET /courses/:courseId/versions/:version` | `@ownwords/learning` |
@@ -79,6 +80,13 @@ a decision the demo client does not have to make:
   so the review step can move a row from waiting to suggested or failed
   independently. Over HTTP that is one request per language, or one streamed
   response; the callback shape supports either.
+
+## Online-first
+
+Every method above needs the backend and a connection. The service worker
+precaches the shell and nothing else; it never caches or replays a backend
+answer, so an offline launch shows each screen's written failure and retry
+rather than stale data.
 
 ## What must not drift
 

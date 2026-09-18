@@ -81,9 +81,18 @@ export interface EntryQuery {
   kind?: EntryKind;
   /** Only entries carrying an equivalent nobody has confirmed. */
   unverifiedOnly?: boolean;
+  mastery?: MasteryBand;
   cursor?: string;
   limit?: number;
 }
+
+/**
+ * How well an entry is held, on the thresholds the mastery meter colours by.
+ * `weak`: some practised direction, in some language, is below a third.
+ * `strong`: something has been practised, and every practised direction is at
+ * two thirds or above.
+ */
+export type MasteryBand = 'weak' | 'strong';
 
 export interface Page<T> {
   items: T[];
@@ -101,6 +110,17 @@ export interface NewEntry {
   /** The languages to suggest equivalents in; empty means suggest nothing. */
   suggestInto: LanguageTag[];
   senseGloss?: string;
+}
+
+/**
+ * An expression offered to an empty Lexicon. Its equivalents are vetted before
+ * it is offered, so adding it gives practice something to ask on day one.
+ */
+export interface Starter {
+  id: string;
+  headword: string;
+  note: string;
+  language: LanguageTag;
 }
 
 export interface SuggestionResult {
@@ -131,11 +151,17 @@ export interface PracticeCard {
   note: string;
 }
 
+export interface PracticeScope {
+  mode: 'maintain' | 'learn';
+  /** Ask for the cards coming up next, before they are due, instead of what is due now. */
+  ahead?: boolean;
+}
+
 export interface DueQueue {
   cards: PracticeCard[];
-  /** Written for display: "About four minutes." */
+  /** Written for display: "About four minutes." Empty when there are no cards. */
   estimate: string;
-  /** What the scheduler will offer next when the queue is empty. */
+  /** What the scheduler will offer next, beyond these cards. */
   comingUp: UpcomingItem[];
 }
 
@@ -167,11 +193,12 @@ export interface LanguageProgress {
   nextDueAt: string | null;
 }
 
+/** Progress is retention and what is due next. It carries no card counts. */
 export interface ProgressSummary {
   perLanguage: LanguageProgress[];
-  /** How many cards are due across every maintained language, right now. */
-  dueNow: number;
+  /** How long the Maintain practice due now takes: "About four minutes." Empty when nothing is due. */
   estimate: string;
+  /** What Maintain practice offers next. */
   comingUp: UpcomingItem[];
 }
 

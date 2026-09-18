@@ -41,6 +41,8 @@ export function EntryScreen() {
   const { showToast } = useToast();
   const [target, setTarget] = useState<SheetTarget | null>(null);
   const [typed, setTyped] = useState('');
+  const [addingSense, setAddingSense] = useState(false);
+  const [gloss, setGloss] = useState('');
 
   const state = useAsync(
     async () => ({
@@ -86,6 +88,18 @@ export function EntryScreen() {
   const closeSheet = () => {
     setTarget(null);
     setTyped('');
+  };
+
+  const closeSenseSheet = () => {
+    setAddingSense(false);
+    setGloss('');
+  };
+
+  const saveSense = () => {
+    const text = gloss.trim();
+    if (!text) return;
+    closeSenseSheet();
+    void apply(client.addSense(entry.id, text), 'Sense added.');
   };
 
   return (
@@ -245,11 +259,43 @@ export function EntryScreen() {
           variant="ghost"
           icon="plus"
           full
-          onClick={() => void apply(client.addSense(entry.id, 'A new sense'), 'Sense added.')}
+          onClick={() => setAddingSense(true)}
         >
           Add another sense
         </Button>
       </Screen>
+
+      <AppSheet
+        open={addingSense}
+        title="Add another sense"
+        onClose={closeSenseSheet}
+        footer={
+          <Button variant="ghost" full onClick={closeSenseSheet}>
+            Cancel
+          </Button>
+        }
+      >
+        <div style={{ display: 'grid', gap: 8 }}>
+          <TextField
+            label="What does it mean in this sense?"
+            name="sense-gloss"
+            value={gloss}
+            onChange={setGloss}
+            placeholder="A short gloss"
+            hint="Adding a sense never rewrites another."
+            lang={entry.language}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                saveSense();
+              }
+            }}
+          />
+          <Button full disabled={!gloss.trim()} icon="check" onClick={saveSense}>
+            Add this sense
+          </Button>
+        </div>
+      </AppSheet>
 
       <AppSheet
         open={target !== null}

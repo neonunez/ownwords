@@ -16,6 +16,7 @@ import type {
   EntryQuery,
   Language,
   Lesson,
+  MasteryBand,
   NewEntry,
   Page,
   PracticeCard,
@@ -23,13 +24,14 @@ import type {
   ProgressSummary,
   ReferenceTopic,
   ReviewSubmission,
+  Starter,
   SuggestionResult,
+  UpcomingItem,
 } from '../types';
 import { forSearch, inWords } from '../../lib/text';
 import { localId } from '../../lib/ids';
 import {
   demoAlphabet,
-  demoComingUp,
   demoCourse,
   demoDue,
   demoEntries,
@@ -37,7 +39,10 @@ import {
   demoLesson,
   demoPreferences,
   demoReferenceTopics,
+  demoStarters,
   demoSuggestions,
+  demoUpcoming,
+  type DemoCard,
 } from './fixtures';
 
 export interface DemoClientOptions {
@@ -49,6 +54,8 @@ export interface DemoClientOptions {
   suggestionDelaysMs?: Record<string, number>;
   /** Languages the stand-in translator cannot answer for, to exercise failure. */
   failingLanguages?: readonly string[];
+  /** The collection to start from. Defaults to the sample collection. */
+  entries?: readonly Entry[];
 }
 
 const clone = <T,>(value: T): T => structuredClone(value);
@@ -64,12 +71,31 @@ function estimateFor(cards: number): string {
   return minutes === 1 ? 'About a minute.' : `About ${inWords(minutes)} minutes.`;
 }
 
+const learning = new Set(
+  demoLanguages.filter((language) => language.role === 'learning').map((language) => language.code),
+);
+
+/** Learn practises the language being learned; Maintain practises the rest. */
+const inMode = (mode: 'maintain' | 'learn', card: DemoCard): boolean =>
+  learning.has(card.language) === (mode === 'learn');
+
+/** Retrievability bands, on the thresholds the mastery meter colours by. */
+function inBand(entry: Entry, band: MasteryBand): boolean {
+  const readings = Object.values(entry.mastery)
+    .flatMap((mastery) => [mastery.recognise, mastery.produce])
+    .filter((value): value is number => value !== null);
+  if (band === 'weak') return readings.some((value) => value < 0.34);
+  return readings.length > 0 && readings.every((value) => value >= 0.67);
+}
+
 export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClient {
   const delays = options.suggestionDelaysMs ?? { es: 900, ru: 1700 };
   const failing = new Set(options.failingLanguages ?? []);
 
-  let entries: Entry[] = clone(demoEntries);
+  let entries: Entry[] = clone([...(options.entries ?? demoEntries)]);
   let preferences: Preferences = clone(demoPreferences);
+  const due: DemoCard[] = clone(demoDue);
+  const upcoming = clone(demoUpcoming);
   const reviewed = new Set<string>();
 
   const findEntry = (entryId: string): Entry => {
@@ -87,25 +113,37 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
       ),
     );
 
-  const cardsFor = (mode: 'maintain' | 'learn'): PracticeCard[] =>
-    demoDue
-      .filter((card) => (mode === 'learn' ? card.language === 'ru' : card.language !== 'ru'))
-      .filter((card) => !reviewed.has(card.cardId))
-      .map((card) => {
-        const entry = entries.find((candidate) => candidate.id === card.entryId);
-        return {
-          cardId: card.cardId,
-          entryId: card.entryId,
-          headword: entry?.headword ?? card.prompt,
-          language: card.language,
-          promptLanguage: card.promptLanguage,
-          direction: card.direction,
-          prompt: card.prompt,
-          answer: card.answer,
-          hint: card.hint,
-          note: entry?.note ?? '',
-        };
-      });
+  /** The cards still waiting in `cards` for this mode, whose entry is still in the Lexicon. */
+  const pending = <T extends DemoCard>(cards: readonly T[], mode: 'maintain' | 'learn'): T[] =>
+    cards.filter(
+      (card) =>
+        inMode(mode, card) &&
+        !reviewed.has(card.cardId) &&
+        entries.some((entry) => entry.id === card.entryId),
+    );
+
+  const toPracticeCard = (card: DemoCard): PracticeCard => {
+    const entry = findEntry(card.entryId);
+    return {
+      cardId: card.cardId,
+      entryId: card.entryId,
+      headword: entry.headword,
+      language: card.language,
+      promptLanguage: card.promptLanguage,
+      direction: card.direction,
+      prompt: card.prompt,
+      answer: card.answer,
+      hint: card.hint,
+      note: entry.note,
+    };
+  };
+
+  const toUpcoming = (card: DemoCard & { when: string }): UpcomingItem => ({
+    when: card.when,
+    headword: findEntry(card.entryId).headword,
+    language: card.language,
+    direction: card.direction,
+  });
 
   return {
     async listLanguages(): Promise<Language[]> {
@@ -118,6 +156,7 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
         if (search && !forSearch(entry.headword).includes(search)) return false;
         if (query.kind && entry.kind !== query.kind) return false;
         if (query.unverifiedOnly && !isUnverified(entry)) return false;
+        if (query.mastery && !inBand(entry, query.mastery)) return false;
         if (query.language) {
           const inEntry = entry.language === query.language;
           const inEquivalents = entry.senses.some((sense) =>
@@ -238,17 +277,64 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
 
     async addSense(entryId: string, gloss: string): Promise<Entry> {
       const entry = findEntry(entryId);
+      if (!gloss.trim()) {
+        throw new OwnwordsError('invalid_request', 'A sense needs a gloss that says what it means.', 400);
+      }
       entry.senses.push({ id: localId('s'), gloss: gloss.trim(), equivalents: [] });
       entry.version += 1;
       return copyEntry(entry);
     },
 
+    async listStarters(): Promise<Starter[]> {
+      return demoStarters.map(({ id, headword, note, language }) => ({ id, headword, note, language }));
+    },
+
+    async addStarter(starterId: string): Promise<Entry> {
+      const starter = demoStarters.find((candidate) => candidate.id === starterId);
+      if (!starter) {
+        throw new OwnwordsError('not_found', 'That starter expression is no longer offered.', 404);
+      }
+      const entry: Entry = {
+        id: localId('e'),
+        headword: starter.headword,
+        note: starter.note,
+        kind: starter.kind,
+        language: starter.language,
+        version: 1,
+        createdAt: new Date().toISOString(),
+        senses: [
+          {
+            id: localId('s'),
+            gloss: starter.note,
+            equivalents: starter.equivalents.map((equivalent) => ({ ...equivalent, id: localId('q') })),
+          },
+        ],
+        mastery: {},
+      };
+      entries = [entry, ...entries];
+      // Vetted equivalents are due at once, so there is practice on day one.
+      for (const equivalent of starter.equivalents) {
+        due.push({
+          cardId: localId('c'),
+          entryId: entry.id,
+          language: equivalent.language,
+          promptLanguage: starter.language,
+          direction: 'produce',
+          prompt: starter.headword,
+          answer: equivalent.text,
+          hint: starter.note,
+        });
+      }
+      return copyEntry(entry);
+    },
+
     async getDueQueue(scope): Promise<DueQueue> {
-      const cards = cardsFor(scope.mode);
+      const coming = pending(upcoming, scope.mode);
+      const cards = (scope.ahead ? coming : pending(due, scope.mode)).map(toPracticeCard);
       return {
         cards,
         estimate: estimateFor(cards.length),
-        comingUp: clone(demoComingUp),
+        comingUp: scope.ahead ? [] : coming.map(toUpcoming),
       };
     },
 
@@ -258,11 +344,9 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
     },
 
     async getProgress(): Promise<ProgressSummary> {
-      const due = cardsFor('maintain').length + cardsFor('learn').length;
       return {
-        dueNow: due,
-        estimate: estimateFor(due),
-        comingUp: clone(demoComingUp),
+        estimate: estimateFor(pending(due, 'maintain').length),
+        comingUp: pending(upcoming, 'maintain').map(toUpcoming),
         perLanguage: [
           { language: 'es', direction: 'recognise', retention: 0.74, nextDueAt: '2026-09-17T18:00:00.000Z' },
           { language: 'es', direction: 'produce', retention: 0.48, nextDueAt: '2026-09-17T18:00:00.000Z' },
