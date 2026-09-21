@@ -772,53 +772,37 @@ export function createLearningRoutes(
         );
       }
       const timestamp = clock().toISOString();
-      const lessonStatement = existing
-        ? c.env.DB.prepare(
-            `UPDATE learning_user_lesson_progress
-         SET current_step_id = ?, farthest_step_position = MAX(farthest_step_position, ?), updated_at = ?
-         WHERE user_id = ? AND course_id = ? AND course_version = ? AND lesson_id = ?`,
-          ).bind(
-            parsed.data.stepId,
-            step.position,
-            timestamp,
-            userId,
-            courseId,
-            version,
-            lessonId,
-          )
-        : c.env.DB.prepare(
-            `INSERT INTO learning_user_lesson_progress
-         (user_id, course_id, course_version, lesson_id, status, current_step_id,
-          farthest_step_position, started_at, completed_at, updated_at)
-         VALUES (?, ?, ?, ?, 'in_progress', ?, ?, ?, NULL, ?)`,
-          ).bind(
-            userId,
-            courseId,
-            version,
-            lessonId,
-            parsed.data.stepId,
-            step.position,
-            timestamp,
-            timestamp,
-          );
-      const courseStatement = c.env.DB.prepare(
-        `INSERT INTO learning_user_course_progress
-       (user_id, course_id, course_version, current_lesson_id, current_step_id, started_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id, course_id) DO UPDATE SET
-         current_lesson_id = excluded.current_lesson_id,
+      const lessonStatement = c.env.DB.prepare(
+        `INSERT INTO learning_user_lesson_progress
+       (user_id, course_id, course_version, lesson_id, status, current_step_id,
+        farthest_step_position, started_at, completed_at, updated_at)
+       VALUES (?, ?, ?, ?, 'in_progress', ?, ?, ?, NULL, ?)
+       ON CONFLICT(user_id, course_id, course_version, lesson_id) DO UPDATE SET
          current_step_id = excluded.current_step_id,
+         farthest_step_position = MAX(
+           learning_user_lesson_progress.farthest_step_position,
+           excluded.farthest_step_position
+         ),
          updated_at = excluded.updated_at
-       WHERE learning_user_course_progress.course_version = excluded.course_version`,
+       WHERE learning_user_lesson_progress.status = 'in_progress'`,
       ).bind(
         userId,
         courseId,
         version,
         lessonId,
         parsed.data.stepId,
+        step.position,
         timestamp,
         timestamp,
       );
+      const courseStatement = c.env.DB.prepare(
+        `INSERT INTO learning_user_course_progress
+       (user_id, course_id, course_version, started_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, course_id) DO UPDATE SET
+         updated_at = excluded.updated_at
+       WHERE learning_user_course_progress.course_version = excluded.course_version`,
+      ).bind(userId, courseId, version, timestamp, timestamp);
       let results: D1Result[];
       try {
         results = await c.env.DB.batch([courseStatement, lessonStatement]);

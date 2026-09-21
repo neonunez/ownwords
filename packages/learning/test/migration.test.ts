@@ -82,14 +82,14 @@ describe("0200 learning migration", () => {
     await publishCourseVersion(test.db, "russian-zero", 2);
     test.sqlite.exec(
       `INSERT INTO learning_user_course_progress
-       (user_id, course_id, course_version, current_lesson_id, current_step_id, started_at, updated_at)
-       VALUES ('alice', 'russian-zero', 1, NULL, NULL, 't', 't')`,
+       (user_id, course_id, course_version, started_at, updated_at)
+       VALUES ('alice', 'russian-zero', 1, 't', 't')`,
     );
     expect(() =>
       test.sqlite.exec(
         `INSERT INTO learning_user_course_progress
-       (user_id, course_id, course_version, current_lesson_id, current_step_id, started_at, updated_at)
-       VALUES ('alice', 'russian-zero', 2, NULL, NULL, 't', 't')`,
+       (user_id, course_id, course_version, started_at, updated_at)
+       VALUES ('alice', 'russian-zero', 2, 't', 't')`,
       ),
     ).toThrow(/UNIQUE constraint failed/);
     expect(() =>

@@ -65,6 +65,58 @@ async function completeHello(
   );
 }
 
+interface GatedDatabase {
+  gated: D1Database;
+  outcomes: unknown[];
+}
+
+function gatedBatches(
+  database: D1Database,
+  participants: number,
+): GatedDatabase {
+  const waiting: Array<() => void> = [];
+  const outcomes: unknown[] = [];
+  const gated = Object.create(database) as D1Database;
+  gated.batch = async <T = unknown>(statements: D1PreparedStatement[]) => {
+    await new Promise<void>((release) => {
+      waiting.push(release);
+      if (waiting.length === participants) waiting.shift()?.();
+    });
+    try {
+      const results = await database.batch<T>(statements);
+      outcomes.push("committed");
+      return results;
+    } catch (error) {
+      outcomes.push(error);
+      throw error;
+    } finally {
+      waiting.shift()?.();
+    }
+  };
+  return { gated, outcomes };
+}
+
+function submitStep(
+  db: D1Database,
+  version: number,
+  stepId: string,
+): Promise<Response> {
+  return Promise.resolve(
+    app.request(
+      `http://test/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/progress`,
+      {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer alice-token",
+        },
+        body: JSON.stringify({ stepId }),
+      },
+      { DB: db },
+    ),
+  );
+}
+
 async function publishVersionTwo(
   course: Record<string, unknown> = {},
 ): Promise<void> {
@@ -330,48 +382,17 @@ describe("authenticated learning routes", () => {
 describe("course version pinning", () => {
   it("pins exactly one version when first progress races across versions", async () => {
     await publishVersionTwo();
-    const database = test.db;
-    const waiting: Array<() => void> = [];
-    const batchOutcomes: unknown[] = [];
-    const gated = Object.create(database) as D1Database;
-    gated.batch = async <T = unknown>(statements: D1PreparedStatement[]) => {
-      await new Promise<void>((release) => {
-        waiting.push(release);
-        if (waiting.length === 2) waiting.shift()?.();
-      });
-      try {
-        const results = await database.batch<T>(statements);
-        batchOutcomes.push("committed");
-        return results;
-      } catch (error) {
-        batchOutcomes.push(error);
-        throw error;
-      } finally {
-        waiting.shift()?.();
-      }
-    };
-    const race = (version: number) =>
-      Promise.resolve(
-        app.request(
-          `http://test/api/v1/learning/courses/russian-zero/versions/${version}/lessons/hello/progress`,
-          {
-            method: "PUT",
-            headers: {
-              "content-type": "application/json",
-              authorization: "Bearer alice-token",
-            },
-            body: JSON.stringify({ stepId: "hello-hear" }),
-          },
-          { DB: gated },
-        ),
-      );
-    const [winner, loser] = await Promise.all([race(1), race(2)]);
+    const { gated, outcomes } = gatedBatches(test.db, 2);
+    const [winner, loser] = await Promise.all([
+      submitStep(gated, 1, "hello-hear"),
+      submitStep(gated, 2, "hello-hear"),
+    ]);
     expect(winner.status).toBe(200);
     expect(loser.status).toBe(409);
     expect(await loser.json()).toMatchObject({
       error: { code: "COURSE_VERSION_MISMATCH" },
     });
-    expect(batchOutcomes).toEqual([
+    expect(outcomes).toEqual([
       "committed",
       expect.objectContaining({
         message: expect.stringMatching(/FOREIGN KEY constraint failed/),
@@ -380,17 +401,41 @@ describe("course version pinning", () => {
     expect(
       test.sqlite
         .prepare(
-          "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
+          "SELECT course_version FROM learning_user_course_progress WHERE user_id = 'alice'",
         )
-        .get(),
-    ).toEqual({ course_version: 1, current_step_id: "hello-hear" });
+        .all(),
+    ).toEqual([{ course_version: 1 }]);
     expect(
       test.sqlite
         .prepare(
-          "SELECT COUNT(DISTINCT course_version) AS count FROM learning_user_lesson_progress WHERE user_id = 'alice'",
+          "SELECT course_version, current_step_id FROM learning_user_lesson_progress WHERE user_id = 'alice'",
         )
-        .get(),
-    ).toEqual({ count: 1 });
+        .all(),
+    ).toEqual([{ course_version: 1, current_step_id: "hello-hear" }]);
+  });
+
+  it("accepts a duplicated first-step submission without failing the retry", async () => {
+    const { gated, outcomes } = gatedBatches(test.db, 2);
+    const responses = await Promise.all([
+      submitStep(gated, 1, "hello-hear"),
+      submitStep(gated, 1, "hello-hear"),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(outcomes).toEqual(["committed", "committed"]);
+    expect(
+      test.sqlite
+        .prepare(
+          `SELECT status, current_step_id, farthest_step_position
+           FROM learning_user_lesson_progress WHERE user_id = 'alice'`,
+        )
+        .all(),
+    ).toEqual([
+      {
+        status: "in_progress",
+        current_step_id: "hello-hear",
+        farthest_step_position: 1,
+      },
+    ]);
   });
 
   it("keeps started users on their version after a newer version is published", async () => {
@@ -482,10 +527,17 @@ describe("course version pinning", () => {
     expect(
       test.sqlite
         .prepare(
-          "SELECT course_version, current_step_id FROM learning_user_course_progress WHERE user_id = 'alice'",
+          "SELECT course_version FROM learning_user_course_progress WHERE user_id = 'alice'",
         )
-        .get(),
-    ).toEqual({ course_version: 1, current_step_id: "hello-use" });
+        .all(),
+    ).toEqual([{ course_version: 1 }]);
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT current_step_id FROM learning_user_lesson_progress WHERE user_id = 'alice'",
+        )
+        .all(),
+    ).toEqual([{ current_step_id: "hello-use" }]);
   });
 
   it("imports each course item into Lexicon once across published versions", async () => {

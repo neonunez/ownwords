@@ -9,9 +9,12 @@ Apply `migrations/0200_learning.sql` after core `0001*` and Lexicon `0100*` migr
 `/api/v1/learning` after verified Better Auth middleware has set `c.set("userId", subject)`:
 
 ```ts
-app.route("/api/v1/learning", createLearningRoutes({
-  lexiconImporter: createCourseLexiconImporter({ db: env.DB }),
-}));
+app.route(
+  "/api/v1/learning",
+  createLearningRoutes({
+    lexiconImporter: createCourseLexiconImporter({ db: env.DB }),
+  }),
+);
 ```
 
 `lexiconImporter` structurally matches `@ownwords/lexicon`'s `LexiconCourseImportService`. The tuple
@@ -67,10 +70,11 @@ completion, reference-unlock, and pending-sync query is scoped to `userId`.
 ## Local checks
 
 ```sh
-npm install --no-package-lock
-npm run typecheck
-npm test
+npm ci
+npm run check
 ```
+
+Both commands run from the repository root; `npm test --workspace @ownwords/learning` runs this package alone.
 
 Tests use Node's in-memory SQLite adapter to execute the real migration and observable Hono routes. No account,
 secret, cloud resource, production migration, or deployment is required.

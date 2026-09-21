@@ -138,20 +138,13 @@ CREATE TABLE learning_user_course_progress (
   user_id TEXT NOT NULL,
   course_id TEXT NOT NULL,
   course_version INTEGER NOT NULL,
-  current_lesson_id TEXT,
-  current_step_id TEXT,
   started_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, course_id),
   UNIQUE (user_id, course_id, course_version),
   FOREIGN KEY (course_id, course_version)
     REFERENCES learning_course_versions(course_id, version) ON DELETE RESTRICT,
-  FOREIGN KEY (course_id, course_version, current_lesson_id)
-    REFERENCES learning_lessons(course_id, course_version, lesson_id) ON DELETE RESTRICT,
-  FOREIGN KEY (course_id, course_version, current_step_id)
-    REFERENCES learning_steps(course_id, course_version, step_id) ON DELETE RESTRICT,
-  CHECK (length(user_id) BETWEEN 1 AND 255),
-  CHECK (current_step_id IS NULL OR current_lesson_id IS NOT NULL)
+  CHECK (length(user_id) BETWEEN 1 AND 255)
 ) STRICT;
 
 CREATE TABLE learning_user_lesson_progress (
