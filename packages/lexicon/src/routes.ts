@@ -99,6 +99,23 @@ interface CardRow {
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 30;
 const DEFAULT_WRONG_DELAY_MS = 5 * 60 * 1000;
+const MASTERED_STABILITY_DAYS = 21;
+
+interface CardMasteryRow {
+  equivalent_id: string;
+  direction: PracticeDirection;
+  due_at: string;
+  reps: number;
+  stability: number;
+}
+
+interface MasterySummary {
+  level: 'new' | 'learning' | 'mastered';
+  dueAt: string;
+  due: boolean;
+}
+
+type EquivalentMastery = Map<string, Partial<Record<PracticeDirection, MasterySummary>>>;
 
 export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): Hono<LexiconEnv> {
   const app = new Hono<LexiconEnv>();
@@ -148,7 +165,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
       clock,
       ids,
     );
-    const entry = await getEntry(c.env.DB, ownerId, created.id);
+    const entry = await getEntry(c.env.DB, ownerId, created.id, clock.now());
     return c.json({ data: entry }, 201);
   });
 
@@ -168,6 +185,8 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
       ['new', 'due', 'learning', 'mastered'] as const,
       'mastery',
     );
+    const direction = optionalEnum(url.searchParams.get('direction'), directions, 'direction');
+    if (direction !== null && mastery === null) throw new InputError('direction requires a mastery filter');
     const queryValue = url.searchParams.get('query');
     const query = queryValue === null ? null : normalizeSearchText(string(queryValue, 'query', { min: 1, max: 100 })!);
     const cursor = parseCursor(url.searchParams.get('cursor'));
@@ -207,8 +226,8 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
           : mastery === 'due'
             ? 'p.due_at <= ?'
             : mastery === 'learning'
-              ? 'p.reps > 0 AND p.stability < 21'
-              : 'p.stability >= 21';
+              ? `p.reps > 0 AND p.stability < ${MASTERED_STABILITY_DAYS}`
+              : `p.reps > 0 AND p.stability >= ${MASTERED_STABILITY_DAYS}`;
       conditions.push(
         `EXISTS (SELECT 1 FROM lexicon_senses ms
                   JOIN lexicon_equivalents mq ON mq.owner_id = ms.owner_id AND mq.sense_id = ms.id
@@ -217,9 +236,11 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
                    AND mq.deleted_at IS NULL
                    AND mq.status IN ('confirmed', 'manual') AND mq.fit <> 'false_friend'
                    ${language === null ? '' : 'AND mq.language_tag = ?'}
+                   ${direction === null ? '' : 'AND p.direction = ?'}
                    AND ${masteryCondition})`,
       );
       if (language !== null) bindings.push(language);
+      if (direction !== null) bindings.push(direction);
       if (mastery === 'due') bindings.push(iso(clock.now()));
     }
 
@@ -236,7 +257,8 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
         .bind(...bindings, limit + 1),
     );
     const page = rows.slice(0, limit);
-    const data = await Promise.all(page.map((row) => getEntry(c.env.DB, ownerId, row.id)));
+    const now = clock.now();
+    const data = await Promise.all(page.map((row) => getEntry(c.env.DB, ownerId, row.id, now)));
     const last = page.at(-1);
     return c.json({
       data,
@@ -251,7 +273,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
   });
 
   app.get('/entries/:entryId', async (c) => {
-    const entry = await getEntry(c.env.DB, c.get('userId'), validId(c.req.param('entryId')));
+    const entry = await getEntry(c.env.DB, c.get('userId'), validId(c.req.param('entryId')), clock.now());
     if (entry === null) return notFound(c);
     return c.json({ data: entry });
   });
@@ -281,7 +303,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
         .bind(...values, now, entryId, ownerId, version),
     );
     if (changed(result) === 0) return await missingOrConflict(c, 'lexicon_entries', entryId, ownerId);
-    return c.json({ data: await getEntry(c.env.DB, ownerId, entryId) });
+    return c.json({ data: await getEntry(c.env.DB, ownerId, entryId, clock.now()) });
   });
 
   app.delete('/entries/:entryId', async (c) => {
@@ -329,7 +351,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
         .bind(iso(now), entryId, ownerId),
     );
     await c.env.DB.batch(statements);
-    return c.json({ data: await getSense(c.env.DB, ownerId, entryId, senseId) }, 201);
+    return c.json({ data: await getSense(c.env.DB, ownerId, entryId, senseId, now) }, 201);
   });
 
   app.patch('/entries/:entryId/senses/:senseId', async (c) => {
@@ -358,7 +380,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     if (changed(result) === 0) {
       return (await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null ? notFound(c) : conflict(c);
     }
-    return c.json({ data: await getSense(c.env.DB, ownerId, entryId, senseId) });
+    return c.json({ data: await getSense(c.env.DB, ownerId, entryId, senseId, clock.now()) });
   });
 
   app.delete('/entries/:entryId/senses/:senseId', async (c) => {
@@ -394,7 +416,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     const statements: D1PreparedStatement[] = [];
     appendEquivalentInserts(statements, c.env.DB, ownerId, senseId, [equivalent], now, ids, [equivalentId]);
     await c.env.DB.batch(statements);
-    return c.json({ data: await getEquivalent(c.env.DB, ownerId, entryId, senseId, equivalentId) }, 201);
+    return c.json({ data: await getEquivalent(c.env.DB, ownerId, entryId, senseId, equivalentId, now) }, 201);
   });
 
   app.patch('/entries/:entryId/senses/:senseId/equivalents/:equivalentId', async (c) => {
@@ -443,7 +465,7 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     if (isPracticeEligible(status, fit)) appendCardStatements(statements, c.env.DB, ownerId, equivalentId, now, ids);
     const results = await c.env.DB.batch(statements);
     if (changed(results[0]!) === 0) return conflict(c);
-    return c.json({ data: await getEquivalent(c.env.DB, ownerId, entryId, senseId, equivalentId) });
+    return c.json({ data: await getEquivalent(c.env.DB, ownerId, entryId, senseId, equivalentId, now) });
   });
 
   app.delete('/entries/:entryId/senses/:senseId/equivalents/:equivalentId', async (c) => {
@@ -681,47 +703,6 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     return c.json({ data: result.value, replayed: result.replayed }, result.replayed ? 200 : 201);
   });
 
-  app.get('/practice/cards/:cardId/reviews', async (c) => {
-    const ownerId = c.get('userId');
-    const cardId = validId(c.req.param('cardId'));
-    const url = new URL(c.req.url);
-    const limit = parseLimit(url.searchParams.get('limit'));
-    const cursor = parseReviewCursor(url.searchParams.get('cursor'));
-    const card = await first<{ id: string }>(
-      c.env.DB.prepare('SELECT id FROM lexicon_practice_cards WHERE id = ? AND owner_id = ?').bind(cardId, ownerId),
-    );
-    if (card === null) return notFound(c);
-    const history = await all<ReviewEventRow>(
-      c.env.DB
-        .prepare(
-          `SELECT id, submission_id, card_id, session_id, rating, reviewed_at, prior_revision,
-                  resulting_revision, result_json
-             FROM lexicon_review_events
-            WHERE owner_id = ? AND card_id = ?
-              ${cursor === null ? '' : 'AND (reviewed_at < ? OR (reviewed_at = ? AND id < ?))'}
-            ORDER BY reviewed_at DESC, id DESC LIMIT ?`,
-        )
-        .bind(
-          ownerId,
-          cardId,
-          ...(cursor === null ? [] : [cursor.reviewedAt, cursor.reviewedAt, cursor.id]),
-          limit + 1,
-        ),
-    );
-    const page = history.slice(0, limit);
-    const last = page.at(-1);
-    return c.json({
-      data: page.map(mapReviewEvent),
-      page: {
-        limit,
-        nextCursor:
-          history.length > limit && last !== undefined
-            ? encodeReviewCursor({ reviewedAt: last.reviewed_at, id: last.id })
-            : null,
-      },
-    });
-  });
-
   app.get('/progress', async (c) => {
     const ownerId = c.get('userId');
     const language = languageTag(new URL(c.req.url).searchParams.get('language'), 'language');
@@ -805,7 +786,7 @@ function appendEquivalentInserts(
   });
 }
 
-async function getEntry(db: D1Database, ownerId: string, entryId: string): Promise<Record<string, unknown> | null> {
+async function getEntry(db: D1Database, ownerId: string, entryId: string, now: Date): Promise<Record<string, unknown> | null> {
   const entry = await first<EntryRow>(
     db
       .prepare(
@@ -824,7 +805,8 @@ async function getEntry(db: D1Database, ownerId: string, entryId: string): Promi
       )
       .bind(ownerId, entryId),
   );
-  const mappedSenses = await Promise.all(senses.map((sense) => mapSenseWithEquivalents(db, ownerId, sense)));
+  const mastery = await loadMastery(db, ownerId, 's.entry_id', entryId, now);
+  const mappedSenses = await Promise.all(senses.map((sense) => mapSenseWithEquivalents(db, ownerId, sense, mastery)));
   return { ...mapEntry(entry), senses: mappedSenses };
 }
 
@@ -833,9 +815,11 @@ async function getSense(
   ownerId: string,
   entryId: string,
   senseId: string,
+  now: Date,
 ): Promise<Record<string, unknown> | null> {
   const row = await findSenseRow(db, ownerId, entryId, senseId);
-  return row === null ? null : await mapSenseWithEquivalents(db, ownerId, row);
+  if (row === null) return null;
+  return await mapSenseWithEquivalents(db, ownerId, row, await loadMastery(db, ownerId, 'q.sense_id', senseId, now));
 }
 
 async function findSenseRow(db: D1Database, ownerId: string, entryId: string, senseId: string): Promise<SenseRow | null> {
@@ -853,7 +837,12 @@ async function findSenseRow(db: D1Database, ownerId: string, entryId: string, se
   );
 }
 
-async function mapSenseWithEquivalents(db: D1Database, ownerId: string, sense: SenseRow): Promise<Record<string, unknown>> {
+async function mapSenseWithEquivalents(
+  db: D1Database,
+  ownerId: string,
+  sense: SenseRow,
+  mastery: EquivalentMastery,
+): Promise<Record<string, unknown>> {
   const equivalents = await all<EquivalentRow>(
     db
       .prepare(
@@ -864,7 +853,38 @@ async function mapSenseWithEquivalents(db: D1Database, ownerId: string, sense: S
       )
       .bind(ownerId, sense.id),
   );
-  return { ...mapSense(sense), equivalents: equivalents.map(mapEquivalent) };
+  return { ...mapSense(sense), equivalents: equivalents.map((row) => mapEquivalent(row, mastery)) };
+}
+
+async function loadMastery(
+  db: D1Database,
+  ownerId: string,
+  scope: 's.entry_id' | 'q.sense_id' | 'q.id',
+  id: string,
+  now: Date,
+): Promise<EquivalentMastery> {
+  const rows = await all<CardMasteryRow>(
+    db
+      .prepare(
+        `SELECT p.equivalent_id, p.direction, p.due_at, p.reps, p.stability
+           FROM lexicon_practice_cards p
+           JOIN lexicon_equivalents q ON q.id = p.equivalent_id AND q.owner_id = p.owner_id
+           JOIN lexicon_senses s ON s.id = q.sense_id AND s.owner_id = q.owner_id
+          WHERE p.owner_id = ? AND ${scope} = ?`,
+      )
+      .bind(ownerId, id),
+  );
+  const nowIso = iso(now);
+  const mastery: EquivalentMastery = new Map();
+  for (const row of rows) {
+    const summary: MasterySummary = {
+      level: row.reps === 0 ? 'new' : row.stability >= MASTERED_STABILITY_DAYS ? 'mastered' : 'learning',
+      dueAt: row.due_at,
+      due: row.due_at <= nowIso,
+    };
+    mastery.set(row.equivalent_id, { ...mastery.get(row.equivalent_id), [row.direction]: summary });
+  }
+  return mastery;
 }
 
 async function getEquivalent(
@@ -873,9 +893,11 @@ async function getEquivalent(
   entryId: string,
   senseId: string,
   equivalentId: string,
+  now: Date,
 ): Promise<Record<string, unknown> | null> {
   const row = await findEquivalentRow(db, ownerId, entryId, senseId, equivalentId);
-  return row === null ? null : mapEquivalent(row);
+  if (row === null) return null;
+  return mapEquivalent(row, await loadMastery(db, ownerId, 'q.id', equivalentId, now));
 }
 
 async function findEquivalentRow(
@@ -929,7 +951,8 @@ function mapSense(row: SenseRow): Record<string, unknown> {
   };
 }
 
-function mapEquivalent(row: EquivalentRow): Record<string, unknown> {
+function mapEquivalent(row: EquivalentRow, mastery: EquivalentMastery): Record<string, unknown> {
+  const cards = mastery.get(row.id);
   return {
     id: row.id,
     senseId: row.sense_id,
@@ -941,6 +964,9 @@ function mapEquivalent(row: EquivalentRow): Record<string, unknown> {
     source: row.source,
     provenance: decodeJson(row.provenance_json),
     scriptData: decodeJson(row.script_data_json),
+    mastery: isPracticeEligible(row.status, row.fit)
+      ? { recognize: cards?.recognize ?? null, produce: cards?.produce ?? null }
+      : null,
     humanEdited: row.human_edited === 1,
     version: row.version,
     createdAt: row.created_at,
@@ -1234,19 +1260,6 @@ function replayResult(row: ReviewEventRow, input: ReviewInput): SubmitResult {
   return { value: JSON.parse(row.result_json) as Record<string, unknown>, replayed: true };
 }
 
-function mapReviewEvent(row: ReviewEventRow): Record<string, unknown> {
-  return {
-    id: row.id,
-    submissionId: row.submission_id,
-    cardId: row.card_id,
-    sessionId: row.session_id,
-    rating: row.rating,
-    reviewedAt: row.reviewed_at,
-    priorRevision: row.prior_revision,
-    resultingRevision: row.resulting_revision,
-  };
-}
-
 async function entryExists(db: D1Database, ownerId: string, entryId: string): Promise<boolean> {
   return (
     (await first<{ id: string }>(
@@ -1337,37 +1350,13 @@ function parseCursor(raw: string | null): CursorValue | null {
   }
 }
 
-interface ReviewCursorValue {
-  reviewedAt: string;
-  id: string;
-}
-
-function encodeReviewCursor(value: ReviewCursorValue): string {
-  return btoa(JSON.stringify(value));
-}
-
-function parseReviewCursor(raw: string | null): ReviewCursorValue | null {
-  if (raw === null) return null;
-  try {
-    const parsed = object(JSON.parse(atob(raw)), 'cursor');
-    const reviewedAt = string(parsed.reviewedAt, 'cursor.reviewedAt', { min: 20, max: 40 })!;
-    const id = validId(string(parsed.id, 'cursor.id', { min: 1, max: 200 })!);
-    if (Number.isNaN(Date.parse(reviewedAt))) throw new InputError('cursor is invalid');
-    return { reviewedAt, id };
-  } catch (error) {
-    if (error instanceof InputError) throw error;
-    throw new InputError('cursor is invalid');
-  }
-}
-
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
 }
 
 function parseIfMatch(raw: string | undefined): number {
   if (raw === undefined) throw new InputError('If-Match version header is required');
-  const cleaned = raw.replace(/^W\//u, '').replace(/^"|"$/gu, '');
-  const version = Number(cleaned);
-  if (!Number.isInteger(version) || version < 1) throw new InputError('If-Match must contain a positive version');
-  return version;
+  const match = /^"([1-9]\d*)"$/u.exec(raw);
+  if (match === null) throw new InputError('If-Match must be a quoted positive version such as "3"');
+  return Number(match[1]);
 }

@@ -1,16 +1,23 @@
-const REMOVABLE_ACCENTS = /[\u0300\u0301\u0302]/gu;
+const BASE_WITH_MARKS = /(\P{M})(\p{M}+)/gu;
+const DISTINCT_LETTER_MARKS: Record<string, string> = {
+  n: '\u0303',
+  е: '\u0308',
+  и: '\u0306',
+};
 const RUSSIAN_STRESS = /\u0301/gu;
 const SPACES = /\s+/gu;
 
 /**
- * Search ignores case and vowel accent/stress marks while preserving meaningful letters:
- * Spanish ñ remains distinct from n and Russian ё remains distinct from е.
+ * Search ignores case and diacritics (accents, stress, diaeresis, tildes, cedillas) while preserving
+ * letters that are distinct in their alphabet: Spanish ñ, and Russian ё and й.
  */
 export function normalizeSearchText(value: string): string {
   return value
     .normalize('NFD')
     .toLocaleLowerCase('und')
-    .replace(REMOVABLE_ACCENTS, '')
+    .replace(BASE_WITH_MARKS, (_match, base: string, marks: string) =>
+      base + [...marks].filter((mark) => DISTINCT_LETTER_MARKS[base] === mark).join(''),
+    )
     .normalize('NFC')
     .replace(SPACES, ' ')
     .trim();

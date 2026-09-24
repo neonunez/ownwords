@@ -19,14 +19,23 @@ type LexiconEnv = {
 ```
 
 Missing identity returns `401`. Every entry, nested resource, due query, progress aggregate, cache row, and review
-history query is owner-scoped. A resource owned by somebody else is indistinguishable from a missing resource
+event is owner-scoped. A resource owned by somebody else is indistinguishable from a missing resource
 (`404`). Client bodies and query strings cannot select an owner.
 
 Errors use `{ "error": { "code": string, "message": string } }`. Request limits are enforced at the route boundary.
 Updates require a body `version`; deletes require `If-Match: "<version>"`. Stale versions return `409` and deletes
 are soft, keeping owner-scoped review history while removing the resource from reads and practice.
-Entry lists and review history use opaque continuation cursors and cap each page at 100 records. An entry or course
+Entry lists use opaque continuation cursors and cap each page at 100 records. An entry or course
 import accepts at most 20 senses, 30 equivalents per sense, and 100 equivalents in total.
+
+List search (`query`) ignores case and diacritics such as accents, stress marks, diaeresis, tildes, and cedillas,
+but keeps letters that are distinct in their alphabet: `ñ`, `ё`, and `й` (and non-diacritic letters such as `ß`).
+
+Each equivalent carries `mastery`: `null` when it is not practice-eligible, otherwise
+`{ recognize, produce }`, each `{ level: 'new' | 'learning' | 'mastered', dueAt, due }` from that direction's FSRS
+card (`mastered` means stability of at least 21 days). The list `mastery` filter (`new`, `due`, `learning`,
+`mastered`) matches eligible equivalents in the optional `language`, and the optional `direction` scopes it to
+`recognize` or `produce`; `direction` without `mastery` is rejected.
 
 ## Course-to-Lexicon callback
 

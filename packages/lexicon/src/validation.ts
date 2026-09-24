@@ -39,7 +39,8 @@ export function string(
 
 export function optionalString(value: unknown, label: string, max: number): string | null | undefined {
   if (value === undefined) return undefined;
-  return string(value, label, { max, nullable: true });
+  const parsed = string(value, label, { max, nullable: true });
+  return parsed === '' ? null : parsed;
 }
 
 export function integer(value: unknown, label: string, min = 0): number {

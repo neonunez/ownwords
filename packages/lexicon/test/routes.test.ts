@@ -81,6 +81,10 @@ describe('Lexicon HTTP ownership and CRUD', () => {
 
     const deleted = await jsonRequest(app, path, { method: 'DELETE', headers: { 'If-Match': '"2"' } }, ctx.db);
     assert.equal(deleted.status, 204);
+    for (const header of ['2', 'W/"2"', '"0"', '"2.5"']) {
+      const unquoted = await jsonRequest(app, path, { method: 'DELETE', headers: { 'If-Match': header } }, ctx.db);
+      assert.equal(unquoted.status, 400);
+    }
     const repeated = await jsonRequest(app, path, { method: 'DELETE', headers: { 'If-Match': '"2"' } }, ctx.db);
     assert.equal(repeated.status, 404);
 
@@ -130,10 +134,11 @@ describe('Lexicon HTTP ownership and CRUD', () => {
 });
 
 describe('search, filtering, and pagination', () => {
-  it('ignores case and stress accents but preserves meaningful letters', async () => {
+  it('ignores case and diacritics but preserves distinct letters', async () => {
     const ctx = await context();
     const app = appFor(ctx, 'user-a');
-    for (const text of ['Camión', 'cañón', 'сло́во', 'всё']) {
+    const texts = ['Camión', 'cañón', 'сло́во', 'всё', 'мой', 'pingüino', 'Noël', 'não', 'français', 'crème', 'Straße'];
+    for (const text of texts) {
       const languageTag = /[А-Яа-яЁё]/u.test(text) ? 'ru' : 'es';
       const response = await jsonRequest(
         app,
@@ -159,6 +164,22 @@ describe('search, filtering, and pagination', () => {
     assert.equal(((await slovo.json() as any).data as any[]).length, 1);
     const vse = await jsonRequest(app, `/api/v1/lexicon/entries?query=${encodeURIComponent('все')}`, {}, ctx.db);
     assert.equal(((await vse.json() as any).data as any[]).length, 0);
+
+    const search = async (query: string): Promise<string[]> => {
+      const response = await jsonRequest(app, `/api/v1/lexicon/entries?query=${encodeURIComponent(query)}`, {}, ctx.db);
+      return ((await response.json() as any).data as any[]).map((entry) => entry.senses[0].equivalents[0].text);
+    };
+    assert.deepEqual(await search('pinguino'), ['pingüino']);
+    assert.deepEqual(await search('NOEL'), ['Noël']);
+    assert.deepEqual(await search('nao'), ['não']);
+    assert.deepEqual(await search('francais'), ['français']);
+    assert.deepEqual(await search('creme'), ['crème']);
+    assert.deepEqual(await search('cañon'), ['cañón']);
+    assert.deepEqual(await search('мои'), []);
+    assert.deepEqual(await search('мой'), ['мой']);
+    assert.deepEqual(await search('всё'), ['всё']);
+    assert.deepEqual(await search('straße'), ['Straße']);
+    assert.deepEqual(await search('strasse'), []);
   });
 
   it('stores BCP 47-style language tags in canonical casing', async () => {
@@ -222,6 +243,50 @@ describe('search, filtering, and pagination', () => {
     assert.equal((await russian.json() as any).data.length, 0);
     const english = await jsonRequest(app, '/api/v1/lexicon/entries?language=en&mastery=mastered', {}, ctx.db);
     assert.equal((await english.json() as any).data.length, 1);
+  });
+
+  it('exposes per-direction mastery on each equivalent and filters mastery by direction', async () => {
+    const ctx = await context();
+    const entry = await createVerifiedEntry(ctx);
+    const initial = entry.senses[0].equivalents.find((item: any) => item.languageTag === 'ru');
+    assert.deepEqual(initial.mastery, {
+      recognize: { level: 'new', dueAt: '2026-01-15T12:00:00.000Z', due: true },
+      produce: { level: 'new', dueAt: '2026-01-15T12:00:00.000Z', due: true },
+    });
+
+    ctx.rawDb.sqlite
+      .prepare(
+        `UPDATE lexicon_practice_cards SET reps = 5, stability = 30, due_at = '2026-02-15T12:00:00.000Z'
+          WHERE language_tag = 'ru' AND direction = 'recognize'`,
+      )
+      .run();
+    const app = appFor(ctx, 'user-a');
+    const list = await jsonRequest(app, '/api/v1/lexicon/entries', {}, ctx.db);
+    const equivalents = (await list.json() as any).data[0].senses[0].equivalents as any[];
+    assert.deepEqual(equivalents.find((item) => item.languageTag === 'ru').mastery, {
+      recognize: { level: 'mastered', dueAt: '2026-02-15T12:00:00.000Z', due: false },
+      produce: { level: 'new', dueAt: '2026-01-15T12:00:00.000Z', due: true },
+    });
+
+    const filter = async (query: string): Promise<number> => {
+      const response = await jsonRequest(app, `/api/v1/lexicon/entries?${query}`, {}, ctx.db);
+      assert.equal(response.status, 200);
+      return (await response.json() as any).data.length;
+    };
+    assert.equal(await filter('language=ru&mastery=mastered&direction=recognize'), 1);
+    assert.equal(await filter('language=ru&mastery=mastered&direction=produce'), 0);
+    assert.equal(await filter('language=ru&mastery=due&direction=recognize'), 0);
+    assert.equal(await filter('language=ru&mastery=due&direction=produce'), 1);
+    const missingMastery = await jsonRequest(app, '/api/v1/lexicon/entries?direction=produce', {}, ctx.db);
+    assert.equal(missingMastery.status, 400);
+
+    const suggested = await jsonRequest(
+      app,
+      '/api/v1/lexicon/entries',
+      { method: 'POST', json: { kind: 'word', senses: [{ gloss: 'test', equivalents: [{ languageTag: 'ru', text: 'тест', status: 'suggested' }] }] } },
+      ctx.db,
+    );
+    assert.equal((await suggested.json() as any).data.senses[0].equivalents[0].mastery, null);
   });
 });
 

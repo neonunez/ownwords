@@ -157,7 +157,46 @@ describe('practice eligibility and shared scheduler', () => {
   });
 });
 
-describe('review idempotency, concurrency, history, and wrong-answer revisits', () => {
+describe('practice prompts', () => {
+  it('treats a blank gloss as absent instead of serving a blank prompt', async () => {
+    const ctx = await context();
+    const app = appFor(ctx, 'user-a');
+    const created = await jsonRequest(
+      app,
+      '/api/v1/lexicon/entries',
+      {
+        method: 'POST',
+        json: { kind: 'word', senses: [{ gloss: '   ', equivalents: [{ languageTag: 'ru', text: 'дом', status: 'manual' }] }] },
+      },
+      ctx.db,
+    );
+    assert.equal(created.status, 201);
+    const entry = (await created.json() as any).data;
+    assert.equal(entry.senses[0].gloss, null);
+    assert.equal((await due(ctx, 'user-a', 'session-a')).data.length, 0);
+
+    const sense = entry.senses[0];
+    const glossed = await jsonRequest(
+      app,
+      `/api/v1/lexicon/entries/${entry.id}/senses/${sense.id}`,
+      { method: 'PATCH', json: { version: sense.version, gloss: 'house' } },
+      ctx.db,
+    );
+    assert.equal(glossed.status, 200);
+    assert.deepEqual((await due(ctx, 'user-a', 'session-a')).data[0].prompt, { type: 'gloss', text: 'house' });
+
+    const cleared = await jsonRequest(
+      app,
+      `/api/v1/lexicon/entries/${entry.id}/senses/${sense.id}`,
+      { method: 'PATCH', json: { version: sense.version + 1, gloss: '' } },
+      ctx.db,
+    );
+    assert.equal((await cleared.json() as any).data.gloss, null);
+    assert.equal((await due(ctx, 'user-a', 'session-a')).data.length, 0);
+  });
+});
+
+describe('review idempotency, concurrency, and wrong-answer revisits', () => {
   it('replays duplicate submissions once and rejects an idempotency-key mismatch', async () => {
     const ctx = await context();
     await createVerifiedEntry(ctx);
@@ -185,15 +224,10 @@ describe('review idempotency, concurrency, history, and wrong-answer revisits', 
     );
     assert.equal(conflict.status, 409);
 
-    const history = await jsonRequest(app, `/api/v1/lexicon/practice/cards/${cardId}/reviews`, {}, ctx.db);
-    assert.equal((await history.json() as any).data.length, 1);
-    const foreignHistory = await jsonRequest(
-      appFor(ctx, 'user-b'),
-      `/api/v1/lexicon/practice/cards/${cardId}/reviews`,
-      {},
-      ctx.db,
-    );
-    assert.equal(foreignHistory.status, 404);
+    const events = ctx.rawDb.sqlite
+      .prepare('SELECT COUNT(*) AS count FROM lexicon_review_events WHERE card_id = ?')
+      .get(cardId) as { count: number };
+    assert.equal(events.count, 1);
   });
 
   it('serializes concurrent distinct reviews and revisits a wrong answer later in the same session', async () => {
@@ -227,26 +261,6 @@ describe('review idempotency, concurrency, history, and wrong-answer revisits', 
 
     const later = await due(ctx, 'user-a', 'session-a');
     assert.equal(later.data.some((item: any) => item.revisit === true), false);
-
-    const firstPage = await jsonRequest(
-      app,
-      `/api/v1/lexicon/practice/cards/${cardId}/reviews?limit=1`,
-      {},
-      ctx.db,
-    );
-    const firstBody = await firstPage.json() as any;
-    assert.equal(firstBody.data.length, 1);
-    assert.equal(typeof firstBody.page.nextCursor, 'string');
-    const secondPage = await jsonRequest(
-      app,
-      `/api/v1/lexicon/practice/cards/${cardId}/reviews?limit=1&cursor=${encodeURIComponent(firstBody.page.nextCursor)}`,
-      {},
-      ctx.db,
-    );
-    const secondBody = await secondPage.json() as any;
-    assert.equal(secondBody.data.length, 1);
-    assert.notEqual(secondBody.data[0].submissionId, firstBody.data[0].submissionId);
-    assert.equal(secondBody.page.nextCursor, null);
   });
 
   it('reports FSRS retention and next due time separately by direction', async () => {
