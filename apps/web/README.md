@@ -14,12 +14,12 @@ fixtures — see [docs/backend-boundary.md](docs/backend-boundary.md).
 ## Running it
 
 ```sh
+npm install          # from the repository root; one lockfile for every workspace
 cd apps/web
-npm install
 npm run dev          # http://localhost:5173
 ```
 
-Node 22.5 or newer. While the demo client answers, nothing else is required:
+Node 24 or newer. While the demo client answers, nothing else is required:
 no backend, no account, no keys, no network at runtime. Once the HTTP client
 replaces it, every data flow needs the backend and a connection.
 
@@ -32,7 +32,11 @@ replaces it, every data flow needs the backend and a connection.
 | `npm run lint` | ESLint, including the React Hooks and `jsx-a11y` rules. |
 | `npm test` | Unit and component tests (Vitest, jsdom). |
 | `npm run test:e2e` | Browser smoke tests (Playwright). Builds and previews first. |
-| `npm run test:all` | Everything above, in the order CI would run it. |
+| `npm run test:all` | Everything above, in order. |
+
+The root `npm run check` and `npm run build`, which CI runs, cover this
+package's type-check, unit tests and build; lint and the browser tests run
+only from here.
 
 `npm run test:e2e` runs against Chromium in two shapes, a phone and a desktop
 window, and uses the browser Playwright has already installed. If it is
@@ -170,7 +174,7 @@ Ownwords keeps one shared visual style on iOS, Android and the desktop
 browser. It does not build a Material, or any other platform-native, visual
 variant. The design package ships only the iOS-flavoured kit and says the
 Material flavouring is not built. For this release that decision replaces the
-root README's "iOS styling on iOS, Material styling on Android".
+root README's earlier "iOS styling on iOS, Material styling on Android".
 
 What changes per platform is behaviour, and only where the platform expects
 it:
