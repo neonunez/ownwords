@@ -17,8 +17,8 @@ npm ci
 cp apps/api/.dev.vars.example apps/api/.dev.vars
 # Replace BETTER_AUTH_SECRET in the ignored file.
 npm run db:migrate:local --workspace @ownwords/api
-# Optional: publish the synthetic test-author course into the local database.
-npm run content:publish:local --workspace @ownwords/api -- ../../packages/learning/test/fixtures/synthetic-russian.json
+# Optional: publish the authored Russian Foundations course into the local database.
+npm run content:publish:local --workspace @ownwords/api -- ../../packages/learning/content/russian-foundations-v1.json
 npm run dev --workspace @ownwords/api
 ```
 
@@ -33,7 +33,7 @@ runs on the relying party's origin. Locally, the app's dev server and preview fo
 
 ```sh
 # The whole connected app on http://localhost:4180, on a fresh local D1 with the
-# synthetic course and synthetic accounts. It prints how to sign in as one.
+# Russian Foundations course and synthetic accounts. It prints how to sign in as one.
 npm run stack --workspace @ownwords/web
 
 # Or, with hot reload: the API trusting the dev server's origin, then the app.
@@ -116,7 +116,7 @@ credentials. Its journeys: the sign-in gate; a wrong and a real invitation; the 
 origin's callback, answered by a stand-in so nothing reaches Google; the first run; adding a passkey after sign-in
 and signing in with it alone, on a Chromium virtual authenticator against the real passkey endpoints; capturing an
 entry whose suggestions fail because the provider is off, typing equivalents by hand, search without stress marks,
-flashcard practice and the retention it records; finishing a synthetic lesson, carrying on from the step reached,
+flashcard practice and the retention it records; finishing a Russian Foundations lesson, carrying on from the step reached,
 the Lexicon import and Learn practice; the alphabet and reference; cross-account denial; export; a session ending
 mid-use; sign-out that revokes the session; and a cut network with recovery.
 

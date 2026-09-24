@@ -23,7 +23,7 @@ npm run dev:demo     # or: the screens alone on sample data, http://localhost:51
 
 Node 24 or newer. `npm run stack` builds the app and serves it in front of the
 real API under `wrangler dev`, on a fresh local D1 with every migration, the
-synthetic test course and a set of synthetic accounts; it prints how to sign
+authored Russian Foundations course and a set of synthetic accounts; it prints how to sign
 in as one from the browser console. Nothing in it needs a credential or leaves
 the machine.
 
@@ -139,8 +139,8 @@ pretending:
 - **Practising ahead** — the scheduler has no such scope, so it is not offered.
 - **Reminders** — shown as "After install"; nothing stores or sends them.
 - **Account deletion** — deliberately deferred; see `docs/SETUP.md`.
-- **Course content** — only the synthetic test course exists; production
-  content and its recordings are separate work.
+- **Course content** — only the first, unreviewed Russian Foundations pack
+  exists, with no recordings; see `packages/learning/content/README.md`.
 
 ## Accessibility
 
