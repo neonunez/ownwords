@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { lexiconImportProblem } from "./lexicon-export";
 
 const id = z
   .string()
@@ -333,23 +332,6 @@ export function validateContentPack(input: unknown): ContentPack {
       item.languageTag.toLowerCase() !== pack.course.languageTag.toLowerCase()
     ) {
       issues.push(`item '${item.id}' language must match the course language`);
-    }
-    const lexiconProblem = lexiconImportProblem({
-      itemId: item.id,
-      kind: item.kind,
-      languageTag: item.languageTag,
-      displayText: item.displayText,
-      gloss: item.gloss,
-      stressText: item.stressText ?? null,
-      grammaticalMetadata: item.grammaticalMetadata,
-      license: item.license,
-      provenance: item.provenance,
-      audio: item.audio ?? null,
-    });
-    if (lexiconProblem) {
-      issues.push(
-        `item '${item.id}' cannot be exported to the Lexicon: ${lexiconProblem}`,
-      );
     }
   }
   // Only an introducing lesson exports an item, so an item a lesson uses but

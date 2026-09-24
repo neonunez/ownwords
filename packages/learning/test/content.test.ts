@@ -77,21 +77,7 @@ describe("content validation and ingestion", () => {
     );
   });
 
-  it("rejects items the Lexicon importer would refuse or never receive", () => {
-    const oversized = structuredClone(pack());
-    if (oversized.items[0])
-      oversized.items[0].grammaticalMetadata = { note: "x".repeat(10_001) };
-    expect(() => validateContentPack(oversized)).toThrow(
-      /item 'privet' cannot be exported to the Lexicon: grammatical metadata/,
-    );
-
-    const privateUseTag = structuredClone(pack()) as ContentPack;
-    privateUseTag.course.languageTag = "ru-x-a";
-    for (const item of privateUseTag.items) item.languageTag = "ru-x-a";
-    expect(() => validateContentPack(privateUseTag)).toThrow(
-      /language tag is not accepted by the Lexicon/,
-    );
-
+  it("rejects items a lesson uses that no lesson introduces", () => {
     const neverIntroduced = structuredClone(pack());
     const goodbyeIntroduction =
       neverIntroduced.units[0]?.lessons[1]?.steps[0]?.items[0];

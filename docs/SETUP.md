@@ -67,8 +67,8 @@ Core pins Hono `4.13.8`, Better Auth `1.7.5`, and `@better-auth/passkey` `1.7.5`
   caps request bodies at 256 KiB, below which the packages apply their own field limits.
 - The course-to-Lexicon importer is created per request from that request's D1 binding and injected into Learning
   as a typed factory. Neither package imports the other or writes the other's tables.
-- Learning validates that every item a lesson uses is introduced by exactly one lesson and fits the Lexicon importer's
-  limits, so a published item can always be exported. Completing a lesson commits the completion and one pending
+- Learning validates that every item a lesson uses is introduced by exactly one lesson; the Lexicon importer alone
+  owns its field limits. Completing a lesson commits the completion and one pending
   sync row per introduced item in one D1 batch, then imports each item under its stable
   `(owner, course, version, item)` key. A failed import returns `202` with `lexiconSync.status: "pending"`; completing
   the lesson again retries only that lesson's pending items and never duplicates an entry.
@@ -127,7 +127,8 @@ and review history, and Learning enrollment, lesson progress, and export state. 
 tables for that owner. Credentials, session tokens, passkey public keys, the translation cache, and session-scoped
 revisit markers are left out. Published course content is not personal data and is not repeated.
 
-Account deletion is still not implemented, and Better Auth's raw user-deletion endpoint stays disabled. Lexicon and
+Account deletion is deliberately out of scope for this backend and is tracked as separate future work; Better Auth's
+raw user-deletion endpoint stays disabled until then. Lexicon and
 Learning rows are keyed by owner ID without foreign keys to the auth tables, so deleting only the core user would
 leave them behind. Deletion needs ownership-aware delete services in both packages, composed into one authenticated
 operation.

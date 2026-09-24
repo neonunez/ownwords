@@ -28,9 +28,8 @@ rows, so one stuck item never marks a later lesson unsynced. Learning marks a ro
 synced only after Lexicon confirms durability. The callback must remain idempotent because no transaction spans the
 two package-owned operations.
 
-Content validation refuses items the Lexicon importer would reject (its language-tag form and 10,000-character
-provenance and script-data limits) and items a lesson uses that no lesson introduces, so every published item can be
-exported. `exportLearnerData(db, userId)` returns one learner's enrollment, lesson progress, and export state for the
+Content validation refuses items a lesson uses that no lesson introduces, so every published item reaches the
+Lexicon. An item the Lexicon importer refuses stays `pending` and is retried when the lesson is completed again. `exportLearnerData(db, userId)` returns one learner's enrollment, lesson progress, and export state for the
 composed account export.
 
 Learning serves only core curriculum content. It has no review scheduling tables, no practice route, and never reads
