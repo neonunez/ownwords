@@ -28,8 +28,10 @@ are soft, keeping owner-scoped review history while removing the resource from r
 Entry lists use opaque continuation cursors and cap each page at 100 records. An entry or course
 import accepts at most 20 senses, 30 equivalents per sense, and 100 equivalents in total.
 
-List search (`query`) ignores case and diacritics such as accents, stress marks, diaeresis, tildes, and cedillas,
-but keeps letters that are distinct in their alphabet: `ñ`, `ё`, and `й` (and non-diacritic letters such as `ß`).
+List search (`query`) ignores case and Latin diacritics such as accents, diaeresis, tildes, and cedillas, except
+Spanish `ñ`. Cyrillic text drops only stress marks, so `ё`, `й`, `ї`, and `ў` stay distinct; other scripts keep all
+their marks, and non-diacritic letters such as `ß` are unchanged. Cloze answer checks ignore case and spacing but are
+diacritic-sensitive; only Russian answers ignore the stress mark.
 
 Each equivalent carries `mastery`: `null` when it is not practice-eligible, otherwise
 `{ recognize, produce }`, each `{ level: 'new' | 'learning' | 'mastered', dueAt, due }` from that direction's FSRS

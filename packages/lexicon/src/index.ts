@@ -1,7 +1,7 @@
 export { createLexiconRoutes } from './routes.js';
 export { createCourseLexiconImporter } from './service.js';
 export { DisabledTranslationProvider, ProviderDisabledError, TranslationSuggestionService } from './translation.js';
-export { answersMatch, normalizeRussianAnswer, normalizeSearchText } from './normalize.js';
+export { answersMatch, normalizeAnswer, normalizeSearchText } from './normalize.js';
 export { newStoredCard, scheduleReview } from './scheduler.js';
 export type {
   Clock,

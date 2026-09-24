@@ -137,9 +137,24 @@ describe('search, filtering, and pagination', () => {
   it('ignores case and diacritics but preserves distinct letters', async () => {
     const ctx = await context();
     const app = appFor(ctx, 'user-a');
-    const texts = ['Camión', 'cañón', 'сло́во', 'всё', 'мой', 'pingüino', 'Noël', 'não', 'français', 'crème', 'Straße'];
-    for (const text of texts) {
-      const languageTag = /[А-Яа-яЁё]/u.test(text) ? 'ru' : 'es';
+    const texts = [
+      ['es', 'Camión'],
+      ['es', 'cañón'],
+      ['ru', 'сло́во'],
+      ['ru', 'всё'],
+      ['ru', 'мой'],
+      ['es', 'pingüino'],
+      ['fr', 'Noël'],
+      ['pt', 'não'],
+      ['fr', 'français'],
+      ['fr', 'crème'],
+      ['de', 'Straße'],
+      ['uk', 'їжак'],
+      ['be', 'ўсё'],
+      ['hi', 'काल'],
+      ['ja', 'が'],
+    ] as const;
+    for (const [languageTag, text] of texts) {
       const response = await jsonRequest(
         app,
         '/api/v1/lexicon/entries',
@@ -180,6 +195,14 @@ describe('search, filtering, and pagination', () => {
     assert.deepEqual(await search('всё'), ['всё']);
     assert.deepEqual(await search('straße'), ['Straße']);
     assert.deepEqual(await search('strasse'), []);
+    assert.deepEqual(await search('їжак'), ['їжак']);
+    assert.deepEqual(await search('іжак'), []);
+    assert.deepEqual(await search('ўсё'), ['ўсё']);
+    assert.deepEqual(await search('усё'), []);
+    assert.deepEqual(await search('काल'), ['काल']);
+    assert.deepEqual(await search('कल'), []);
+    assert.deepEqual(await search('が'), ['が']);
+    assert.deepEqual(await search('か'), []);
   });
 
   it('stores BCP 47-style language tags in canonical casing', async () => {
@@ -334,6 +357,17 @@ describe('validated cloze and answer matching', () => {
   it('does not erase meaningful Russian ё while stripping stress', () => {
     assert.equal(answersMatch('ru', 'сло́во', 'слово'), true);
     assert.equal(answersMatch('ru', 'всё', 'все'), false);
+    assert.equal(answersMatch('ru', 'Мой', 'мо́й'), true);
+    assert.equal(answersMatch('ru', 'мои', 'мой'), false);
+  });
+
+  it('keeps non-Russian answers diacritic-sensitive while ignoring case and spacing', () => {
+    assert.equal(answersMatch('de', ' Schön ', 'schön'), true);
+    assert.equal(answersMatch('de', 'schon', 'schön'), false);
+    assert.equal(answersMatch('de', 'Bar', 'Bär'), false);
+    assert.equal(answersMatch('es', 'camion', 'camión'), false);
+    assert.equal(answersMatch('fr', 'francais', 'français'), false);
+    assert.equal(answersMatch('fr', 'e\u0301te\u0301', 'été'), true);
   });
 
   it('stops serving answer checks after an equivalent becomes a false friend', async () => {
