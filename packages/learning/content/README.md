@@ -17,7 +17,7 @@ Validate and publish locally from the repository root:
 
 ```sh
 npm run content:validate --workspace @ownwords/learning -- content/russian-foundations-v1.json
-npm run content:publish:local --workspace @ownwords/api -- packages/learning/content/russian-foundations-v1.json
+npm run content:publish:local --workspace @ownwords/api -- ../../packages/learning/content/russian-foundations-v1.json
 ```
 
 The local publisher uses the supported operator import and D1 is local only. The connected stack test seeds this same pack through that path.
