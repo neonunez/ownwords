@@ -14,6 +14,8 @@ test.describe("how the app sits on a screen", () => {
   test("never scrolls sideways, at either size", async ({ page }) => {
     for (const path of screens) {
       await page.goto(path);
+      // The screen is drawn, not merely loading, before it is measured.
+      await expect(page.getByRole("navigation").first()).toBeVisible();
       await page.waitForTimeout(150);
       const overflow = await page.evaluate(
         () =>
@@ -31,6 +33,7 @@ test.describe("how the app sits on a screen", () => {
     await page.goto("/maintain/progress");
 
     const frame = page.locator(".ow-app");
+    await expect(frame).toBeVisible();
     const box = (await frame.boundingBox())!;
     const viewport = page.viewportSize()!;
     expect(box.width).toBeCloseTo(viewport.width, 0);
@@ -46,6 +49,7 @@ test.describe("how the app sits on a screen", () => {
     test.skip(testInfo.project.name !== "desktop", "Desktop review only.");
     await page.goto("/maintain/progress");
 
+    await expect(page.locator(".ow-app")).toBeVisible();
     const box = (await page.locator(".ow-app").boundingBox())!;
     const viewport = page.viewportSize()!;
     expect(box.width).toBeLessThan(viewport.width / 2);
@@ -59,6 +63,8 @@ test.describe("how the app sits on a screen", () => {
       "/learn/course",
     ]) {
       await page.goto(path);
+      // The screen is drawn, not merely loading, before it is measured.
+      await expect(page.getByRole("navigation").first()).toBeVisible();
       await page.waitForTimeout(150);
       const small = await page.evaluate(() => {
         const nodes = Array.from(

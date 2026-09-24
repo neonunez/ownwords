@@ -14,6 +14,7 @@ import { ToastProvider } from "./ToastProvider";
 import { UpdatePrompt } from "../../pwa/UpdatePrompt";
 import { useAsync } from "./useAsync";
 import { useClient } from "./ClientProvider";
+import { useSession } from "../session/SessionGate";
 
 interface PanelState {
   panel?: boolean;
@@ -54,7 +55,12 @@ function ShellBody({
   const activeKey = activeTabKey(location.pathname);
   const panelOpen = Boolean((location.state as PanelState | null)?.panel);
 
-  const languages = useAsync(() => client.listLanguages(), [client]);
+  const session = useSession();
+  // Read again whenever the languages change from the side panel.
+  const languages = useAsync(
+    () => client.listLanguages(),
+    [client, session?.onboarding],
+  );
 
   const openPanel = useCallback(() => {
     navigate(`${location.pathname}${location.search}`, {

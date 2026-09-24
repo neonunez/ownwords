@@ -3,3 +3,8 @@ README.md
 CLAUDE.md
 .opencode
 .claude
+apps/web/demo-dist
+apps/web/stack-report
+apps/web/stack-results
+apps/web/playwright-report
+apps/web/test-results

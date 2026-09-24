@@ -17,7 +17,13 @@ import { useClient } from "../../shell/ClientProvider";
 import { useScreen } from "../../shell/useScreen";
 import { useToast } from "../../shell/ToastProvider";
 import { FrameLayer } from "../../shell/OverlayHost";
-import type { Entry, EntryQuery, Language, Starter } from "../../../api/types";
+import type {
+  Entry,
+  EntryQuery,
+  Language,
+  Page,
+  Starter,
+} from "../../../api/types";
 
 type Filter =
   "all" | "unverified" | "words" | "expressions" | "weak" | "strong" | string;
@@ -59,6 +65,15 @@ export function LexiconScreen() {
     () => client.listEntries(queryFor(filter, search)),
     [client, filter, search],
   );
+  // Pages read after the first one, for a collection larger than a page.
+  // They belong to the first page they followed, so a new search drops them.
+  const [following, setFollowing] = useState<{
+    after: Page<Entry> | null;
+    pages: Page<Entry>[];
+  }>({ after: null, pages: [] });
+  const more = following.after === page.data ? following.pages : [];
+  const [loadingMore, setLoadingMore] = useState(false);
+  const { showToast } = useToast();
 
   const filters = useMemo(() => {
     const byLanguage = (languages.data ?? []).map((language: Language) => ({
@@ -81,8 +96,33 @@ export function LexiconScreen() {
     languages.data?.find((language) => language.code === code)?.name ??
     code.toUpperCase();
 
-  const entries = page.data?.items ?? [];
-  const total = page.data?.total ?? entries.length;
+  const entries = [
+    ...(page.data?.items ?? []),
+    ...more.flatMap((next) => next.items),
+  ];
+  const nextCursor = (more.at(-1) ?? page.data)?.nextCursor;
+  const total = page.data?.total;
+
+  const loadMore = () => {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    const first = page.data;
+    client
+      .listEntries({ ...queryFor(filter, search), cursor: nextCursor })
+      .then(
+        (next) => {
+          setFollowing((current) => ({
+            after: first,
+            pages: current.after === first ? [...current.pages, next] : [next],
+          }));
+          setLoadingMore(false);
+        },
+        () => {
+          setLoadingMore(false);
+          showToast("The rest of your Lexicon could not be read. Try again.");
+        },
+      );
+  };
 
   return (
     <>
@@ -139,9 +179,11 @@ export function LexiconScreen() {
                 color: "var(--fg-3)",
               }}
             >
-              {entries.length === total
-                ? `${total} ${total === 1 ? "entry" : "entries"}`
-                : `${entries.length} of ${total} entries`}
+              {total === undefined
+                ? `${entries.length}${nextCursor ? "+" : ""} ${entries.length === 1 && !nextCursor ? "entry" : "entries"}`
+                : entries.length === total
+                  ? `${total} ${total === 1 ? "entry" : "entries"}`
+                  : `${entries.length} of ${total} entries`}
             </p>
             <Card padding={0}>
               {entries.map((entry, index) => (
@@ -164,6 +206,16 @@ export function LexiconScreen() {
                 />
               ))}
             </Card>
+            {nextCursor && (
+              <Button
+                variant="secondary"
+                full
+                disabled={loadingMore}
+                onClick={loadMore}
+              >
+                {loadingMore ? "Reading more." : "Show more"}
+              </Button>
+            )}
           </>
         ) : search.trim() ? (
           <Empty
@@ -188,18 +240,10 @@ export function LexiconScreen() {
             </Button>
           </Empty>
         ) : (
-          <Empty message="Your Lexicon is empty. Tap a starter expression, or store the first thing you keep reaching for, and practice can start today.">
-            <div style={{ display: "grid", gap: 8 }}>
-              <Starters onAdded={page.reload} />
-              <Button
-                variant="ghost"
-                icon="plus"
-                onClick={() => navigate("/maintain/add")}
-              >
-                Add your first entry
-              </Button>
-            </div>
-          </Empty>
+          <EmptyLexicon
+            onAdded={page.reload}
+            onAdd={() => navigate("/maintain/add")}
+          />
         )}
       </Screen>
 
@@ -226,11 +270,49 @@ export function LexiconScreen() {
   );
 }
 
+/** One line of explanation, the starter expressions when there are any, and one action. */
+function EmptyLexicon({
+  onAdded,
+  onAdd,
+}: {
+  onAdded: () => void;
+  onAdd: () => void;
+}) {
+  const client = useClient();
+  const starters = useAsync(() => client.listStarters(), [client]);
+  const offered = starters.data ?? [];
+  return (
+    <Empty
+      message={
+        offered.length
+          ? "Your Lexicon is empty. Tap a starter expression, or store the first thing you keep reaching for, and practice can start today."
+          : "Your Lexicon is empty. Store the first thing you keep reaching for, with what it is in your other languages, and practice can start today."
+      }
+    >
+      <div style={{ display: "grid", gap: 8 }}>
+        <Starters starters={offered} onAdded={onAdded} />
+        <Button
+          variant={offered.length ? "ghost" : "secondary"}
+          icon="plus"
+          onClick={onAdd}
+        >
+          Add your first entry
+        </Button>
+      </div>
+    </Empty>
+  );
+}
+
 /** The one-tap starter expressions an empty Lexicon offers. */
-function Starters({ onAdded }: { onAdded: () => void }) {
+function Starters({
+  starters,
+  onAdded,
+}: {
+  starters: readonly Starter[];
+  onAdded: () => void;
+}) {
   const client = useClient();
   const { showToast } = useToast();
-  const starters = useAsync(() => client.listStarters(), [client]);
   const [adding, setAdding] = useState(false);
 
   const add = (starter: Starter) => {
@@ -251,7 +333,7 @@ function Starters({ onAdded }: { onAdded: () => void }) {
 
   return (
     <>
-      {starters.data?.map((starter) => (
+      {starters.map((starter) => (
         <Button
           key={starter.id}
           variant="secondary"

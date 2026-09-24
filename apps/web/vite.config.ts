@@ -4,6 +4,17 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { manifest } from "./src/pwa/manifest.ts";
 
+// The app talks to the API on its own origin, under /api. Locally, the dev
+// server and the preview forward /api to a running `wrangler dev`, so the
+// session cookie stays first-party and the passkey ceremony runs on the
+// origin the page is served from, exactly as a deployment serves them.
+const api = {
+  "/api": {
+    target: process.env.OWNWORDS_API_URL ?? "http://127.0.0.1:8787",
+    changeOrigin: false,
+  },
+};
+
 // The app is served from the site root. `base` stays '/' so the service worker
 // scope, the manifest scope and the navigation fallback all agree.
 export default defineConfig({
@@ -43,6 +54,6 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
-  server: { port: 5173 },
-  preview: { port: 4173 },
+  server: { port: 5173, proxy: api },
+  preview: { port: 4173, proxy: api },
 });

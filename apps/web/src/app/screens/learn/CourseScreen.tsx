@@ -2,7 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, Icon, TopBar } from "../../../design-system";
 import type { IconName } from "../../../design-system";
 import { Screen, Section } from "../../layout";
-import { Failed, Loading } from "../ScreenState";
+import { Empty, Failed, Loading } from "../ScreenState";
+import { useSession } from "../../session/SessionGate";
 import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
 import { useScreen } from "../../shell/useScreen";
@@ -24,6 +25,12 @@ const marks: Record<
     bg: "var(--accent)",
     written: "in progress",
   },
+  open: {
+    icon: "circle",
+    fg: "var(--fg-2)",
+    bg: "var(--bg-sunken)",
+    written: "not started",
+  },
   locked: {
     icon: "lock",
     fg: "var(--fg-3)",
@@ -37,6 +44,7 @@ export function CourseScreen() {
   const client = useClient();
   const navigate = useNavigate();
   const { openPanel } = useScreen();
+  const session = useSession();
   const state = useAsync(() => client.getCourse(), [client]);
 
   const header = (
@@ -51,7 +59,7 @@ export function CourseScreen() {
       </>
     );
   }
-  if (state.error || !state.data) {
+  if (state.error) {
     return (
       <>
         {header}
@@ -64,96 +72,128 @@ export function CourseScreen() {
   }
 
   const course = state.data;
+  if (!course) {
+    const learning = session?.onboarding.languages.some(
+      (language) => language.kind === "learn",
+    );
+    return (
+      <>
+        {header}
+        <Screen>
+          <Empty
+            message={
+              learning === false
+                ? "You are not learning a language yet. Choose one under Change languages, in the side panel."
+                : "The course is not published yet. It appears here as soon as it is."
+            }
+          />
+        </Screen>
+      </>
+    );
+  }
+
+  const resume = course.resume;
 
   return (
     <>
       {header}
       <Screen>
-        <Card
-          tone="accent"
-          padding={18}
-          onClick={() => navigate(`/learn/course/${course.resume.unitId}`)}
-        >
-          <span
-            style={{
-              display: "block",
-              font: "var(--type-overline)",
-              letterSpacing: "var(--tracking-wide)",
-              textTransform: "uppercase",
-              opacity: 0.9,
-            }}
-          >
-            Continue · Unit {course.resume.unitNumber}
-          </span>
-          <span
-            lang={course.language}
-            style={{
-              display: "block",
-              font: "var(--type-title)",
-              fontSize: "1.75rem",
-              marginTop: 6,
-              letterSpacing: "var(--tracking-display)",
-            }}
-          >
-            {course.resume.title}
-          </span>
-          <span
-            style={{
-              display: "block",
-              font: "var(--type-body)",
-              fontSize: ".9375rem",
-              opacity: 0.9,
-              marginTop: 4,
-            }}
-          >
-            {course.resume.step} · {course.resume.canDo}
-          </span>
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginTop: 16,
-            }}
+        {resume ? (
+          <Card
+            tone="accent"
+            padding={18}
+            onClick={() => navigate(`/learn/course/${resume.lessonId}`)}
           >
             <span
-              role="img"
-              aria-label={`${Math.round(course.resume.progress * 100)}% through this unit`}
               style={{
-                flex: 1,
-                height: 6,
-                borderRadius: 99,
-                background:
-                  "color-mix(in oklab, var(--fg-on-accent) 22%, transparent)",
                 display: "block",
+                font: "var(--type-overline)",
+                letterSpacing: "var(--tracking-wide)",
+                textTransform: "uppercase",
+                opacity: 0.9,
+              }}
+            >
+              Continue · Unit {resume.unitNumber}
+            </span>
+            <span
+              lang={course.language}
+              style={{
+                display: "block",
+                font: "var(--type-title)",
+                fontSize: "1.75rem",
+                marginTop: 6,
+                letterSpacing: "var(--tracking-display)",
+              }}
+            >
+              {resume.title}
+            </span>
+            <span
+              style={{
+                display: "block",
+                font: "var(--type-body)",
+                fontSize: ".9375rem",
+                opacity: 0.9,
+                marginTop: 4,
+              }}
+            >
+              {resume.step} · {resume.canDo}
+            </span>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginTop: 16,
               }}
             >
               <span
+                role="img"
+                aria-label={`${Math.round(resume.progress * 100)}% through this unit`}
                 style={{
-                  display: "block",
-                  width: `${course.resume.progress * 100}%`,
-                  height: "100%",
+                  flex: 1,
+                  height: 6,
                   borderRadius: 99,
-                  background: "var(--fg-on-accent)",
+                  background:
+                    "color-mix(in oklab, var(--fg-on-accent) 22%, transparent)",
+                  display: "block",
                 }}
-              />
+              >
+                <span
+                  style={{
+                    display: "block",
+                    width: `${resume.progress * 100}%`,
+                    height: "100%",
+                    borderRadius: 99,
+                    background: "var(--fg-on-accent)",
+                  }}
+                />
+              </span>
+              <Icon name="arrow-right" size={22} />
             </span>
-            <Icon name="arrow-right" size={22} />
-          </span>
-        </Card>
+          </Card>
+        ) : (
+          <Card tone="soft" padding={18}>
+            <p style={{ margin: 0, font: "var(--type-body)" }}>
+              Every lesson in the course is finished. Practice keeps its words
+              fresh.
+            </p>
+          </Card>
+        )}
 
         <Section title="Units">
           <Card padding={0}>
             {course.units.map((unit, index) => {
               const mark = marks[unit.state];
-              const locked = unit.state === "locked";
+              const locked = unit.lessonId === null;
               return (
                 <button
                   key={unit.id}
                   type="button"
                   className={locked ? undefined : "ow-row"}
                   disabled={locked}
-                  onClick={() => navigate(`/learn/course/${unit.id}`)}
+                  onClick={() =>
+                    unit.lessonId && navigate(`/learn/course/${unit.lessonId}`)
+                  }
                   style={{
                     display: "grid",
                     gridTemplateColumns: "40px minmax(0, 1fr) auto",

@@ -3,11 +3,13 @@
  *
  * Nothing here comes from a server. It is the sample collection the design
  * package's UI kit used, written into the typed shapes of `api/types.ts` so
- * every screen is exercised against the contract the backend will answer.
- * Replace the demo client with the HTTP one and these fixtures fall away.
+ * the screens can be exercised without a backend. It is used only by tests
+ * and by a preview built on purpose in Vite's `demo` mode; the app
+ * itself never falls back to it.
  */
 
 import type {
+  Account,
   AlphabetLetter,
   Course,
   Entry,
@@ -20,8 +22,19 @@ import type {
   Starter,
 } from "../types";
 
-/** A card as the demo scheduler holds it; the entry supplies headword and note. */
-export type DemoCard = Omit<PracticeCard, "headword" | "note">;
+/** A card as the demo scheduler holds it; the entry supplies the headword. */
+export interface DemoCard {
+  cardId: string;
+  entryId: string;
+  /** The language the answer is written in. */
+  language: string;
+  /** The language the prompt is written in. */
+  promptLanguage: string;
+  direction: PracticeCard["direction"];
+  prompt: string;
+  answer: string;
+  hint: string | null;
+}
 
 export const demoLanguages: Language[] = [
   { code: "en", name: "English", role: "native", level: "native" },
@@ -49,6 +62,7 @@ export const demoEntries: Entry[] = [
             text: "arreglárselas con",
             fit: "exact",
             state: "confirmed",
+            version: 1,
           },
           {
             id: "e1s1ru",
@@ -56,6 +70,7 @@ export const demoEntries: Entry[] = [
             text: "обходи́ться",
             fit: "broader",
             state: "suggested",
+            version: 1,
           },
         ],
       },
@@ -84,6 +99,7 @@ export const demoEntries: Entry[] = [
             text: "no way",
             fit: "exact",
             state: "confirmed",
+            version: 1,
           },
           {
             id: "e2s1ru",
@@ -91,6 +107,7 @@ export const demoEntries: Entry[] = [
             text: "ни за что́",
             fit: "narrower",
             state: "confirmed",
+            version: 1,
           },
         ],
       },
@@ -119,6 +136,7 @@ export const demoEntries: Entry[] = [
             text: "actualmente",
             fit: "false-friend",
             state: "confirmed",
+            version: 1,
           },
           {
             id: "e3s1ru",
@@ -126,6 +144,7 @@ export const demoEntries: Entry[] = [
             text: "на са́мом де́ле",
             fit: "exact",
             state: "confirmed",
+            version: 1,
           },
         ],
       },
@@ -139,6 +158,7 @@ export const demoEntries: Entry[] = [
             text: "en realidad",
             fit: "exact",
             state: "confirmed",
+            version: 1,
           },
           {
             id: "e3s2ru",
@@ -146,6 +166,7 @@ export const demoEntries: Entry[] = [
             text: "",
             fit: null,
             state: "waiting",
+            version: 1,
           },
         ],
       },
@@ -174,6 +195,7 @@ export const demoEntries: Entry[] = [
             text: "after-dinner conversation",
             fit: "context-only",
             state: "manual",
+            version: 1,
           },
           {
             id: "e4s1ru",
@@ -181,6 +203,7 @@ export const demoEntries: Entry[] = [
             text: "",
             fit: null,
             state: "failed",
+            version: 1,
           },
         ],
       },
@@ -209,6 +232,7 @@ export const demoEntries: Entry[] = [
             text: "dar por sentado",
             fit: "exact",
             state: "confirmed",
+            version: 1,
           },
           {
             id: "e5s1ru",
@@ -216,6 +240,7 @@ export const demoEntries: Entry[] = [
             text: "принима́ть как до́лжное",
             fit: "exact",
             state: "suggested",
+            version: 1,
           },
         ],
       },
@@ -244,6 +269,7 @@ export const demoEntries: Entry[] = [
             text: "milk",
             fit: "exact",
             state: "confirmed",
+            version: 1,
             courseItemId: "ru-a1-milk",
           },
           {
@@ -252,6 +278,7 @@ export const demoEntries: Entry[] = [
             text: "leche",
             fit: "exact",
             state: "confirmed",
+            version: 1,
             courseItemId: "ru-a1-milk",
           },
         ],
@@ -359,7 +386,7 @@ export const demoUpcoming: (DemoCard & { when: string })[] = [
 /** What an empty Lexicon offers, with equivalents vetted in every demo language. */
 export const demoStarters: (Starter & {
   kind: "expression";
-  equivalents: Omit<Equivalent, "id">[];
+  equivalents: Omit<Equivalent, "id" | "version">[];
 })[] = [
   {
     id: "st1",
@@ -410,9 +437,11 @@ export const demoCourse: Course = {
   id: "ru-a0-a1",
   version: "2026.09.1",
   language: "ru",
+  title: "Russian from zero",
   resume: {
     unitId: "u3",
     unitNumber: 3,
+    lessonId: "u3",
     title: "В кафе́",
     step: "Hear it first",
     progress: 0.4,
@@ -425,6 +454,7 @@ export const demoCourse: Course = {
       title: "Алфави́т",
       subtitle: "The alphabet, and the letters that look Latin but aren’t",
       state: "done",
+      lessonId: null,
     },
     {
       id: "u1",
@@ -432,6 +462,7 @@ export const demoCourse: Course = {
       title: "Здра́вствуйте",
       subtitle: "Greet somebody and introduce yourself",
       state: "done",
+      lessonId: null,
     },
     {
       id: "u2",
@@ -439,6 +470,7 @@ export const demoCourse: Course = {
       title: "Молоко́ и хлеб",
       subtitle: "Name six everyday things",
       state: "done",
+      lessonId: null,
     },
     {
       id: "u3",
@@ -446,6 +478,7 @@ export const demoCourse: Course = {
       title: "В кафе́",
       subtitle: "Order a coffee and say thank you",
       state: "current",
+      lessonId: "u3",
     },
     {
       id: "u4",
@@ -453,6 +486,7 @@ export const demoCourse: Course = {
       title: "Ско́лько сто́ит?",
       subtitle: "Numbers 1–20, and asking a price",
       state: "locked",
+      lessonId: null,
     },
     {
       id: "u5",
@@ -460,6 +494,7 @@ export const demoCourse: Course = {
       title: "Где метро́?",
       subtitle: "Ask where something is",
       state: "locked",
+      lessonId: null,
     },
   ],
   milestones: [
@@ -474,6 +509,9 @@ export const demoLesson: Lesson = {
   unitNumber: 3,
   title: "В кафе́",
   canDo: "Order a coffee and say thank you",
+  language: "ru",
+  status: "in_progress",
+  currentStepId: null,
   steps: [
     {
       id: "u3s1",
@@ -619,6 +657,23 @@ export const demoReferenceTopics: ReferenceTopic[] = [
     summary: "Gender, aspect pairs and cases, as they arrive",
     introducedIn: "Unit 3",
     locked: false,
+    items: [
+      {
+        id: "gender",
+        title: "Gender",
+        lines: [
+          "Every noun is masculine, feminine or neuter.",
+          "The ending usually tells you which; ко́фе is the exception you meet first.",
+        ],
+        locked: false,
+      },
+      {
+        id: "aspect",
+        title: "Aspect pairs",
+        lines: [],
+        locked: true,
+      },
+    ],
   },
   {
     id: "phrases",
@@ -627,6 +682,7 @@ export const demoReferenceTopics: ReferenceTopic[] = [
     summary: "Everything sayable so far, by situation",
     introducedIn: "",
     locked: false,
+    items: [],
   },
   {
     id: "intonation",
@@ -635,6 +691,7 @@ export const demoReferenceTopics: ReferenceTopic[] = [
     summary: "Questions asked without a question word",
     introducedIn: "Unit 2",
     locked: false,
+    items: [],
   },
   {
     id: "numbers",
@@ -643,6 +700,7 @@ export const demoReferenceTopics: ReferenceTopic[] = [
     summary: "0 to 20, then the tens",
     introducedIn: "Unit 4",
     locked: true,
+    items: [],
   },
   {
     id: "vocabulary",
@@ -651,8 +709,14 @@ export const demoReferenceTopics: ReferenceTopic[] = [
     summary: "Every course item, and all of it in your Lexicon",
     introducedIn: "",
     locked: false,
+    items: [],
   },
 ];
+
+export const demoAccount: Account = {
+  name: "Demo",
+  email: "demo@ownwords.invalid",
+};
 
 export const demoPreferences: Preferences = {
   explanationsIn: "en",

@@ -2,9 +2,10 @@
  * The demo implementation of `OwnwordsClient`.
  *
  * It answers from the fixtures in `fixtures.ts`, in memory, for this browser
- * session only. Nothing is sent anywhere and nothing survives a reload, which
- * is deliberate: until the Lexicon and learning packages are mounted behind
- * HTTP, no screen should imply it is talking to a server.
+ * session only. Nothing is sent anywhere and nothing survives a reload. It
+ * exists for tests and for a preview built on purpose in Vite's
+ * `demo` mode; the app never falls back to it, and the side
+ * panel says in words that a demo keeps nothing.
  */
 
 import {
@@ -25,19 +26,24 @@ import type {
   Lesson,
   MasteryBand,
   NewEntry,
+  NewEquivalent,
+  Onboarding,
   Page,
   PracticeCard,
   Preferences,
   ProgressSummary,
   ReferenceTopic,
   ReviewSubmission,
+  Session,
   Starter,
   SuggestionResult,
   UpcomingItem,
 } from "../types";
-import { forSearch, inWords } from "../../lib/text";
+import { forSearch } from "../../lib/text";
 import { localId } from "../../lib/ids";
+import { estimateFor } from "../../lib/time";
 import {
+  demoAccount,
   demoAlphabet,
   demoCourse,
   demoDue,
@@ -55,7 +61,7 @@ import {
 export interface DemoClientOptions {
   /**
    * How long each simulated translation takes to come back, per language.
-   * Tests pass zero; the running app keeps a short, visible wait so the
+   * Tests pass zero; the preview keeps a short, visible wait so the
    * "waiting" state is real rather than decorative.
    */
   suggestionDelaysMs?: Record<string, number>;
@@ -63,6 +69,8 @@ export interface DemoClientOptions {
   failingLanguages?: readonly string[];
   /** The collection to start from. Defaults to the sample collection. */
   entries?: readonly Entry[];
+  /** The session the demo reports. Defaults to signed in and onboarded. */
+  session?: Session;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -71,21 +79,12 @@ function copyEntry(entry: Entry): Entry {
   return clone(entry);
 }
 
-/** A session is sized by what is due, and said in words rather than counted. */
-function estimateFor(cards: number): string {
-  if (cards === 0) return "";
-  const minutes = Math.max(1, Math.round(cards * 1.1));
-  return minutes === 1
-    ? "About a minute."
-    : `About ${inWords(minutes)} minutes.`;
-}
-
 const native = demoLanguages.find(
   (language) => language.role === "native",
 )?.code;
 
 /** Retention the demo scheduler reports; when each is next due follows the practice queue. */
-const retention: Omit<LanguageProgress, "nextDueAt">[] = [
+const retention: Omit<LanguageProgress, "nextDueAt" | "dueNow">[] = [
   { language: "es", direction: "recognise", retention: 0.74 },
   { language: "es", direction: "produce", retention: 0.48 },
   { language: "ru", direction: "recognise", retention: 0.22 },
@@ -106,16 +105,45 @@ const inMode = (mode: "maintain" | "learn", card: DemoCard): boolean =>
 function inBand(entry: Entry, band: MasteryBand): boolean {
   const readings = Object.values(entry.mastery)
     .flatMap((mastery) => [mastery.recognise, mastery.produce])
-    .filter((value): value is number => value !== null);
+    .filter((value): value is number => typeof value === "number");
   if (band === "weak") return readings.some((value) => value < 0.34);
   return readings.length > 0 && readings.every((value) => value >= 0.67);
 }
+
+const demoOnboarding: Onboarding = {
+  languages: demoLanguages.map((language) => ({
+    code: language.code,
+    kind: language.role === "learning" ? "learn" : "maintain",
+    level:
+      language.role === "native"
+        ? "native"
+        : language.role === "learning"
+          ? "a0"
+          : "b2",
+  })),
+  preferences: {
+    explanationsIn: demoPreferences.explanationsIn,
+    audioInCourse: demoPreferences.audioInCourse,
+    suggestTranslations: demoPreferences.suggestTranslations,
+  },
+};
+
+const noAccounts = () =>
+  new OwnwordsError(
+    "demo",
+    "This is a demo with sample data. It has no accounts and keeps nothing.",
+  );
 
 export function createDemoClient(
   options: DemoClientOptions = {},
 ): OwnwordsClient {
   const delays = options.suggestionDelaysMs ?? { es: 900, ru: 1700 };
   const failing = new Set(options.failingLanguages ?? []);
+  const session: Session = options.session ?? {
+    status: "signed-in",
+    account: demoAccount,
+    onboarding: clone(demoOnboarding),
+  };
 
   let entries: Entry[] = clone([...(options.entries ?? demoEntries)]);
   let preferences: Preferences = clone(demoPreferences);
@@ -133,6 +161,20 @@ export function createDemoClient(
       );
     }
     return entry;
+  };
+
+  const findEquivalent = (entry: Entry, senseId: string, id: string) => {
+    const equivalent = entry.senses
+      .find((candidate) => candidate.id === senseId)
+      ?.equivalents.find((candidate) => candidate.id === id);
+    if (!equivalent) {
+      throw new OwnwordsError(
+        "not_found",
+        "That equivalent is no longer on this entry.",
+        404,
+      );
+    }
+    return equivalent;
   };
 
   const isUnverified = (entry: Entry): boolean =>
@@ -157,21 +199,18 @@ export function createDemoClient(
         entries.some((entry) => entry.id === card.entryId),
     );
 
-  const toPracticeCard = (card: DemoCard): PracticeCard => {
-    const entry = findEntry(card.entryId);
-    return {
-      cardId: card.cardId,
-      entryId: card.entryId,
-      headword: entry.headword,
-      language: card.language,
-      promptLanguage: card.promptLanguage,
-      direction: card.direction,
-      prompt: card.prompt,
-      answer: card.answer,
-      hint: card.hint,
-      note: entry.note,
-    };
-  };
+  const toPracticeCard = (card: DemoCard): PracticeCard => ({
+    cardId: card.cardId,
+    headword: findEntry(card.entryId).headword,
+    language: card.language,
+    promptLanguage: card.promptLanguage,
+    answerLanguage: card.language,
+    direction: card.direction,
+    prompt: card.prompt,
+    answer: card.answer,
+    accepted: [],
+    hint: card.hint,
+  });
 
   const toUpcoming = (card: DemoCard & { when: string }): UpcomingItem => ({
     when: card.when,
@@ -181,6 +220,56 @@ export function createDemoClient(
   });
 
   return {
+    kind: "demo",
+
+    async getSession(): Promise<Session> {
+      return clone(session);
+    },
+
+    async redeemInvitation() {
+      throw noAccounts();
+    },
+
+    async startGoogleSignIn() {
+      throw noAccounts();
+    },
+
+    async signInWithPasskey() {
+      throw noAccounts();
+    },
+
+    async addPasskey() {
+      throw noAccounts();
+    },
+
+    async signOut() {
+      throw noAccounts();
+    },
+
+    async saveOnboarding(input: Onboarding): Promise<Onboarding> {
+      if (session.status === "signed-in") session.onboarding = clone(input);
+      preferences = { ...preferences, ...input.preferences };
+      return clone(input);
+    },
+
+    async exportAccount() {
+      const document = {
+        format: "ownwords-demo-export",
+        note: "Sample data from the demo. Nothing here was stored.",
+        lexicon: entries,
+      };
+      return {
+        filename: "ownwords-demo-export.json",
+        blob: new Blob([JSON.stringify(document, null, 2)], {
+          type: "application/json",
+        }),
+      };
+    },
+
+    onSignedOut() {
+      return () => {};
+    },
+
     async listLanguages(): Promise<Language[]> {
       return clone(demoLanguages);
     },
@@ -211,7 +300,6 @@ export function createDemoClient(
     },
 
     async createEntry(input: NewEntry): Promise<Entry> {
-      const senseId = localId("s");
       const entry: Entry = {
         id: localId("e"),
         headword: input.headword.trim(),
@@ -222,15 +310,9 @@ export function createDemoClient(
         createdAt: new Date().toISOString(),
         senses: [
           {
-            id: senseId,
-            gloss: input.senseGloss?.trim() || input.headword.trim(),
-            equivalents: input.suggestInto.map((language) => ({
-              id: localId("q"),
-              language,
-              text: "",
-              fit: null,
-              state: "waiting" as const,
-            })),
+            id: localId("s"),
+            gloss: input.senseGloss?.trim() ?? "",
+            equivalents: [],
           },
         ],
         mastery: {},
@@ -239,7 +321,34 @@ export function createDemoClient(
       return copyEntry(entry);
     },
 
-    async requestSuggestions(input, into, onResult, signal): Promise<void> {
+    async updateEntry(entryId, patch): Promise<Entry> {
+      const entry = findEntry(entryId);
+      if (entry.version !== patch.version) {
+        throw new OwnwordsError(
+          "VERSION_CONFLICT",
+          "It was changed somewhere else first. Look at it again, then retry.",
+          409,
+        );
+      }
+      if (patch.note !== undefined) entry.note = patch.note.trim();
+      if (patch.kind !== undefined) entry.kind = patch.kind;
+      entry.version += 1;
+      return copyEntry(entry);
+    },
+
+    async deleteEntry(entryId: string, version: number): Promise<void> {
+      const entry = findEntry(entryId);
+      if (entry.version !== version) {
+        throw new OwnwordsError(
+          "VERSION_CONFLICT",
+          "It was changed somewhere else first. Look at it again, then retry.",
+          409,
+        );
+      }
+      entries = entries.filter((candidate) => candidate.id !== entryId);
+    },
+
+    async requestSuggestions(entry, into, onResult, signal): Promise<void> {
       await Promise.all(
         into.map(
           (language) =>
@@ -257,7 +366,8 @@ export function createDemoClient(
                   : {
                       language,
                       state: "suggested",
-                      text: demoSuggestions[language] ?? input.headword,
+                      text: demoSuggestions[language] ?? entry.headword,
+                      fit: "exact",
                     };
                 onResult(result);
                 resolve();
@@ -276,6 +386,35 @@ export function createDemoClient(
       );
     },
 
+    async addEquivalents(
+      entryId: string,
+      senseId: string,
+      equivalents: readonly NewEquivalent[],
+    ): Promise<Entry> {
+      const entry = findEntry(entryId);
+      const sense = entry.senses.find((candidate) => candidate.id === senseId);
+      if (!sense) {
+        throw new OwnwordsError(
+          "not_found",
+          "That sense is no longer on this entry.",
+          404,
+        );
+      }
+      for (const equivalent of equivalents) {
+        const failed = equivalent.state === "failed";
+        sense.equivalents.push({
+          id: localId("q"),
+          language: equivalent.language,
+          text: failed ? "" : equivalent.text.trim(),
+          fit: failed ? null : (equivalent.fit ?? "exact"),
+          state: equivalent.state,
+          version: 1,
+        });
+      }
+      entry.version += 1;
+      return copyEntry(entry);
+    },
+
     async updateEquivalent(
       entryId: string,
       senseId: string,
@@ -283,23 +422,22 @@ export function createDemoClient(
       patch: EquivalentPatch,
     ): Promise<Entry> {
       const entry = findEntry(entryId);
-      const sense = entry.senses.find((candidate) => candidate.id === senseId);
-      const equivalent = sense?.equivalents.find(
-        (candidate) => candidate.id === equivalentId,
-      );
-      if (!sense || !equivalent) {
+      const equivalent = findEquivalent(entry, senseId, equivalentId);
+      if (equivalent.version !== patch.version) {
         throw new OwnwordsError(
-          "not_found",
-          "That equivalent is no longer on this entry.",
-          404,
+          "VERSION_CONFLICT",
+          "It was changed somewhere else first. Look at it again, then retry.",
+          409,
         );
       }
       if (patch.text !== undefined) {
         equivalent.text = patch.text.trim();
         equivalent.state = "manual";
+        equivalent.fit = equivalent.fit ?? "exact";
       }
       if (patch.fit !== undefined) equivalent.fit = patch.fit;
       if (patch.state !== undefined) equivalent.state = patch.state;
+      equivalent.version += 1;
       entry.version += 1;
       return copyEntry(entry);
     },
@@ -310,20 +448,11 @@ export function createDemoClient(
       equivalentId: string,
     ): Promise<Entry> {
       const entry = findEntry(entryId);
-      const sense = entry.senses.find((candidate) => candidate.id === senseId);
-      const equivalent = sense?.equivalents.find(
-        (candidate) => candidate.id === equivalentId,
-      );
-      if (!sense || !equivalent) {
-        throw new OwnwordsError(
-          "not_found",
-          "That equivalent is no longer on this entry.",
-          404,
-        );
-      }
+      const equivalent = findEquivalent(entry, senseId, equivalentId);
       equivalent.state = "suggested";
       equivalent.text = demoSuggestions[equivalent.language] ?? equivalent.text;
       equivalent.fit = equivalent.fit ?? "exact";
+      equivalent.version += 1;
       entry.version += 1;
       return copyEntry(entry);
     },
@@ -381,6 +510,7 @@ export function createDemoClient(
             equivalents: starter.equivalents.map((equivalent) => ({
               ...equivalent,
               id: localId("q"),
+              version: 1,
             })),
           },
         ],
@@ -412,6 +542,7 @@ export function createDemoClient(
         cards,
         estimate: estimateFor(cards.length),
         comingUp: scope.ahead ? [] : coming.map(toUpcoming),
+        aheadAvailable: true,
       };
     },
 
@@ -447,6 +578,7 @@ export function createDemoClient(
         perLanguage: retention.map((row) => ({
           ...row,
           nextDueAt: nextDueFor(row.language, row.direction),
+          dueNow: has(due, row.language, row.direction),
         })),
       };
     },
@@ -467,7 +599,11 @@ export function createDemoClient(
     },
 
     async completeLessonStep(): Promise<void> {
-      // Recorded by the learning package once it is mounted.
+      // The demo keeps no course progress.
+    },
+
+    async completeLesson() {
+      return { lexicon: "synced" as const };
     },
 
     async getAlphabet(): Promise<AlphabetLetter[]> {

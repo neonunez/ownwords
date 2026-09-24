@@ -9,9 +9,12 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
+      "demo-dist",
       "dev-dist",
       "playwright-report",
       "test-results",
+      "stack-report",
+      "stack-results",
       "coverage",
     ],
   },
@@ -42,9 +45,15 @@ export default tseslint.config(
     },
   },
   {
+    // Scripts that run in Node rather than in the browser.
+    files: ["**/*.mjs"],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // A context and the hook that reads it belong in one file; that costs a
     // little hot-reload precision and nothing else.
     files: [
+      "src/app/session/SessionGate.tsx",
       "src/app/shell/ClientProvider.tsx",
       "src/app/shell/OverlayHost.tsx",
       "src/app/shell/ThemeProvider.tsx",
