@@ -3,10 +3,10 @@
 ## HTTP mount and identity
 
 ```ts
-import { createLexiconRoutes, type LexiconEnv } from '@ownwords/lexicon';
+import { createLexiconRoutes, type LexiconEnv } from "@ownwords/lexicon";
 
 // Verified auth middleware must run first and call c.set('userId', verifiedSubject).
-app.route('/api/v1/lexicon', createLexiconRoutes());
+app.route("/api/v1/lexicon", createLexiconRoutes());
 ```
 
 The Hono environment is exactly:

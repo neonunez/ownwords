@@ -1,4 +1,6 @@
-export async function first<T>(statement: D1PreparedStatement): Promise<T | null> {
+export async function first<T>(
+  statement: D1PreparedStatement,
+): Promise<T | null> {
   return await statement.first<T>();
 }
 

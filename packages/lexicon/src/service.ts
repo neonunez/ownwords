@@ -1,7 +1,7 @@
-import { encodeJson, first } from './db.js';
-import { normalizeSearchText } from './normalize.js';
-import { cryptoIdGenerator, iso, systemClock } from './runtime.js';
-import { newStoredCard } from './scheduler.js';
+import { encodeJson, first } from "./db.js";
+import { normalizeSearchText } from "./normalize.js";
+import { cryptoIdGenerator, iso, systemClock } from "./runtime.js";
+import { newStoredCard } from "./scheduler.js";
 import type {
   Clock,
   CourseLexiconImport,
@@ -11,8 +11,15 @@ import type {
   IdGenerator,
   LexiconCourseImportService,
   SenseInput,
-} from './types.js';
-import { InputError, enumValue, jsonRecord, kinds, optionalString, parseSense } from './validation.js';
+} from "./types.js";
+import {
+  InputError,
+  enumValue,
+  jsonRecord,
+  kinds,
+  optionalString,
+  parseSense,
+} from "./validation.js";
 
 export interface CreateEntryInput {
   kind: EntryKind;
@@ -54,19 +61,33 @@ export async function createEntry(
         iso(now),
       ),
   ];
-  appendSenseStatements(statements, db, ownerId, entryId, input.senses, now, ids, true);
+  appendSenseStatements(
+    statements,
+    db,
+    ownerId,
+    entryId,
+    input.senses,
+    now,
+    ids,
+    true,
+  );
   await db.batch(statements);
   return { id: entryId, version: 1 };
 }
 
-export function createCourseLexiconImporter(options: CreateCourseImporterOptions): LexiconCourseImportService {
+export function createCourseLexiconImporter(
+  options: CreateCourseImporterOptions,
+): LexiconCourseImportService {
   const clock = options.clock ?? systemClock;
   const ids = options.idGenerator ?? cryptoIdGenerator;
   return {
-    async importCourseEntry(input: CourseLexiconImport): Promise<CourseLexiconImportResult> {
+    async importCourseEntry(
+      input: CourseLexiconImport,
+    ): Promise<CourseLexiconImportResult> {
       const normalized = validateCourseImport(input);
       const existing = await findCourseImport(options.db, normalized);
-      if (existing !== null) return { entryId: existing.entry_id, created: false };
+      if (existing !== null)
+        return { entryId: existing.entry_id, created: false };
 
       const now = clock.now();
       const entryId = ids.next();
@@ -87,7 +108,16 @@ export function createCourseLexiconImporter(options: CreateCourseImporterOptions
             iso(now),
           ),
       ];
-      appendSenseStatements(statements, options.db, normalized.ownerId, entryId, normalized.senses, now, ids, false);
+      appendSenseStatements(
+        statements,
+        options.db,
+        normalized.ownerId,
+        entryId,
+        normalized.senses,
+        now,
+        ids,
+        false,
+      );
       statements.push(
         options.db
           .prepare(
@@ -111,7 +141,8 @@ export function createCourseLexiconImporter(options: CreateCourseImporterOptions
         // A concurrent retry may have won the unique course identity. D1 batch is atomic,
         // so this attempt either fully committed or left no partial Lexicon rows.
         const winner = await findCourseImport(options.db, normalized);
-        if (winner !== null) return { entryId: winner.entry_id, created: false };
+        if (winner !== null)
+          return { entryId: winner.entry_id, created: false };
         throw error;
       }
     },
@@ -122,7 +153,10 @@ interface ImportRow {
   entry_id: string;
 }
 
-async function findCourseImport(db: D1Database, input: CourseLexiconImport): Promise<ImportRow | null> {
+async function findCourseImport(
+  db: D1Database,
+  input: CourseLexiconImport,
+): Promise<ImportRow | null> {
   return await first<ImportRow>(
     db
       .prepare(
@@ -180,19 +214,21 @@ function appendSenseStatements(
             senseId,
             equivalent.languageTag,
             equivalent.text ?? null,
-            equivalent.text == null ? null : normalizeSearchText(equivalent.text),
-            equivalent.fit ?? 'exact',
+            equivalent.text == null
+              ? null
+              : normalizeSearchText(equivalent.text),
+            equivalent.fit ?? "exact",
             equivalent.status,
             equivalent.note ?? null,
             equivalent.source ?? null,
             encodeJson(equivalent.provenance),
             encodeJson(equivalent.scriptData),
-            humanEdited || equivalent.status === 'manual' ? 1 : 0,
+            humanEdited || equivalent.status === "manual" ? 1 : 0,
             iso(now),
             iso(now),
           ),
       );
-      if (isPracticeEligible(equivalent.status, equivalent.fit ?? 'exact')) {
+      if (isPracticeEligible(equivalent.status, equivalent.fit ?? "exact")) {
         appendCardStatements(statements, db, ownerId, equivalentId, now, ids);
       }
     }
@@ -208,7 +244,7 @@ export function appendCardStatements(
   ids: IdGenerator,
 ): void {
   const initial = newStoredCard(now);
-  for (const direction of ['recognize', 'produce'] as const) {
+  for (const direction of ["recognize", "produce"] as const) {
     statements.push(
       db
         .prepare(
@@ -247,41 +283,64 @@ export function appendCardStatements(
 }
 
 export function isPracticeEligible(status: string, fit: string): boolean {
-  return (status === 'confirmed' || status === 'manual') && fit !== 'false_friend';
+  return (
+    (status === "confirmed" || status === "manual") && fit !== "false_friend"
+  );
 }
 
 function validateCourseImport(input: CourseLexiconImport): CourseLexiconImport {
   for (const [name, value] of [
-    ['ownerId', input.ownerId],
-    ['courseId', input.courseId],
-    ['courseVersion', input.courseVersion],
-    ['itemId', input.itemId],
+    ["ownerId", input.ownerId],
+    ["courseId", input.courseId],
+    ["courseVersion", input.courseVersion],
+    ["itemId", input.itemId],
   ] as const) {
-    if (typeof value !== 'string' || value.length < 1 || value.length > 200 || value.trim() !== value) {
+    if (
+      typeof value !== "string" ||
+      value.length < 1 ||
+      value.length > 200 ||
+      value.trim() !== value
+    ) {
       throw new InputError(`${name} is invalid`);
     }
   }
-  if (!Array.isArray(input.senses) || input.senses.length < 1 || input.senses.length > 20) {
-    throw new InputError('senses are invalid');
+  if (
+    !Array.isArray(input.senses) ||
+    input.senses.length < 1 ||
+    input.senses.length > 20
+  ) {
+    throw new InputError("senses are invalid");
   }
-  const senses = input.senses.map((sense, index) => parseSense(sense, `senses[${index}]`));
-  if (senses.reduce((count, sense) => count + sense.equivalents.length, 0) > 100) {
-    throw new InputError('course imports support at most 100 equivalents');
+  const senses = input.senses.map((sense, index) =>
+    parseSense(sense, `senses[${index}]`),
+  );
+  if (
+    senses.reduce((count, sense) => count + sense.equivalents.length, 0) > 100
+  ) {
+    throw new InputError("course imports support at most 100 equivalents");
   }
   for (const sense of senses) {
-    if (sense.equivalents.some((equivalent) => !isPracticeEligible(equivalent.status, equivalent.fit ?? 'exact'))) {
-      throw new InputError('course imports require verified, non-false-friend equivalents');
+    if (
+      sense.equivalents.some(
+        (equivalent) =>
+          !isPracticeEligible(equivalent.status, equivalent.fit ?? "exact"),
+      )
+    ) {
+      throw new InputError(
+        "course imports require verified, non-false-friend equivalents",
+      );
     }
   }
-  const provenance = jsonRecord(input.provenance, 'provenance');
-  if (provenance === null || provenance === undefined) throw new InputError('provenance is required');
-  const note = optionalString(input.note, 'note', 2000);
+  const provenance = jsonRecord(input.provenance, "provenance");
+  if (provenance === null || provenance === undefined)
+    throw new InputError("provenance is required");
+  const note = optionalString(input.note, "note", 2000);
   return {
     ownerId: input.ownerId,
     courseId: input.courseId,
     courseVersion: input.courseVersion,
     itemId: input.itemId,
-    kind: enumValue(input.kind, 'kind', kinds),
+    kind: enumValue(input.kind, "kind", kinds),
     ...(note === undefined ? {} : { note }),
     provenance,
     senses,

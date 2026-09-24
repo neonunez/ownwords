@@ -6,11 +6,12 @@ an owner identity from a request payload. The API shell must set `Variables.user
 
 ## Local validation
 
+Run from the repository root; the package has no lockfile of its own.
+
 ```sh
-cd packages/lexicon
-npm install
-npm test
-npm run typecheck
+npm ci
+npm test --workspace @ownwords/lexicon
+npm run typecheck --workspace @ownwords/lexicon
 ```
 
 Tests apply the real [`0100_lexicon.sql`](./migrations/0100_lexicon.sql) migration to SQLite and exercise the Hono

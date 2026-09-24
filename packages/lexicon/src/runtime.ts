@@ -1,4 +1,4 @@
-import type { Clock, IdGenerator } from './types.js';
+import type { Clock, IdGenerator } from "./types.js";
 
 export const systemClock: Clock = {
   now: () => new Date(),

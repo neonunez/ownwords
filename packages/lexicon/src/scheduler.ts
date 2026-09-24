@@ -1,5 +1,5 @@
-import { State, createEmptyCard, fsrs, type Card, type Grade } from 'ts-fsrs';
-import type { ReviewRating } from './types.js';
+import { State, createEmptyCard, fsrs, type Card, type Grade } from "ts-fsrs";
+import type { ReviewRating } from "./types.js";
 
 export interface StoredCardState {
   dueAt: string;
@@ -24,15 +24,26 @@ export function newStoredCard(now: Date): StoredCardState {
   return fromFsrsCard(createEmptyCard(now));
 }
 
-export function scheduleReview(current: StoredCardState, rating: ReviewRating, now: Date): StoredCardState {
+export function scheduleReview(
+  current: StoredCardState,
+  rating: ReviewRating,
+  now: Date,
+): StoredCardState {
   const next = scheduler.next(toFsrsCard(current), now, rating as Grade).card;
   return fromFsrsCard(next);
 }
 
-export function estimateRetention(cards: StoredCardState[], now: Date): number | null {
+export function estimateRetention(
+  cards: StoredCardState[],
+  now: Date,
+): number | null {
   const reviewed = cards.filter((card) => card.state !== State.New);
   if (reviewed.length === 0) return null;
-  const total = reviewed.reduce((sum, card) => sum + scheduler.get_retrievability(toFsrsCard(card), now, false), 0);
+  const total = reviewed.reduce(
+    (sum, card) =>
+      sum + scheduler.get_retrievability(toFsrsCard(card), now, false),
+    0,
+  );
   return total / reviewed.length;
 }
 
@@ -47,7 +58,9 @@ function toFsrsCard(card: StoredCardState): Card {
     reps: card.reps,
     lapses: card.lapses,
     state: card.state as State,
-    ...(card.lastReviewAt === null ? {} : { last_review: new Date(card.lastReviewAt) }),
+    ...(card.lastReviewAt === null
+      ? {}
+      : { last_review: new Date(card.lastReviewAt) }),
   };
 }
 

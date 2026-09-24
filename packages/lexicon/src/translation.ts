@@ -1,11 +1,11 @@
-import { first, run } from './db.js';
-import { iso } from './runtime.js';
+import { first, run } from "./db.js";
+import { iso } from "./runtime.js";
 import type {
   Clock,
   TranslationProvider,
   TranslationSuggestion,
   TranslationSuggestionRequest,
-} from './types.js';
+} from "./types.js";
 
 interface CacheRow {
   result_json: string;
@@ -14,17 +14,19 @@ interface CacheRow {
 
 export class ProviderDisabledError extends Error {
   constructor() {
-    super('Translation suggestions are disabled');
-    this.name = 'ProviderDisabledError';
+    super("Translation suggestions are disabled");
+    this.name = "ProviderDisabledError";
   }
 }
 
 /** Default provider: it performs no network request and cannot incur a charge. */
 export class DisabledTranslationProvider implements TranslationProvider {
-  readonly id = 'disabled';
-  readonly version = '1';
+  readonly id = "disabled";
+  readonly version = "1";
 
-  async suggest(_request: TranslationSuggestionRequest): Promise<TranslationSuggestion[]> {
+  async suggest(
+    _request: TranslationSuggestionRequest,
+  ): Promise<TranslationSuggestion[]> {
     throw new ProviderDisabledError();
   }
 }
@@ -36,7 +38,7 @@ export interface SuggestionServiceInput extends TranslationSuggestionRequest {
 
 export interface SuggestionServiceResult {
   suggestions: TranslationSuggestion[];
-  cache: 'hit' | 'miss';
+  cache: "hit" | "miss";
 }
 
 /**
@@ -51,7 +53,9 @@ export class TranslationSuggestionService {
     private readonly ttlMs = 30 * 24 * 60 * 60 * 1000,
   ) {}
 
-  async suggest(input: SuggestionServiceInput): Promise<SuggestionServiceResult> {
+  async suggest(
+    input: SuggestionServiceInput,
+  ): Promise<SuggestionServiceResult> {
     const cacheKey = await makeCacheKey(this.provider, input);
     const now = this.clock.now();
     const cached = await first<CacheRow>(
@@ -66,7 +70,7 @@ export class TranslationSuggestionService {
     if (cached !== null) {
       return {
         suggestions: JSON.parse(cached.result_json) as TranslationSuggestion[],
-        cache: 'hit',
+        cache: "hit",
       };
     }
 
@@ -103,11 +107,14 @@ export class TranslationSuggestionService {
           iso(expiresAt),
         ),
     );
-    return { suggestions, cache: 'miss' };
+    return { suggestions, cache: "miss" };
   }
 }
 
-async function makeCacheKey(provider: TranslationProvider, input: SuggestionServiceInput): Promise<string> {
+async function makeCacheKey(
+  provider: TranslationProvider,
+  input: SuggestionServiceInput,
+): Promise<string> {
   const material = JSON.stringify({
     provider: provider.id,
     providerVersion: provider.version,
@@ -117,35 +124,52 @@ async function makeCacheKey(provider: TranslationProvider, input: SuggestionServ
     text: input.text,
     sense: input.sense ?? null,
   });
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(material),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function validateProviderResult(suggestions: TranslationSuggestion[]): void {
   if (!Array.isArray(suggestions) || suggestions.length > 20) {
-    throw new Error('Translation provider returned an invalid suggestion count');
+    throw new Error(
+      "Translation provider returned an invalid suggestion count",
+    );
   }
   for (const suggestion of suggestions) {
     if (
-      typeof suggestion !== 'object' ||
+      typeof suggestion !== "object" ||
       suggestion === null ||
-      typeof suggestion.text !== 'string' ||
+      typeof suggestion.text !== "string" ||
       suggestion.text.length < 1 ||
       suggestion.text.length > 500 ||
-      !['exact', 'broader', 'narrower', 'context_only'].includes(suggestion.fit) ||
-      (suggestion.note !== undefined && (typeof suggestion.note !== 'string' || suggestion.note.length > 2000)) ||
+      !["exact", "broader", "narrower", "context_only"].includes(
+        suggestion.fit,
+      ) ||
+      (suggestion.note !== undefined &&
+        (typeof suggestion.note !== "string" ||
+          suggestion.note.length > 2000)) ||
       (suggestion.provenance !== undefined &&
-        (typeof suggestion.provenance !== 'object' || suggestion.provenance === null || Array.isArray(suggestion.provenance)))
+        (typeof suggestion.provenance !== "object" ||
+          suggestion.provenance === null ||
+          Array.isArray(suggestion.provenance)))
     ) {
-      throw new Error('Translation provider returned an invalid suggestion');
+      throw new Error("Translation provider returned an invalid suggestion");
     }
     try {
       if (JSON.stringify(suggestion.provenance ?? {}).length > 10_000) {
-        throw new Error('Translation provider returned oversized provenance');
+        throw new Error("Translation provider returned oversized provenance");
       }
     } catch (error) {
-      if (error instanceof Error && error.message === 'Translation provider returned oversized provenance') throw error;
-      throw new Error('Translation provider returned invalid provenance');
+      if (
+        error instanceof Error &&
+        error.message === "Translation provider returned oversized provenance"
+      )
+        throw error;
+      throw new Error("Translation provider returned invalid provenance");
     }
   }
 }

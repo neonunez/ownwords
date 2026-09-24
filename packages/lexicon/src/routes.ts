@@ -1,14 +1,22 @@
-import { Hono, type Context } from 'hono';
-import { all, changed, decodeJson, encodeJson, first, run } from './db.js';
-import { answersMatch, normalizeSearchText } from './normalize.js';
-import { cryptoIdGenerator, iso, systemClock } from './runtime.js';
-import { appendCardStatements, createEntry, isPracticeEligible } from './service.js';
-import { estimateRetention, scheduleReview, type StoredCardState } from './scheduler.js';
+import { Hono, type Context } from "hono";
+import { all, changed, decodeJson, encodeJson, first, run } from "./db.js";
+import { answersMatch, normalizeSearchText } from "./normalize.js";
+import { cryptoIdGenerator, iso, systemClock } from "./runtime.js";
+import {
+  appendCardStatements,
+  createEntry,
+  isPracticeEligible,
+} from "./service.js";
+import {
+  estimateRetention,
+  scheduleReview,
+  type StoredCardState,
+} from "./scheduler.js";
 import {
   DisabledTranslationProvider,
   ProviderDisabledError,
   TranslationSuggestionService,
-} from './translation.js';
+} from "./translation.js";
 import type {
   Clock,
   CreateLexiconRoutesOptions,
@@ -19,7 +27,7 @@ import type {
   PracticeFormat,
   ReviewRating,
   TranslationStatus,
-} from './types.js';
+} from "./types.js";
 import {
   InputError,
   directions,
@@ -35,7 +43,7 @@ import {
   parseSense,
   reviewRating,
   string,
-} from './validation.js';
+} from "./validation.js";
 
 interface EntryRow {
   id: string;
@@ -110,56 +118,79 @@ interface CardMasteryRow {
 }
 
 interface MasterySummary {
-  level: 'new' | 'learning' | 'mastered';
+  level: "new" | "learning" | "mastered";
   dueAt: string;
   due: boolean;
 }
 
-type EquivalentMastery = Map<string, Partial<Record<PracticeDirection, MasterySummary>>>;
+type EquivalentMastery = Map<
+  string,
+  Partial<Record<PracticeDirection, MasterySummary>>
+>;
 
-export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): Hono<LexiconEnv> {
+export function createLexiconRoutes(
+  options: CreateLexiconRoutesOptions = {},
+): Hono<LexiconEnv> {
   const app = new Hono<LexiconEnv>();
   const clock = options.clock ?? systemClock;
   const ids = options.idGenerator ?? cryptoIdGenerator;
-  const provider = options.translationProvider ?? new DisabledTranslationProvider();
+  const provider =
+    options.translationProvider ?? new DisabledTranslationProvider();
   const wrongDelayMs = options.wrongAnswerDelayMs ?? DEFAULT_WRONG_DELAY_MS;
 
   app.onError((error, c) => {
     if (error instanceof InputError) {
-      return c.json(errorBody('INVALID_REQUEST', error.message), 400);
+      return c.json(errorBody("INVALID_REQUEST", error.message), 400);
     }
     if (error instanceof ProviderDisabledError) {
-      return c.json(errorBody('TRANSLATION_PROVIDER_DISABLED', error.message), 503);
+      return c.json(
+        errorBody("TRANSLATION_PROVIDER_DISABLED", error.message),
+        503,
+      );
     }
-    return c.json(errorBody('INTERNAL_ERROR', 'The request could not be completed'), 500);
+    return c.json(
+      errorBody("INTERNAL_ERROR", "The request could not be completed"),
+      500,
+    );
   });
 
-  app.use('*', async (c, next) => {
-    const ownerId = c.get('userId');
-    if (typeof ownerId !== 'string' || ownerId.length === 0) {
-      return c.json(errorBody('AUTH_REQUIRED', 'Authentication is required'), 401);
+  app.use("*", async (c, next) => {
+    const ownerId = c.get("userId");
+    if (typeof ownerId !== "string" || ownerId.length === 0) {
+      return c.json(
+        errorBody("AUTH_REQUIRED", "Authentication is required"),
+        401,
+      );
     }
     await next();
   });
 
-  app.post('/entries', async (c) => {
-    const ownerId = c.get('userId');
+  app.post("/entries", async (c) => {
+    const ownerId = c.get("userId");
     const body = object(await readJson(c.req.raw));
-    if (!Array.isArray(body.senses) || body.senses.length < 1 || body.senses.length > 20) {
-      throw new InputError('senses must contain between 1 and 20 items');
+    if (
+      !Array.isArray(body.senses) ||
+      body.senses.length < 1 ||
+      body.senses.length > 20
+    ) {
+      throw new InputError("senses must contain between 1 and 20 items");
     }
-    const senses = body.senses.map((item, index) => parseSense(item, `senses[${index}]`));
-    if (senses.reduce((count, sense) => count + sense.equivalents.length, 0) > 100) {
-      throw new InputError('entries support at most 100 equivalents');
+    const senses = body.senses.map((item, index) =>
+      parseSense(item, `senses[${index}]`),
+    );
+    if (
+      senses.reduce((count, sense) => count + sense.equivalents.length, 0) > 100
+    ) {
+      throw new InputError("entries support at most 100 equivalents");
     }
     const created = await createEntry(
       c.env.DB,
       ownerId,
       {
-        kind: enumValue(body.kind, 'kind', kinds),
-        note: optionalString(body.note, 'note', 2000),
-        source: optionalString(body.source, 'source', 500),
-        provenance: jsonRecord(body.provenance, 'provenance'),
+        kind: enumValue(body.kind, "kind", kinds),
+        note: optionalString(body.note, "note", 2000),
+        source: optionalString(body.source, "source", 500),
+        provenance: jsonRecord(body.provenance, "provenance"),
         senses,
       },
       clock,
@@ -169,63 +200,80 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     return c.json({ data: entry }, 201);
   });
 
-  app.get('/entries', async (c) => {
-    const ownerId = c.get('userId');
+  app.get("/entries", async (c) => {
+    const ownerId = c.get("userId");
     const url = new URL(c.req.url);
-    const limit = parseLimit(url.searchParams.get('limit'));
-    const language = optionalLanguage(url.searchParams.get('language'));
-    const kind = optionalEnum(url.searchParams.get('kind'), kinds, 'kind');
+    const limit = parseLimit(url.searchParams.get("limit"));
+    const language = optionalLanguage(url.searchParams.get("language"));
+    const kind = optionalEnum(url.searchParams.get("kind"), kinds, "kind");
     const verification = optionalEnum(
-      url.searchParams.get('verification'),
-      ['verified', 'unverified'] as const,
-      'verification',
+      url.searchParams.get("verification"),
+      ["verified", "unverified"] as const,
+      "verification",
     );
     const mastery = optionalEnum(
-      url.searchParams.get('mastery'),
-      ['new', 'due', 'learning', 'mastered'] as const,
-      'mastery',
+      url.searchParams.get("mastery"),
+      ["new", "due", "learning", "mastered"] as const,
+      "mastery",
     );
-    const direction = optionalEnum(url.searchParams.get('direction'), directions, 'direction');
-    if (direction !== null && mastery === null) throw new InputError('direction requires a mastery filter');
-    const queryValue = url.searchParams.get('query');
-    const query = queryValue === null ? null : normalizeSearchText(string(queryValue, 'query', { min: 1, max: 100 })!);
-    const cursor = parseCursor(url.searchParams.get('cursor'));
+    const direction = optionalEnum(
+      url.searchParams.get("direction"),
+      directions,
+      "direction",
+    );
+    if (direction !== null && mastery === null)
+      throw new InputError("direction requires a mastery filter");
+    const queryValue = url.searchParams.get("query");
+    const query =
+      queryValue === null
+        ? null
+        : normalizeSearchText(
+            string(queryValue, "query", { min: 1, max: 100 })!,
+          );
+    const cursor = parseCursor(url.searchParams.get("cursor"));
 
-    const conditions = ['e.owner_id = ?', 'e.deleted_at IS NULL'];
+    const conditions = ["e.owner_id = ?", "e.deleted_at IS NULL"];
     const bindings: unknown[] = [ownerId];
     if (kind !== null) {
-      conditions.push('e.kind = ?');
+      conditions.push("e.kind = ?");
       bindings.push(kind);
     }
     if (cursor !== null) {
-      conditions.push('(e.updated_at < ? OR (e.updated_at = ? AND e.id < ?))');
+      conditions.push("(e.updated_at < ? OR (e.updated_at = ? AND e.id < ?))");
       bindings.push(cursor.updatedAt, cursor.updatedAt, cursor.id);
     }
     if (language !== null || query !== null || verification !== null) {
-      const nested = ['s.owner_id = e.owner_id', 's.entry_id = e.id', 's.deleted_at IS NULL', 'q.deleted_at IS NULL'];
+      const nested = [
+        "s.owner_id = e.owner_id",
+        "s.entry_id = e.id",
+        "s.deleted_at IS NULL",
+        "q.deleted_at IS NULL",
+      ];
       if (language !== null) {
-        nested.push('q.language_tag = ?');
+        nested.push("q.language_tag = ?");
         bindings.push(language);
       }
       if (query !== null) {
         nested.push("q.search_text LIKE ? ESCAPE '\\'");
         bindings.push(`%${escapeLike(query)}%`);
       }
-      if (verification === 'verified') nested.push("q.status IN ('confirmed', 'manual')");
-      if (verification === 'unverified') nested.push("q.status IN ('suggested', 'waiting', 'failed')");
+      if (verification === "verified")
+        nested.push("q.status IN ('confirmed', 'manual')");
+      if (verification === "unverified")
+        nested.push("q.status IN ('suggested', 'waiting', 'failed')");
       conditions.push(
         `EXISTS (SELECT 1 FROM lexicon_senses s JOIN lexicon_equivalents q
                    ON q.owner_id = s.owner_id AND q.sense_id = s.id
-                  WHERE ${nested.join(' AND ')})`,
+                  WHERE ${nested.join(" AND ")})`,
       );
     }
     if (mastery !== null) {
       const masteryCondition =
-        mastery === 'new'
-          ? 'p.reps = 0'
-          : mastery === 'due'
-            ? 'p.due_at <= ?'
-            : mastery === 'learning'
+        mastery === "new"
+          ? "p.reps = 0"
+          : mastery === "due"
+            ? "p.due_at <= ?"
+            : mastery === "learning"
               ? `p.reps > 0 AND p.stability < ${MASTERED_STABILITY_DAYS}`
               : `p.reps > 0 AND p.stability >= ${MASTERED_STABILITY_DAYS}`;
       conditions.push(
@@ -235,30 +283,30 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
                  WHERE ms.owner_id = e.owner_id AND ms.entry_id = e.id AND ms.deleted_at IS NULL
                    AND mq.deleted_at IS NULL
                    AND mq.status IN ('confirmed', 'manual') AND mq.fit <> 'false_friend'
-                   ${language === null ? '' : 'AND mq.language_tag = ?'}
-                   ${direction === null ? '' : 'AND p.direction = ?'}
+                   ${language === null ? "" : "AND mq.language_tag = ?"}
+                   ${direction === null ? "" : "AND p.direction = ?"}
                    AND ${masteryCondition})`,
       );
       if (language !== null) bindings.push(language);
       if (direction !== null) bindings.push(direction);
-      if (mastery === 'due') bindings.push(iso(clock.now()));
+      if (mastery === "due") bindings.push(iso(clock.now()));
     }
 
     const rows = await all<EntryRow>(
-      c.env.DB
-        .prepare(
-          `SELECT e.id, e.kind, e.note, e.source, e.provenance_json, e.human_edited,
+      c.env.DB.prepare(
+        `SELECT e.id, e.kind, e.note, e.source, e.provenance_json, e.human_edited,
                   e.version, e.created_at, e.updated_at
              FROM lexicon_entries e
-            WHERE ${conditions.join(' AND ')}
+            WHERE ${conditions.join(" AND ")}
             ORDER BY e.updated_at DESC, e.id DESC
             LIMIT ?`,
-        )
-        .bind(...bindings, limit + 1),
+      ).bind(...bindings, limit + 1),
     );
     const page = rows.slice(0, limit);
     const now = clock.now();
-    const data = await Promise.all(page.map((row) => getEntry(c.env.DB, ownerId, row.id, now)));
+    const data = await Promise.all(
+      page.map((row) => getEntry(c.env.DB, ownerId, row.id, now)),
+    );
     const last = page.at(-1);
     return c.json({
       data,
@@ -272,238 +320,425 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     });
   });
 
-  app.get('/entries/:entryId', async (c) => {
-    const entry = await getEntry(c.env.DB, c.get('userId'), validId(c.req.param('entryId')), clock.now());
+  app.get("/entries/:entryId", async (c) => {
+    const entry = await getEntry(
+      c.env.DB,
+      c.get("userId"),
+      validId(c.req.param("entryId")),
+      clock.now(),
+    );
     if (entry === null) return notFound(c);
     return c.json({ data: entry });
   });
 
-  app.patch('/entries/:entryId', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
+  app.patch("/entries/:entryId", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
     const body = object(await readJson(c.req.raw));
-    const version = integer(body.version, 'version', 1);
+    const version = integer(body.version, "version", 1);
     const assignments: string[] = [];
     const values: unknown[] = [];
-    if ('kind' in body) pushAssignment(assignments, values, 'kind', enumValue(body.kind, 'kind', kinds));
-    if ('note' in body) pushAssignment(assignments, values, 'note', optionalString(body.note, 'note', 2000));
-    if ('source' in body) pushAssignment(assignments, values, 'source', optionalString(body.source, 'source', 500));
-    if ('provenance' in body) {
-      pushAssignment(assignments, values, 'provenance_json', encodeJson(jsonRecord(body.provenance, 'provenance')));
+    if ("kind" in body)
+      pushAssignment(
+        assignments,
+        values,
+        "kind",
+        enumValue(body.kind, "kind", kinds),
+      );
+    if ("note" in body)
+      pushAssignment(
+        assignments,
+        values,
+        "note",
+        optionalString(body.note, "note", 2000),
+      );
+    if ("source" in body)
+      pushAssignment(
+        assignments,
+        values,
+        "source",
+        optionalString(body.source, "source", 500),
+      );
+    if ("provenance" in body) {
+      pushAssignment(
+        assignments,
+        values,
+        "provenance_json",
+        encodeJson(jsonRecord(body.provenance, "provenance")),
+      );
     }
-    if (assignments.length === 0) throw new InputError('at least one editable field is required');
+    if (assignments.length === 0)
+      throw new InputError("at least one editable field is required");
     const now = iso(clock.now());
     const result = await run(
-      c.env.DB
-        .prepare(
-          `UPDATE lexicon_entries SET ${assignments.join(', ')}, human_edited = 1,
+      c.env.DB.prepare(
+        `UPDATE lexicon_entries SET ${assignments.join(", ")}, human_edited = 1,
                   version = version + 1, updated_at = ?
             WHERE id = ? AND owner_id = ? AND version = ? AND deleted_at IS NULL`,
-        )
-        .bind(...values, now, entryId, ownerId, version),
+      ).bind(...values, now, entryId, ownerId, version),
     );
-    if (changed(result) === 0) return await missingOrConflict(c, 'lexicon_entries', entryId, ownerId);
-    return c.json({ data: await getEntry(c.env.DB, ownerId, entryId, clock.now()) });
+    if (changed(result) === 0)
+      return await missingOrConflict(c, "lexicon_entries", entryId, ownerId);
+    return c.json({
+      data: await getEntry(c.env.DB, ownerId, entryId, clock.now()),
+    });
   });
 
-  app.delete('/entries/:entryId', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const version = parseIfMatch(c.req.header('If-Match'));
+  app.delete("/entries/:entryId", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
+    const version = parseIfMatch(c.req.header("If-Match"));
     const now = iso(clock.now());
     const result = await run(
-      c.env.DB
-        .prepare(
-          `UPDATE lexicon_entries SET deleted_at = ?, updated_at = ?, version = version + 1
+      c.env.DB.prepare(
+        `UPDATE lexicon_entries SET deleted_at = ?, updated_at = ?, version = version + 1
             WHERE id = ? AND owner_id = ? AND version = ? AND deleted_at IS NULL`,
-        )
-        .bind(now, now, entryId, ownerId, version),
+      ).bind(now, now, entryId, ownerId, version),
     );
-    if (changed(result) === 0) return await missingOrConflict(c, 'lexicon_entries', entryId, ownerId);
+    if (changed(result) === 0)
+      return await missingOrConflict(c, "lexicon_entries", entryId, ownerId);
     return c.body(null, 204);
   });
 
-  app.post('/entries/:entryId/senses', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
+  app.post("/entries/:entryId/senses", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
     if (!(await entryExists(c.env.DB, ownerId, entryId))) return notFound(c);
     const sense = parseSense(await readJson(c.req.raw));
     const now = clock.now();
     const senseId = ids.next();
     const max = await first<{ position: number }>(
-      c.env.DB
-        .prepare('SELECT COALESCE(MAX(position), -1) AS position FROM lexicon_senses WHERE owner_id = ? AND entry_id = ?')
-        .bind(ownerId, entryId),
+      c.env.DB.prepare(
+        "SELECT COALESCE(MAX(position), -1) AS position FROM lexicon_senses WHERE owner_id = ? AND entry_id = ?",
+      ).bind(ownerId, entryId),
     );
     const statements: D1PreparedStatement[] = [
-      c.env.DB
-        .prepare(
-          `INSERT INTO lexicon_senses
+      c.env.DB.prepare(
+        `INSERT INTO lexicon_senses
             (id, owner_id, entry_id, gloss, note, position, human_edited, version, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`,
-        )
-        .bind(senseId, ownerId, entryId, sense.gloss ?? null, sense.note ?? null, (max?.position ?? -1) + 1, iso(now), iso(now)),
+      ).bind(
+        senseId,
+        ownerId,
+        entryId,
+        sense.gloss ?? null,
+        sense.note ?? null,
+        (max?.position ?? -1) + 1,
+        iso(now),
+        iso(now),
+      ),
     ];
-    appendEquivalentInserts(statements, c.env.DB, ownerId, senseId, sense.equivalents, now, ids);
+    appendEquivalentInserts(
+      statements,
+      c.env.DB,
+      ownerId,
+      senseId,
+      sense.equivalents,
+      now,
+      ids,
+    );
     statements.push(
-      c.env.DB
-        .prepare('UPDATE lexicon_entries SET version = version + 1, updated_at = ?, human_edited = 1 WHERE id = ? AND owner_id = ?')
-        .bind(iso(now), entryId, ownerId),
+      c.env.DB.prepare(
+        "UPDATE lexicon_entries SET version = version + 1, updated_at = ?, human_edited = 1 WHERE id = ? AND owner_id = ?",
+      ).bind(iso(now), entryId, ownerId),
     );
     await c.env.DB.batch(statements);
-    return c.json({ data: await getSense(c.env.DB, ownerId, entryId, senseId, now) }, 201);
+    return c.json(
+      { data: await getSense(c.env.DB, ownerId, entryId, senseId, now) },
+      201,
+    );
   });
 
-  app.patch('/entries/:entryId/senses/:senseId', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
+  app.patch("/entries/:entryId/senses/:senseId", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
+    const senseId = validId(c.req.param("senseId"));
     const body = object(await readJson(c.req.raw));
-    const version = integer(body.version, 'version', 1);
+    const version = integer(body.version, "version", 1);
     const assignments: string[] = [];
     const values: unknown[] = [];
-    if ('gloss' in body) pushAssignment(assignments, values, 'gloss', optionalString(body.gloss, 'gloss', 500));
-    if ('note' in body) pushAssignment(assignments, values, 'note', optionalString(body.note, 'note', 2000));
-    if ('position' in body) pushAssignment(assignments, values, 'position', integer(body.position, 'position'));
-    if (assignments.length === 0) throw new InputError('at least one editable field is required');
+    if ("gloss" in body)
+      pushAssignment(
+        assignments,
+        values,
+        "gloss",
+        optionalString(body.gloss, "gloss", 500),
+      );
+    if ("note" in body)
+      pushAssignment(
+        assignments,
+        values,
+        "note",
+        optionalString(body.note, "note", 2000),
+      );
+    if ("position" in body)
+      pushAssignment(
+        assignments,
+        values,
+        "position",
+        integer(body.position, "position"),
+      );
+    if (assignments.length === 0)
+      throw new InputError("at least one editable field is required");
     const now = iso(clock.now());
     const result = await run(
-      c.env.DB
-        .prepare(
-          `UPDATE lexicon_senses SET ${assignments.join(', ')}, human_edited = 1,
+      c.env.DB.prepare(
+        `UPDATE lexicon_senses SET ${assignments.join(", ")}, human_edited = 1,
                   version = version + 1, updated_at = ?
             WHERE id = ? AND owner_id = ? AND entry_id = ? AND version = ? AND deleted_at IS NULL
               AND EXISTS (SELECT 1 FROM lexicon_entries e WHERE e.id = entry_id AND e.owner_id = owner_id AND e.deleted_at IS NULL)`,
-        )
-        .bind(...values, now, senseId, ownerId, entryId, version),
+      ).bind(...values, now, senseId, ownerId, entryId, version),
     );
     if (changed(result) === 0) {
-      return (await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null ? notFound(c) : conflict(c);
+      return (await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null
+        ? notFound(c)
+        : conflict(c);
     }
-    return c.json({ data: await getSense(c.env.DB, ownerId, entryId, senseId, clock.now()) });
+    return c.json({
+      data: await getSense(c.env.DB, ownerId, entryId, senseId, clock.now()),
+    });
   });
 
-  app.delete('/entries/:entryId/senses/:senseId', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
-    const version = parseIfMatch(c.req.header('If-Match'));
+  app.delete("/entries/:entryId/senses/:senseId", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
+    const senseId = validId(c.req.param("senseId"));
+    const version = parseIfMatch(c.req.header("If-Match"));
     const now = iso(clock.now());
     const result = await run(
-      c.env.DB
-        .prepare(
-          `UPDATE lexicon_senses SET deleted_at = ?, updated_at = ?, version = version + 1
+      c.env.DB.prepare(
+        `UPDATE lexicon_senses SET deleted_at = ?, updated_at = ?, version = version + 1
             WHERE id = ? AND owner_id = ? AND entry_id = ? AND version = ? AND deleted_at IS NULL
               AND EXISTS (SELECT 1 FROM lexicon_entries e
                            WHERE e.id = entry_id AND e.owner_id = owner_id AND e.deleted_at IS NULL)`,
-        )
-        .bind(now, now, senseId, ownerId, entryId, version),
+      ).bind(now, now, senseId, ownerId, entryId, version),
     );
     if (changed(result) === 0) {
-      return (await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null ? notFound(c) : conflict(c);
+      return (await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null
+        ? notFound(c)
+        : conflict(c);
     }
     return c.body(null, 204);
   });
 
-  app.post('/entries/:entryId/senses/:senseId/equivalents', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
-    if ((await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null) return notFound(c);
+  app.post("/entries/:entryId/senses/:senseId/equivalents", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
+    const senseId = validId(c.req.param("senseId"));
+    if ((await findSenseRow(c.env.DB, ownerId, entryId, senseId)) === null)
+      return notFound(c);
     const equivalent = parseEquivalent(await readJson(c.req.raw));
     const now = clock.now();
     const equivalentId = ids.next();
     const statements: D1PreparedStatement[] = [];
-    appendEquivalentInserts(statements, c.env.DB, ownerId, senseId, [equivalent], now, ids, [equivalentId]);
+    appendEquivalentInserts(
+      statements,
+      c.env.DB,
+      ownerId,
+      senseId,
+      [equivalent],
+      now,
+      ids,
+      [equivalentId],
+    );
     await c.env.DB.batch(statements);
-    return c.json({ data: await getEquivalent(c.env.DB, ownerId, entryId, senseId, equivalentId, now) }, 201);
+    return c.json(
+      {
+        data: await getEquivalent(
+          c.env.DB,
+          ownerId,
+          entryId,
+          senseId,
+          equivalentId,
+          now,
+        ),
+      },
+      201,
+    );
   });
 
-  app.patch('/entries/:entryId/senses/:senseId/equivalents/:equivalentId', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
-    const equivalentId = validId(c.req.param('equivalentId'));
-    const existing = await findEquivalentRow(c.env.DB, ownerId, entryId, senseId, equivalentId);
-    if (existing === null) return notFound(c);
-    const body = object(await readJson(c.req.raw));
-    const version = integer(body.version, 'version', 1);
-    const status = 'status' in body
-      ? enumValue<TranslationStatus>(body.status, 'status', ['suggested', 'confirmed', 'waiting', 'failed', 'manual'])
-      : existing.status;
-    const parsedText = 'text' in body ? optionalString(body.text, 'text', 500) : existing.text;
-    const textValue = parsedText === undefined ? existing.text : parsedText;
-    if ((status === 'waiting' || status === 'failed') && textValue !== null) {
-      throw new InputError(`text must be null for ${status} translations`);
-    }
-    if ((status === 'suggested' || status === 'confirmed' || status === 'manual') && !textValue) {
-      throw new InputError(`text is required for ${status} translations`);
-    }
-    const fit = 'fit' in body
-      ? enumValue<FitLabel>(body.fit, 'fit', ['exact', 'broader', 'narrower', 'context_only', 'false_friend'])
-      : existing.fit;
-    const language = 'languageTag' in body ? languageTag(body.languageTag) : existing.language_tag;
-    const assignments: string[] = ['language_tag = ?', 'text = ?', 'search_text = ?', 'fit = ?', 'status = ?'];
-    const values: unknown[] = [language, textValue, textValue === null ? null : normalizeSearchText(textValue), fit, status];
-    for (const [inputKey, column, max] of [
-      ['note', 'note', 2000],
-      ['source', 'source', 500],
-    ] as const) {
-      if (inputKey in body) pushAssignment(assignments, values, column, optionalString(body[inputKey], inputKey, max));
-    }
-    if ('provenance' in body) pushAssignment(assignments, values, 'provenance_json', encodeJson(jsonRecord(body.provenance, 'provenance')));
-    if ('scriptData' in body) pushAssignment(assignments, values, 'script_data_json', encodeJson(jsonRecord(body.scriptData, 'scriptData')));
-    const now = clock.now();
-    const update = c.env.DB
-      .prepare(
-        `UPDATE lexicon_equivalents SET ${assignments.join(', ')}, human_edited = 1,
+  app.patch(
+    "/entries/:entryId/senses/:senseId/equivalents/:equivalentId",
+    async (c) => {
+      const ownerId = c.get("userId");
+      const entryId = validId(c.req.param("entryId"));
+      const senseId = validId(c.req.param("senseId"));
+      const equivalentId = validId(c.req.param("equivalentId"));
+      const existing = await findEquivalentRow(
+        c.env.DB,
+        ownerId,
+        entryId,
+        senseId,
+        equivalentId,
+      );
+      if (existing === null) return notFound(c);
+      const body = object(await readJson(c.req.raw));
+      const version = integer(body.version, "version", 1);
+      const status =
+        "status" in body
+          ? enumValue<TranslationStatus>(body.status, "status", [
+              "suggested",
+              "confirmed",
+              "waiting",
+              "failed",
+              "manual",
+            ])
+          : existing.status;
+      const parsedText =
+        "text" in body ? optionalString(body.text, "text", 500) : existing.text;
+      const textValue = parsedText === undefined ? existing.text : parsedText;
+      if ((status === "waiting" || status === "failed") && textValue !== null) {
+        throw new InputError(`text must be null for ${status} translations`);
+      }
+      if (
+        (status === "suggested" ||
+          status === "confirmed" ||
+          status === "manual") &&
+        !textValue
+      ) {
+        throw new InputError(`text is required for ${status} translations`);
+      }
+      const fit =
+        "fit" in body
+          ? enumValue<FitLabel>(body.fit, "fit", [
+              "exact",
+              "broader",
+              "narrower",
+              "context_only",
+              "false_friend",
+            ])
+          : existing.fit;
+      const language =
+        "languageTag" in body
+          ? languageTag(body.languageTag)
+          : existing.language_tag;
+      const assignments: string[] = [
+        "language_tag = ?",
+        "text = ?",
+        "search_text = ?",
+        "fit = ?",
+        "status = ?",
+      ];
+      const values: unknown[] = [
+        language,
+        textValue,
+        textValue === null ? null : normalizeSearchText(textValue),
+        fit,
+        status,
+      ];
+      for (const [inputKey, column, max] of [
+        ["note", "note", 2000],
+        ["source", "source", 500],
+      ] as const) {
+        if (inputKey in body)
+          pushAssignment(
+            assignments,
+            values,
+            column,
+            optionalString(body[inputKey], inputKey, max),
+          );
+      }
+      if ("provenance" in body)
+        pushAssignment(
+          assignments,
+          values,
+          "provenance_json",
+          encodeJson(jsonRecord(body.provenance, "provenance")),
+        );
+      if ("scriptData" in body)
+        pushAssignment(
+          assignments,
+          values,
+          "script_data_json",
+          encodeJson(jsonRecord(body.scriptData, "scriptData")),
+        );
+      const now = clock.now();
+      const update = c.env.DB.prepare(
+        `UPDATE lexicon_equivalents SET ${assignments.join(", ")}, human_edited = 1,
                 version = version + 1, updated_at = ?
           WHERE id = ? AND owner_id = ? AND sense_id = ? AND version = ? AND deleted_at IS NULL`,
-      )
-      .bind(...values, iso(now), equivalentId, ownerId, senseId, version);
-    const statements: D1PreparedStatement[] = [update];
-    if (isPracticeEligible(status, fit)) appendCardStatements(statements, c.env.DB, ownerId, equivalentId, now, ids);
-    const results = await c.env.DB.batch(statements);
-    if (changed(results[0]!) === 0) return conflict(c);
-    return c.json({ data: await getEquivalent(c.env.DB, ownerId, entryId, senseId, equivalentId, now) });
-  });
+      ).bind(...values, iso(now), equivalentId, ownerId, senseId, version);
+      const statements: D1PreparedStatement[] = [update];
+      if (isPracticeEligible(status, fit))
+        appendCardStatements(
+          statements,
+          c.env.DB,
+          ownerId,
+          equivalentId,
+          now,
+          ids,
+        );
+      const results = await c.env.DB.batch(statements);
+      if (changed(results[0]!) === 0) return conflict(c);
+      return c.json({
+        data: await getEquivalent(
+          c.env.DB,
+          ownerId,
+          entryId,
+          senseId,
+          equivalentId,
+          now,
+        ),
+      });
+    },
+  );
 
-  app.delete('/entries/:entryId/senses/:senseId/equivalents/:equivalentId', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
-    const equivalentId = validId(c.req.param('equivalentId'));
-    const version = parseIfMatch(c.req.header('If-Match'));
-    const now = iso(clock.now());
-    const result = await run(
-      c.env.DB
-        .prepare(
+  app.delete(
+    "/entries/:entryId/senses/:senseId/equivalents/:equivalentId",
+    async (c) => {
+      const ownerId = c.get("userId");
+      const entryId = validId(c.req.param("entryId"));
+      const senseId = validId(c.req.param("senseId"));
+      const equivalentId = validId(c.req.param("equivalentId"));
+      const version = parseIfMatch(c.req.header("If-Match"));
+      const now = iso(clock.now());
+      const result = await run(
+        c.env.DB.prepare(
           `UPDATE lexicon_equivalents SET deleted_at = ?, updated_at = ?, version = version + 1
             WHERE id = ? AND owner_id = ? AND sense_id = ? AND version = ? AND deleted_at IS NULL
               AND EXISTS (SELECT 1 FROM lexicon_senses s WHERE s.id = sense_id AND s.owner_id = owner_id
                             AND s.entry_id = ? AND s.deleted_at IS NULL
                             AND EXISTS (SELECT 1 FROM lexicon_entries e
                                         WHERE e.id = s.entry_id AND e.owner_id = s.owner_id AND e.deleted_at IS NULL))`,
-        )
-        .bind(now, now, equivalentId, ownerId, senseId, version, entryId),
-    );
-    if (changed(result) === 0) {
-      return (await findEquivalentRow(c.env.DB, ownerId, entryId, senseId, equivalentId)) === null ? notFound(c) : conflict(c);
-    }
-    return c.body(null, 204);
-  });
+        ).bind(now, now, equivalentId, ownerId, senseId, version, entryId),
+      );
+      if (changed(result) === 0) {
+        return (await findEquivalentRow(
+          c.env.DB,
+          ownerId,
+          entryId,
+          senseId,
+          equivalentId,
+        )) === null
+          ? notFound(c)
+          : conflict(c);
+      }
+      return c.body(null, 204);
+    },
+  );
 
-  app.post('/entries/:entryId/senses/:senseId/suggestions', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
+  app.post("/entries/:entryId/senses/:senseId/suggestions", async (c) => {
+    const ownerId = c.get("userId");
+    const entryId = validId(c.req.param("entryId"));
+    const senseId = validId(c.req.param("senseId"));
     const sense = await findSenseRow(c.env.DB, ownerId, entryId, senseId);
     if (sense === null) return notFound(c);
     const body = object(await readJson(c.req.raw));
-    const sourceEquivalentId = validId(string(body.sourceEquivalentId, 'sourceEquivalentId', { min: 1, max: 200 })!);
-    const source = await findEquivalentRow(c.env.DB, ownerId, entryId, senseId, sourceEquivalentId);
+    const sourceEquivalentId = validId(
+      string(body.sourceEquivalentId, "sourceEquivalentId", {
+        min: 1,
+        max: 200,
+      })!,
+    );
+    const source = await findEquivalentRow(
+      c.env.DB,
+      ownerId,
+      entryId,
+      senseId,
+      sourceEquivalentId,
+    );
     if (source === null || source.text === null) return notFound(c);
-    const targetLanguage = languageTag(body.targetLanguage, 'targetLanguage');
+    const targetLanguage = languageTag(body.targetLanguage, "targetLanguage");
     const service = new TranslationSuggestionService(c.env.DB, provider, clock);
     const result = await service.suggest({
       ownerId,
@@ -518,36 +753,56 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
     return c.json({ data: result.suggestions, cache: result.cache });
   });
 
-  app.post('/entries/:entryId/senses/:senseId/equivalents/:equivalentId/cloze', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
-    const equivalentId = validId(c.req.param('equivalentId'));
-    const equivalent = await findEquivalentRow(c.env.DB, ownerId, entryId, senseId, equivalentId);
-    if (equivalent === null) return notFound(c);
-    if (!isPracticeEligible(equivalent.status, equivalent.fit)) {
-      return c.json(errorBody('UNVERIFIED_EQUIVALENT', 'Cloze data requires a verified non-false-friend equivalent'), 409);
-    }
-    const body = object(await readJson(c.req.raw));
-    const template = string(body.template, 'template', { min: 1, max: 1000 })!;
-    if ((template.match(/\{\{blank\}\}/gu) ?? []).length !== 1) {
-      throw new InputError('template must contain exactly one {{blank}} marker');
-    }
-    const answer = string(body.answer, 'answer', { min: 1, max: 500 })!;
-    const accepted = body.acceptedAnswers ?? [];
-    if (!Array.isArray(accepted) || accepted.length > 20) throw new InputError('acceptedAnswers must contain at most 20 items');
-    const acceptedAnswers = accepted.map((item, index) => string(item, `acceptedAnswers[${index}]`, { min: 1, max: 500 })!);
-    const now = iso(clock.now());
-    const clozeId = ids.next();
-    await run(
-      c.env.DB
-        .prepare(
+  app.post(
+    "/entries/:entryId/senses/:senseId/equivalents/:equivalentId/cloze",
+    async (c) => {
+      const ownerId = c.get("userId");
+      const entryId = validId(c.req.param("entryId"));
+      const senseId = validId(c.req.param("senseId"));
+      const equivalentId = validId(c.req.param("equivalentId"));
+      const equivalent = await findEquivalentRow(
+        c.env.DB,
+        ownerId,
+        entryId,
+        senseId,
+        equivalentId,
+      );
+      if (equivalent === null) return notFound(c);
+      if (!isPracticeEligible(equivalent.status, equivalent.fit)) {
+        return c.json(
+          errorBody(
+            "UNVERIFIED_EQUIVALENT",
+            "Cloze data requires a verified non-false-friend equivalent",
+          ),
+          409,
+        );
+      }
+      const body = object(await readJson(c.req.raw));
+      const template = string(body.template, "template", {
+        min: 1,
+        max: 1000,
+      })!;
+      if ((template.match(/\{\{blank\}\}/gu) ?? []).length !== 1) {
+        throw new InputError(
+          "template must contain exactly one {{blank}} marker",
+        );
+      }
+      const answer = string(body.answer, "answer", { min: 1, max: 500 })!;
+      const accepted = body.acceptedAnswers ?? [];
+      if (!Array.isArray(accepted) || accepted.length > 20)
+        throw new InputError("acceptedAnswers must contain at most 20 items");
+      const acceptedAnswers = accepted.map((item, index) =>
+        string(item, `acceptedAnswers[${index}]`, { min: 1, max: 500 })!,
+      );
+      const now = iso(clock.now());
+      const clozeId = ids.next();
+      await run(
+        c.env.DB.prepare(
           `INSERT INTO lexicon_cloze_items
             (id, owner_id, equivalent_id, language_tag, template, answer, accepted_answers_json,
              hint, provenance_json, version, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-        )
-        .bind(
+        ).bind(
           clozeId,
           ownerId,
           equivalentId,
@@ -555,46 +810,65 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
           template,
           answer,
           JSON.stringify(acceptedAnswers),
-          optionalString(body.hint, 'hint', 500) ?? null,
-          encodeJson(jsonRecord(body.provenance, 'provenance')),
+          optionalString(body.hint, "hint", 500) ?? null,
+          encodeJson(jsonRecord(body.provenance, "provenance")),
           now,
           now,
         ),
-    );
-    return c.json({ data: await getCloze(c.env.DB, ownerId, equivalentId, clozeId) }, 201);
-  });
+      );
+      return c.json(
+        { data: await getCloze(c.env.DB, ownerId, equivalentId, clozeId) },
+        201,
+      );
+    },
+  );
 
-  app.get('/entries/:entryId/senses/:senseId/equivalents/:equivalentId/cloze', async (c) => {
-    const ownerId = c.get('userId');
-    const entryId = validId(c.req.param('entryId'));
-    const senseId = validId(c.req.param('senseId'));
-    const equivalentId = validId(c.req.param('equivalentId'));
-    if ((await findEquivalentRow(c.env.DB, ownerId, entryId, senseId, equivalentId)) === null) return notFound(c);
-    const items = await all<ClozeRow>(
-      c.env.DB
-        .prepare(
+  app.get(
+    "/entries/:entryId/senses/:senseId/equivalents/:equivalentId/cloze",
+    async (c) => {
+      const ownerId = c.get("userId");
+      const entryId = validId(c.req.param("entryId"));
+      const senseId = validId(c.req.param("senseId"));
+      const equivalentId = validId(c.req.param("equivalentId"));
+      if (
+        (await findEquivalentRow(
+          c.env.DB,
+          ownerId,
+          entryId,
+          senseId,
+          equivalentId,
+        )) === null
+      )
+        return notFound(c);
+      const items = await all<ClozeRow>(
+        c.env.DB.prepare(
           `SELECT id, equivalent_id, language_tag, template, answer, accepted_answers_json,
                   hint, provenance_json, version, created_at, updated_at
              FROM lexicon_cloze_items
             WHERE owner_id = ? AND equivalent_id = ? AND deleted_at IS NULL ORDER BY created_at, id`,
-        )
-        .bind(ownerId, equivalentId),
-    );
-    if (items.length === 0) {
-      return c.json({ data: [], unavailable: { code: 'NO_VALIDATED_CLOZE', message: 'No validated cloze data is available' } });
-    }
-    return c.json({ data: items.map(mapCloze) });
-  });
+        ).bind(ownerId, equivalentId),
+      );
+      if (items.length === 0) {
+        return c.json({
+          data: [],
+          unavailable: {
+            code: "NO_VALIDATED_CLOZE",
+            message: "No validated cloze data is available",
+          },
+        });
+      }
+      return c.json({ data: items.map(mapCloze) });
+    },
+  );
 
-  app.post('/cloze/:clozeId/check', async (c) => {
-    const ownerId = c.get('userId');
-    const clozeId = validId(c.req.param('clozeId'));
+  app.post("/cloze/:clozeId/check", async (c) => {
+    const ownerId = c.get("userId");
+    const clozeId = validId(c.req.param("clozeId"));
     const body = object(await readJson(c.req.raw));
-    const actual = string(body.answer, 'answer', { max: 500 })!;
+    const actual = string(body.answer, "answer", { max: 500 })!;
     const item = await first<ClozeRow>(
-      c.env.DB
-        .prepare(
-          `SELECT c.id, c.equivalent_id, c.language_tag, c.template, c.answer, c.accepted_answers_json,
+      c.env.DB.prepare(
+        `SELECT c.id, c.equivalent_id, c.language_tag, c.template, c.answer, c.accepted_answers_json,
                   c.hint, c.provenance_json, c.version, c.created_at, c.updated_at
              FROM lexicon_cloze_items c
              JOIN lexicon_equivalents q ON q.id = c.equivalent_id AND q.owner_id = c.owner_id
@@ -603,32 +877,54 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
             WHERE c.id = ? AND c.owner_id = ? AND c.deleted_at IS NULL AND q.deleted_at IS NULL
               AND q.status IN ('confirmed', 'manual') AND q.fit <> 'false_friend'
               AND s.deleted_at IS NULL AND e.deleted_at IS NULL`,
-        )
-        .bind(clozeId, ownerId),
+      ).bind(clozeId, ownerId),
     );
     if (item === null) return notFound(c);
-    const validAnswers = [item.answer, ...(JSON.parse(item.accepted_answers_json) as string[])];
-    return c.json({ data: { correct: validAnswers.some((expected) => answersMatch(item.language_tag, actual, expected)) } });
+    const validAnswers = [
+      item.answer,
+      ...(JSON.parse(item.accepted_answers_json) as string[]),
+    ];
+    return c.json({
+      data: {
+        correct: validAnswers.some((expected) =>
+          answersMatch(item.language_tag, actual, expected),
+        ),
+      },
+    });
   });
 
-  app.get('/practice/due', async (c) => {
-    const ownerId = c.get('userId');
+  app.get("/practice/due", async (c) => {
+    const ownerId = c.get("userId");
     const url = new URL(c.req.url);
-    const language = languageTag(url.searchParams.get('language'), 'language');
-    const direction = enumValue<PracticeDirection>(url.searchParams.get('direction'), 'direction', directions);
-    const format = enumValue<PracticeFormat>(url.searchParams.get('format'), 'format', formats);
-    const sessionId = validId(string(url.searchParams.get('sessionId'), 'sessionId', { min: 1, max: 200 })!);
-    const limit = parseLimit(url.searchParams.get('limit'), 20);
+    const language = languageTag(url.searchParams.get("language"), "language");
+    const direction = enumValue<PracticeDirection>(
+      url.searchParams.get("direction"),
+      "direction",
+      directions,
+    );
+    const format = enumValue<PracticeFormat>(
+      url.searchParams.get("format"),
+      "format",
+      formats,
+    );
+    const sessionId = validId(
+      string(url.searchParams.get("sessionId"), "sessionId", {
+        min: 1,
+        max: 200,
+      })!,
+    );
+    const limit = parseLimit(url.searchParams.get("limit"), 20);
     const now = iso(clock.now());
     const formatCondition =
-      format === 'cloze'
+      format === "cloze"
         ? `AND EXISTS (SELECT 1 FROM lexicon_cloze_items c
                        WHERE c.owner_id = p.owner_id AND c.equivalent_id = p.equivalent_id AND c.deleted_at IS NULL)`
-        : '';
-    const rows = await all<CardRow & EquivalentRow & { gloss: string | null; revisit: number }>(
-      c.env.DB
-        .prepare(
-          `SELECT p.id, p.equivalent_id, p.language_tag, p.direction, p.due_at, p.stability,
+        : "";
+    const rows = await all<
+      CardRow & EquivalentRow & { gloss: string | null; revisit: number }
+    >(
+      c.env.DB.prepare(
+        `SELECT p.id, p.equivalent_id, p.language_tag, p.direction, p.due_at, p.stability,
                   p.difficulty, p.elapsed_days, p.scheduled_days, p.learning_steps, p.reps,
                   p.lapses, p.state, p.last_review_at, p.revision,
                   q.sense_id, q.text, q.fit, q.status, q.note, q.source, q.provenance_json,
@@ -654,22 +950,33 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
               ${formatCondition}
             ORDER BY revisit DESC, p.due_at, p.id
             LIMIT ?`,
-        )
-        .bind(sessionId, now, ownerId, language, direction, now, limit),
+      ).bind(sessionId, now, ownerId, language, direction, now, limit),
     );
     const data = await Promise.all(
       rows.map(async (row) => ({
         card: mapCard(row),
-        target: { id: row.equivalent_id, text: row.text, languageTag: row.language_tag },
-        prompt: await buildPrompt(c.env.DB, ownerId, row.sense_id, row.equivalent_id, row.gloss),
-        cloze: format === 'cloze' ? await firstCloze(c.env.DB, ownerId, row.equivalent_id) : null,
+        target: {
+          id: row.equivalent_id,
+          text: row.text,
+          languageTag: row.language_tag,
+        },
+        prompt: await buildPrompt(
+          c.env.DB,
+          ownerId,
+          row.sense_id,
+          row.equivalent_id,
+          row.gloss,
+        ),
+        cloze:
+          format === "cloze"
+            ? await firstCloze(c.env.DB, ownerId, row.equivalent_id)
+            : null,
         revisit: row.revisit === 1,
       })),
     );
     const next = await first<{ due_at: string }>(
-      c.env.DB
-        .prepare(
-          `SELECT MIN(p.due_at) AS due_at
+      c.env.DB.prepare(
+        `SELECT MIN(p.due_at) AS due_at
              FROM lexicon_practice_cards p
              JOIN lexicon_equivalents q ON q.id = p.equivalent_id AND q.owner_id = p.owner_id
              JOIN lexicon_senses s ON s.id = q.sense_id AND s.owner_id = q.owner_id
@@ -684,33 +991,60 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
                        AND prompt.status IN ('confirmed', 'manual') AND prompt.fit <> 'false_friend'
                        AND prompt.deleted_at IS NULL))
               ${formatCondition}`,
-        )
-        .bind(ownerId, language, direction, now),
+      ).bind(ownerId, language, direction, now),
     );
-    return c.json({ data, nextDueAt: data.length === 0 ? next?.due_at ?? null : null });
+    return c.json({
+      data,
+      nextDueAt: data.length === 0 ? (next?.due_at ?? null) : null,
+    });
   });
 
-  app.post('/practice/reviews', async (c) => {
-    const ownerId = c.get('userId');
+  app.post("/practice/reviews", async (c) => {
+    const ownerId = c.get("userId");
     const body = object(await readJson(c.req.raw));
-    const submissionId = validId(string(body.submissionId, 'submissionId', { min: 1, max: 200 })!);
-    const cardId = validId(string(body.cardId, 'cardId', { min: 1, max: 200 })!);
-    const sessionId = validId(string(body.sessionId, 'sessionId', { min: 1, max: 200 })!);
+    const submissionId = validId(
+      string(body.submissionId, "submissionId", { min: 1, max: 200 })!,
+    );
+    const cardId = validId(
+      string(body.cardId, "cardId", { min: 1, max: 200 })!,
+    );
+    const sessionId = validId(
+      string(body.sessionId, "sessionId", { min: 1, max: 200 })!,
+    );
     const rating = reviewRating(body.rating);
-    const result = await submitReview(c.env.DB, ownerId, { submissionId, cardId, sessionId, rating }, clock, ids, wrongDelayMs);
+    const result = await submitReview(
+      c.env.DB,
+      ownerId,
+      { submissionId, cardId, sessionId, rating },
+      clock,
+      ids,
+      wrongDelayMs,
+    );
     if (result === null) return notFound(c);
-    if (result === 'conflict') return c.json(errorBody('IDEMPOTENCY_CONFLICT', 'submissionId was already used for different review data'), 409);
-    return c.json({ data: result.value, replayed: result.replayed }, result.replayed ? 200 : 201);
+    if (result === "conflict")
+      return c.json(
+        errorBody(
+          "IDEMPOTENCY_CONFLICT",
+          "submissionId was already used for different review data",
+        ),
+        409,
+      );
+    return c.json(
+      { data: result.value, replayed: result.replayed },
+      result.replayed ? 200 : 201,
+    );
   });
 
-  app.get('/progress', async (c) => {
-    const ownerId = c.get('userId');
-    const language = languageTag(new URL(c.req.url).searchParams.get('language'), 'language');
+  app.get("/progress", async (c) => {
+    const ownerId = c.get("userId");
+    const language = languageTag(
+      new URL(c.req.url).searchParams.get("language"),
+      "language",
+    );
     const now = clock.now();
     const rows = await all<CardRow>(
-      c.env.DB
-        .prepare(
-          `SELECT p.id, p.equivalent_id, p.language_tag, p.direction, p.due_at, p.stability,
+      c.env.DB.prepare(
+        `SELECT p.id, p.equivalent_id, p.language_tag, p.direction, p.due_at, p.stability,
                   p.difficulty, p.elapsed_days, p.scheduled_days, p.learning_steps, p.reps,
                   p.lapses, p.state, p.last_review_at, p.revision
              FROM lexicon_practice_cards p
@@ -720,14 +1054,16 @@ export function createLexiconRoutes(options: CreateLexiconRoutesOptions = {}): H
             WHERE p.owner_id = ? AND p.language_tag = ?
               AND q.status IN ('confirmed', 'manual') AND q.fit <> 'false_friend'
               AND q.deleted_at IS NULL AND s.deleted_at IS NULL AND e.deleted_at IS NULL`,
-        )
-        .bind(ownerId, language),
+      ).bind(ownerId, language),
     );
     return c.json({
       data: directions.map((direction) => {
-        const cards = rows.filter((row) => row.direction === direction).map(toStoredCard);
+        const cards = rows
+          .filter((row) => row.direction === direction)
+          .map(toStoredCard);
         const nextDueAt = cards.reduce<string | null>(
-          (earliest, card) => (earliest === null || card.dueAt < earliest ? card.dueAt : earliest),
+          (earliest, card) =>
+            earliest === null || card.dueAt < earliest ? card.dueAt : earliest,
           null,
         );
         return {
@@ -770,7 +1106,7 @@ function appendEquivalentInserts(
           equivalent.languageTag,
           equivalent.text ?? null,
           equivalent.text == null ? null : normalizeSearchText(equivalent.text),
-          equivalent.fit ?? 'exact',
+          equivalent.fit ?? "exact",
           equivalent.status,
           equivalent.note ?? null,
           equivalent.source ?? null,
@@ -780,13 +1116,18 @@ function appendEquivalentInserts(
           iso(now),
         ),
     );
-    if (isPracticeEligible(equivalent.status, equivalent.fit ?? 'exact')) {
+    if (isPracticeEligible(equivalent.status, equivalent.fit ?? "exact")) {
       appendCardStatements(statements, db, ownerId, equivalentId, now, ids);
     }
   });
 }
 
-async function getEntry(db: D1Database, ownerId: string, entryId: string, now: Date): Promise<Record<string, unknown> | null> {
+async function getEntry(
+  db: D1Database,
+  ownerId: string,
+  entryId: string,
+  now: Date,
+): Promise<Record<string, unknown> | null> {
   const entry = await first<EntryRow>(
     db
       .prepare(
@@ -805,8 +1146,10 @@ async function getEntry(db: D1Database, ownerId: string, entryId: string, now: D
       )
       .bind(ownerId, entryId),
   );
-  const mastery = await loadMastery(db, ownerId, 's.entry_id', entryId, now);
-  const mappedSenses = await Promise.all(senses.map((sense) => mapSenseWithEquivalents(db, ownerId, sense, mastery)));
+  const mastery = await loadMastery(db, ownerId, "s.entry_id", entryId, now);
+  const mappedSenses = await Promise.all(
+    senses.map((sense) => mapSenseWithEquivalents(db, ownerId, sense, mastery)),
+  );
   return { ...mapEntry(entry), senses: mappedSenses };
 }
 
@@ -819,10 +1162,20 @@ async function getSense(
 ): Promise<Record<string, unknown> | null> {
   const row = await findSenseRow(db, ownerId, entryId, senseId);
   if (row === null) return null;
-  return await mapSenseWithEquivalents(db, ownerId, row, await loadMastery(db, ownerId, 'q.sense_id', senseId, now));
+  return await mapSenseWithEquivalents(
+    db,
+    ownerId,
+    row,
+    await loadMastery(db, ownerId, "q.sense_id", senseId, now),
+  );
 }
 
-async function findSenseRow(db: D1Database, ownerId: string, entryId: string, senseId: string): Promise<SenseRow | null> {
+async function findSenseRow(
+  db: D1Database,
+  ownerId: string,
+  entryId: string,
+  senseId: string,
+): Promise<SenseRow | null> {
   return await first<SenseRow>(
     db
       .prepare(
@@ -853,13 +1206,16 @@ async function mapSenseWithEquivalents(
       )
       .bind(ownerId, sense.id),
   );
-  return { ...mapSense(sense), equivalents: equivalents.map((row) => mapEquivalent(row, mastery)) };
+  return {
+    ...mapSense(sense),
+    equivalents: equivalents.map((row) => mapEquivalent(row, mastery)),
+  };
 }
 
 async function loadMastery(
   db: D1Database,
   ownerId: string,
-  scope: 's.entry_id' | 'q.sense_id' | 'q.id',
+  scope: "s.entry_id" | "q.sense_id" | "q.id",
   id: string,
   now: Date,
 ): Promise<EquivalentMastery> {
@@ -878,11 +1234,19 @@ async function loadMastery(
   const mastery: EquivalentMastery = new Map();
   for (const row of rows) {
     const summary: MasterySummary = {
-      level: row.reps === 0 ? 'new' : row.stability >= MASTERED_STABILITY_DAYS ? 'mastered' : 'learning',
+      level:
+        row.reps === 0
+          ? "new"
+          : row.stability >= MASTERED_STABILITY_DAYS
+            ? "mastered"
+            : "learning",
       dueAt: row.due_at,
       due: row.due_at <= nowIso,
     };
-    mastery.set(row.equivalent_id, { ...mastery.get(row.equivalent_id), [row.direction]: summary });
+    mastery.set(row.equivalent_id, {
+      ...mastery.get(row.equivalent_id),
+      [row.direction]: summary,
+    });
   }
   return mastery;
 }
@@ -895,9 +1259,18 @@ async function getEquivalent(
   equivalentId: string,
   now: Date,
 ): Promise<Record<string, unknown> | null> {
-  const row = await findEquivalentRow(db, ownerId, entryId, senseId, equivalentId);
+  const row = await findEquivalentRow(
+    db,
+    ownerId,
+    entryId,
+    senseId,
+    equivalentId,
+  );
   if (row === null) return null;
-  return mapEquivalent(row, await loadMastery(db, ownerId, 'q.id', equivalentId, now));
+  return mapEquivalent(
+    row,
+    await loadMastery(db, ownerId, "q.id", equivalentId, now),
+  );
 }
 
 async function findEquivalentRow(
@@ -951,7 +1324,10 @@ function mapSense(row: SenseRow): Record<string, unknown> {
   };
 }
 
-function mapEquivalent(row: EquivalentRow, mastery: EquivalentMastery): Record<string, unknown> {
+function mapEquivalent(
+  row: EquivalentRow,
+  mastery: EquivalentMastery,
+): Record<string, unknown> {
   const cards = mastery.get(row.id);
   return {
     id: row.id,
@@ -988,7 +1364,12 @@ interface ClozeRow {
   updated_at: string;
 }
 
-async function getCloze(db: D1Database, ownerId: string, equivalentId: string, clozeId: string): Promise<Record<string, unknown> | null> {
+async function getCloze(
+  db: D1Database,
+  ownerId: string,
+  equivalentId: string,
+  clozeId: string,
+): Promise<Record<string, unknown> | null> {
   const row = await first<ClozeRow>(
     db
       .prepare(
@@ -1018,7 +1399,11 @@ function mapCloze(row: ClozeRow): Record<string, unknown> {
   };
 }
 
-async function firstCloze(db: D1Database, ownerId: string, equivalentId: string): Promise<Record<string, unknown> | null> {
+async function firstCloze(
+  db: D1Database,
+  ownerId: string,
+  equivalentId: string,
+): Promise<Record<string, unknown> | null> {
   const row = await first<ClozeRow>(
     db
       .prepare(
@@ -1039,8 +1424,12 @@ async function buildPrompt(
   targetId: string,
   gloss: string | null,
 ): Promise<Record<string, unknown>> {
-  if (gloss !== null) return { type: 'gloss', text: gloss };
-  const prompt = await first<{ id: string; language_tag: string; text: string }>(
+  if (gloss !== null) return { type: "gloss", text: gloss };
+  const prompt = await first<{
+    id: string;
+    language_tag: string;
+    text: string;
+  }>(
     db
       .prepare(
         `SELECT id, language_tag, text FROM lexicon_equivalents
@@ -1050,7 +1439,12 @@ async function buildPrompt(
       )
       .bind(ownerId, senseId, targetId),
   );
-  return { type: 'equivalent', id: prompt!.id, languageTag: prompt!.language_tag, text: prompt!.text };
+  return {
+    type: "equivalent",
+    id: prompt!.id,
+    languageTag: prompt!.language_tag,
+    text: prompt!.text,
+  };
 }
 
 function mapCard(row: CardRow): Record<string, unknown> {
@@ -1088,7 +1482,8 @@ interface ReviewInput {
   rating: ReviewRating;
 }
 
-type SubmitResult = { value: Record<string, unknown>; replayed: boolean } | 'conflict' | null;
+type SubmitResult =
+  { value: Record<string, unknown>; replayed: boolean } | "conflict" | null;
 
 async function submitReview(
   db: D1Database,
@@ -1100,12 +1495,20 @@ async function submitReview(
 ): Promise<SubmitResult> {
   const reviewedAt = clock.now();
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const previous = await findReviewBySubmission(db, ownerId, input.submissionId);
+    const previous = await findReviewBySubmission(
+      db,
+      ownerId,
+      input.submissionId,
+    );
     if (previous !== null) return replayResult(previous, input);
 
     const card = await loadEligibleCard(db, ownerId, input.cardId);
     if (card === null) return null;
-    const scheduled = scheduleReview(toStoredCard(card), input.rating, reviewedAt);
+    const scheduled = scheduleReview(
+      toStoredCard(card),
+      input.rating,
+      reviewedAt,
+    );
     const eventId = ids.next();
     const resultValue = {
       eventId,
@@ -1189,7 +1592,14 @@ async function submitReview(
              ON CONFLICT(owner_id, session_id, card_id) DO UPDATE SET
                due_at = excluded.due_at, completed_at = NULL`,
           )
-          .bind(ownerId, input.sessionId, input.cardId, iso(new Date(reviewedAt.getTime() + wrongDelayMs)), eventId, ownerId),
+          .bind(
+            ownerId,
+            input.sessionId,
+            input.cardId,
+            iso(new Date(reviewedAt.getTime() + wrongDelayMs)),
+            eventId,
+            ownerId,
+          ),
       );
     } else {
       statements.push(
@@ -1197,20 +1607,36 @@ async function submitReview(
           .prepare(
             `UPDATE lexicon_wrong_revisits SET completed_at = ?
               WHERE owner_id = ? AND session_id = ? AND card_id = ? AND completed_at IS NULL
-                AND EXISTS (SELECT 1 FROM lexicon_review_events WHERE id = ? AND owner_id = ?)`
+                AND EXISTS (SELECT 1 FROM lexicon_review_events WHERE id = ? AND owner_id = ?)`,
           )
-          .bind(iso(reviewedAt), ownerId, input.sessionId, input.cardId, eventId, ownerId),
+          .bind(
+            iso(reviewedAt),
+            ownerId,
+            input.sessionId,
+            input.cardId,
+            eventId,
+            ownerId,
+          ),
       );
     }
     const results = await db.batch(statements);
-    if (changed(results[0]!) > 0 && changed(results[1]!) > 0) return { value: resultValue, replayed: false };
-    const winner = await findReviewBySubmission(db, ownerId, input.submissionId);
+    if (changed(results[0]!) > 0 && changed(results[1]!) > 0)
+      return { value: resultValue, replayed: false };
+    const winner = await findReviewBySubmission(
+      db,
+      ownerId,
+      input.submissionId,
+    );
     if (winner !== null) return replayResult(winner, input);
   }
-  throw new Error('Concurrent review retry limit exceeded');
+  throw new Error("Concurrent review retry limit exceeded");
 }
 
-async function loadEligibleCard(db: D1Database, ownerId: string, cardId: string): Promise<CardRow | null> {
+async function loadEligibleCard(
+  db: D1Database,
+  ownerId: string,
+  cardId: string,
+): Promise<CardRow | null> {
   return await first<CardRow>(
     db
       .prepare(
@@ -1243,7 +1669,11 @@ function toStoredCard(card: CardRow): StoredCardState {
   };
 }
 
-async function findReviewBySubmission(db: D1Database, ownerId: string, submissionId: string): Promise<ReviewEventRow | null> {
+async function findReviewBySubmission(
+  db: D1Database,
+  ownerId: string,
+  submissionId: string,
+): Promise<ReviewEventRow | null> {
   return await first<ReviewEventRow>(
     db
       .prepare(
@@ -1256,43 +1686,75 @@ async function findReviewBySubmission(db: D1Database, ownerId: string, submissio
 }
 
 function replayResult(row: ReviewEventRow, input: ReviewInput): SubmitResult {
-  if (row.card_id !== input.cardId || row.session_id !== input.sessionId || row.rating !== input.rating) return 'conflict';
-  return { value: JSON.parse(row.result_json) as Record<string, unknown>, replayed: true };
+  if (
+    row.card_id !== input.cardId ||
+    row.session_id !== input.sessionId ||
+    row.rating !== input.rating
+  )
+    return "conflict";
+  return {
+    value: JSON.parse(row.result_json) as Record<string, unknown>,
+    replayed: true,
+  };
 }
 
-async function entryExists(db: D1Database, ownerId: string, entryId: string): Promise<boolean> {
+async function entryExists(
+  db: D1Database,
+  ownerId: string,
+  entryId: string,
+): Promise<boolean> {
   return (
     (await first<{ id: string }>(
-      db.prepare('SELECT id FROM lexicon_entries WHERE id = ? AND owner_id = ? AND deleted_at IS NULL').bind(entryId, ownerId),
+      db
+        .prepare(
+          "SELECT id FROM lexicon_entries WHERE id = ? AND owner_id = ? AND deleted_at IS NULL",
+        )
+        .bind(entryId, ownerId),
     )) !== null
   );
 }
 
-function pushAssignment(assignments: string[], values: unknown[], column: string, value: unknown): void {
+function pushAssignment(
+  assignments: string[],
+  values: unknown[],
+  column: string,
+  value: unknown,
+): void {
   assignments.push(`${column} = ?`);
   values.push(value);
 }
 
-function errorBody(code: string, message: string): { error: { code: string; message: string } } {
+function errorBody(
+  code: string,
+  message: string,
+): { error: { code: string; message: string } } {
   return { error: { code, message } };
 }
 
 function notFound(c: Context<LexiconEnv>) {
-  return c.json(errorBody('NOT_FOUND', 'The requested resource was not found'), 404);
+  return c.json(
+    errorBody("NOT_FOUND", "The requested resource was not found"),
+    404,
+  );
 }
 
 function conflict(c: Context<LexiconEnv>) {
-  return c.json(errorBody('VERSION_CONFLICT', 'The resource changed; refresh and retry'), 409);
+  return c.json(
+    errorBody("VERSION_CONFLICT", "The resource changed; refresh and retry"),
+    409,
+  );
 }
 
 async function missingOrConflict(
   c: Context<LexiconEnv>,
-  table: 'lexicon_entries',
+  table: "lexicon_entries",
   id: string,
   ownerId: string,
 ) {
   const row = await first<{ id: string }>(
-    c.env.DB.prepare(`SELECT id FROM ${table} WHERE id = ? AND owner_id = ? AND deleted_at IS NULL`).bind(id, ownerId),
+    c.env.DB.prepare(
+      `SELECT id FROM ${table} WHERE id = ? AND owner_id = ? AND deleted_at IS NULL`,
+    ).bind(id, ownerId),
   );
   return row === null ? notFound(c) : conflict(c);
 }
@@ -1301,12 +1763,17 @@ async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {
-    throw new InputError('body must be valid JSON');
+    throw new InputError("body must be valid JSON");
   }
 }
 
 function validId(value: string): string {
-  if (value.length < 1 || value.length > 200 || !/^[A-Za-z0-9_.:-]+$/u.test(value)) throw new InputError('invalid resource id');
+  if (
+    value.length < 1 ||
+    value.length > 200 ||
+    !/^[A-Za-z0-9_.:-]+$/u.test(value)
+  )
+    throw new InputError("invalid resource id");
   return value;
 }
 
@@ -1320,10 +1787,14 @@ function parseLimit(raw: string | null, fallback = DEFAULT_PAGE_SIZE): number {
 }
 
 function optionalLanguage(raw: string | null): string | null {
-  return raw === null ? null : languageTag(raw, 'language');
+  return raw === null ? null : languageTag(raw, "language");
 }
 
-function optionalEnum<T extends string>(raw: string | null, allowed: readonly T[], label: string): T | null {
+function optionalEnum<T extends string>(
+  raw: string | null,
+  allowed: readonly T[],
+  label: string,
+): T | null {
   return raw === null ? null : enumValue(raw, label, allowed);
 }
 
@@ -1339,14 +1810,18 @@ function encodeCursor(value: CursorValue): string {
 function parseCursor(raw: string | null): CursorValue | null {
   if (raw === null) return null;
   try {
-    const parsed = object(JSON.parse(atob(raw)), 'cursor');
-    const updatedAt = string(parsed.updatedAt, 'cursor.updatedAt', { min: 20, max: 40 })!;
-    const id = validId(string(parsed.id, 'cursor.id', { min: 1, max: 200 })!);
-    if (Number.isNaN(Date.parse(updatedAt))) throw new InputError('cursor is invalid');
+    const parsed = object(JSON.parse(atob(raw)), "cursor");
+    const updatedAt = string(parsed.updatedAt, "cursor.updatedAt", {
+      min: 20,
+      max: 40,
+    })!;
+    const id = validId(string(parsed.id, "cursor.id", { min: 1, max: 200 })!);
+    if (Number.isNaN(Date.parse(updatedAt)))
+      throw new InputError("cursor is invalid");
     return { updatedAt, id };
   } catch (error) {
     if (error instanceof InputError) throw error;
-    throw new InputError('cursor is invalid');
+    throw new InputError("cursor is invalid");
   }
 }
 
@@ -1355,8 +1830,12 @@ function escapeLike(value: string): string {
 }
 
 function parseIfMatch(raw: string | undefined): number {
-  if (raw === undefined) throw new InputError('If-Match version header is required');
+  if (raw === undefined)
+    throw new InputError("If-Match version header is required");
   const match = /^"([1-9]\d*)"$/u.exec(raw);
-  if (match === null) throw new InputError('If-Match must be a quoted positive version such as "3"');
+  if (match === null)
+    throw new InputError(
+      'If-Match must be a quoted positive version such as "3"',
+    );
   return Number(match[1]);
 }

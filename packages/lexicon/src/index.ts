@@ -1,8 +1,16 @@
-export { createLexiconRoutes } from './routes.js';
-export { createCourseLexiconImporter } from './service.js';
-export { DisabledTranslationProvider, ProviderDisabledError, TranslationSuggestionService } from './translation.js';
-export { answersMatch, normalizeAnswer, normalizeSearchText } from './normalize.js';
-export { newStoredCard, scheduleReview } from './scheduler.js';
+export { createLexiconRoutes } from "./routes.js";
+export { createCourseLexiconImporter } from "./service.js";
+export {
+  DisabledTranslationProvider,
+  ProviderDisabledError,
+  TranslationSuggestionService,
+} from "./translation.js";
+export {
+  answersMatch,
+  normalizeAnswer,
+  normalizeSearchText,
+} from "./normalize.js";
+export { newStoredCard, scheduleReview } from "./scheduler.js";
 export type {
   Clock,
   CourseLexiconImport,
@@ -26,4 +34,4 @@ export type {
   TranslationStatus,
   TranslationSuggestion,
   TranslationSuggestionRequest,
-} from './types.js';
+} from "./types.js";

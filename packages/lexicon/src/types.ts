@@ -1,10 +1,12 @@
-import type { Hono } from 'hono';
+import type { Hono } from "hono";
 
-export type EntryKind = 'word' | 'expression';
-export type FitLabel = 'exact' | 'broader' | 'narrower' | 'context_only' | 'false_friend';
-export type TranslationStatus = 'suggested' | 'confirmed' | 'waiting' | 'failed' | 'manual';
-export type PracticeDirection = 'recognize' | 'produce';
-export type PracticeFormat = 'flashcard' | 'cloze';
+export type EntryKind = "word" | "expression";
+export type FitLabel =
+  "exact" | "broader" | "narrower" | "context_only" | "false_friend";
+export type TranslationStatus =
+  "suggested" | "confirmed" | "waiting" | "failed" | "manual";
+export type PracticeDirection = "recognize" | "produce";
+export type PracticeFormat = "flashcard" | "cloze";
 export type ReviewRating = 1 | 2 | 3 | 4;
 
 export interface Clock {
@@ -69,12 +71,14 @@ export interface CourseLexiconImportResult {
  * no learning-owned table is read or written by the implementation.
  */
 export interface LexiconCourseImportService {
-  importCourseEntry(input: CourseLexiconImport): Promise<CourseLexiconImportResult>;
+  importCourseEntry(
+    input: CourseLexiconImport,
+  ): Promise<CourseLexiconImportResult>;
 }
 
 export interface TranslationSuggestion {
   text: string;
-  fit: Exclude<FitLabel, 'false_friend'>;
+  fit: Exclude<FitLabel, "false_friend">;
   note?: string;
   provenance?: Record<string, unknown>;
 }
@@ -89,7 +93,9 @@ export interface TranslationSuggestionRequest {
 export interface TranslationProvider {
   readonly id: string;
   readonly version: string;
-  suggest(request: TranslationSuggestionRequest): Promise<TranslationSuggestion[]>;
+  suggest(
+    request: TranslationSuggestionRequest,
+  ): Promise<TranslationSuggestion[]>;
 }
 
 export interface CreateLexiconRoutesOptions {
