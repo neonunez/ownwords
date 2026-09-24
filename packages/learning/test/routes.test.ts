@@ -338,6 +338,90 @@ describe("authenticated learning routes", () => {
     expect(callback).toHaveBeenCalledTimes(2);
   });
 
+  it("reports only the completing lesson's Lexicon export state", async () => {
+    const callback = vi.fn<LexiconCourseImportService["importCourseEntry"]>(
+      async (input) => {
+        if (input.itemId === "privet")
+          throw new Error("synthetic Lexicon outage");
+        return { entryId: "fixture-entry", created: true };
+      },
+    );
+    importer.importCourseEntry = callback;
+    const hello = await completeHello();
+    expect(hello.status).toBe(202);
+    expect(await hello.json()).toMatchObject({
+      completion: { lexiconSync: { status: "pending", pendingItems: 1 } },
+    });
+
+    await recordLesson("alice-token", "goodbye", [
+      "goodbye-rule",
+      "goodbye-use",
+    ]);
+    const goodbye = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/goodbye/complete",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(goodbye.status).toBe(200);
+    expect(await goodbye.json()).toMatchObject({
+      completion: {
+        lessonId: "goodbye",
+        lexiconSync: { status: "synced", pendingItems: 0 },
+      },
+    });
+    expect(callback.mock.calls.map(([input]) => input.itemId).sort()).toEqual([
+      "poka",
+      "privet",
+    ]);
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT item_id, lesson_id, status FROM learning_lexicon_sync WHERE user_id = 'alice' ORDER BY item_id",
+        )
+        .all(),
+    ).toEqual([
+      { item_id: "poka", lesson_id: "goodbye", status: "synced" },
+      { item_id: "privet", lesson_id: "hello", status: "pending" },
+    ]);
+  });
+
+  it("refuses a step write when the lesson completes before the write lands", async () => {
+    await recordLesson("alice-token", "hello", ["hello-hear", "hello-use"]);
+    let interleaved = false;
+    const interleaving = Object.create(test.db) as D1Database;
+    interleaving.batch = async <T = unknown>(
+      statements: D1PreparedStatement[],
+    ) => {
+      if (!interleaved) {
+        interleaved = true;
+        const completion = await request(
+          "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+          { method: "POST" },
+          "alice-token",
+        );
+        expect(completion.status).toBe(200);
+      }
+      return test.db.batch<T>(statements);
+    };
+    const retry = await submitStep(interleaving, 1, "hello-use");
+    expect(retry.status).toBe(409);
+    expect(await retry.json()).toMatchObject({
+      error: { code: "LESSON_ALREADY_COMPLETED" },
+    });
+    expect(
+      test.sqlite
+        .prepare(
+          `SELECT status, current_step_id, farthest_step_position
+           FROM learning_user_lesson_progress WHERE user_id = 'alice' AND lesson_id = 'hello'`,
+        )
+        .get(),
+    ).toEqual({
+      status: "completed",
+      current_step_id: "hello-use",
+      farthest_step_position: 2,
+    });
+  });
+
   it("locks reference bodies until their lesson is complete", async () => {
     const before = await request(
       "/api/v1/learning/references?courseId=russian-zero&version=1&category=grammar",

@@ -54,6 +54,18 @@ describe("content validation and ingestion", () => {
     );
   });
 
+  it("rejects lesson steps outside the core curriculum step kinds", () => {
+    const withPractice = structuredClone(pack()) as unknown as {
+      units: Array<{ lessons: Array<{ steps: Array<{ kind: string }> }> }>;
+    };
+    const step = withPractice.units[0]?.lessons[1]?.steps[1];
+    expect(step?.kind).toBe("use");
+    if (step) step.kind = "practice";
+    expect(() => validateContentPack(withPractice)).toThrow(
+      ContentValidationError,
+    );
+  });
+
   it("rejects missing content links and invalid prerequisites before touching D1", () => {
     const missingItem = structuredClone(pack());
     const firstStep = missingItem.units[0]?.lessons[0]?.steps[0];

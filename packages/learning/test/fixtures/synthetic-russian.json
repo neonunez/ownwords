@@ -59,9 +59,9 @@
               ]
             },
             {
-              "id": "goodbye-practice",
+              "id": "goodbye-use",
               "position": 2,
-              "kind": "practice",
+              "kind": "use",
               "payload": { "instruction": "Use the second fixture item." },
               "items": [{ "itemId": "poka", "role": "reviewed", "position": 1 }]
             }

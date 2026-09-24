@@ -254,6 +254,7 @@ async function flushLexiconSync(
   timestamp: string,
   courseId: string,
   version: number,
+  lessonId: string,
 ): Promise<number> {
   const pending = await all<SyncRow>(
     db
@@ -268,10 +269,10 @@ async function flushLexiconSync(
         AND item.course_version = sync.course_version
         AND item.item_id = sync.item_id
        WHERE sync.user_id = ? AND sync.course_id = ? AND sync.course_version = ?
-         AND sync.status = 'pending'
+         AND sync.lesson_id = ? AND sync.status = 'pending'
        ORDER BY sync.item_id`,
       )
-      .bind(userId, courseId, version),
+      .bind(userId, courseId, version, lessonId),
   );
 
   for (const row of pending) {
@@ -343,9 +344,10 @@ async function flushLexiconSync(
     db
       .prepare(
         `SELECT COUNT(*) AS count FROM learning_lexicon_sync
-       WHERE user_id = ? AND course_id = ? AND course_version = ? AND status = 'pending'`,
+       WHERE user_id = ? AND course_id = ? AND course_version = ?
+         AND lesson_id = ? AND status = 'pending'`,
       )
-      .bind(userId, courseId, version),
+      .bind(userId, courseId, version, lessonId),
   );
   return remaining?.count ?? 0;
 }
@@ -813,6 +815,13 @@ export function createLearningRoutes(
       }
       if (results.some((result) => !result.success))
         throw new Error("Progress transaction failed");
+      if (results[1]?.meta.changes === 0) {
+        throw new LearningError(
+          409,
+          "LESSON_ALREADY_COMPLETED",
+          "Completed lesson progress cannot be changed",
+        );
+      }
       return c.json(
         progressResponse({
           courseId,
@@ -904,6 +913,7 @@ export function createLearningRoutes(
         timestamp,
         courseId,
         version,
+        lessonId,
       );
       return c.json(
         {

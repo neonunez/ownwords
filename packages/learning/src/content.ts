@@ -131,7 +131,7 @@ const stepSchema = z
   .object({
     id,
     position: z.number().int().positive(),
-    kind: z.enum(["hear", "rule", "use", "perception", "practice", "alphabet"]),
+    kind: z.enum(["hear", "rule", "use", "perception", "alphabet"]),
     payload: jsonObject,
     items: z.array(stepItemSchema).max(100).default([]),
   })

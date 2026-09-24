@@ -20,7 +20,8 @@ app.route(
 `lexiconImporter` structurally matches `@ownwords/lexicon`'s `LexiconCourseImportService`. The tuple
 `(ownerId, courseId, courseVersion, itemId)` is its stable idempotency key. Completion and Learning's pending import
 row commit atomically in one D1 batch; each item is then imported independently. A failure returns completion with
-`lexiconSync.status: "pending"` (HTTP 202), and repeating completion retries only pending rows. Learning marks a row
+`lexiconSync.status: "pending"` (HTTP 202), and repeating that lesson's completion retries only its own pending
+rows, so one stuck item never marks a later lesson unsynced. Learning marks a row
 synced only after Lexicon confirms durability. The callback must remain idempotent because no transaction spans the
 two package-owned operations.
 

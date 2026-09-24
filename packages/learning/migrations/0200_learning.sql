@@ -68,7 +68,7 @@ CREATE TABLE learning_steps (
   step_id TEXT NOT NULL,
   lesson_id TEXT NOT NULL,
   position INTEGER NOT NULL CHECK (position > 0),
-  kind TEXT NOT NULL CHECK (kind IN ('hear', 'rule', 'use', 'perception', 'practice', 'alphabet')),
+  kind TEXT NOT NULL CHECK (kind IN ('hear', 'rule', 'use', 'perception', 'alphabet')),
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
   PRIMARY KEY (course_id, course_version, step_id),
   UNIQUE (course_id, course_version, lesson_id, position),
