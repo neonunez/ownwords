@@ -1,0 +1,205 @@
+/* Application shell and interaction styles.
+   The design system's tokens own every colour, size and duration used here. */
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--bg-app);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+/* ---- the app frame ------------------------------------------------------
+   On a phone, and in an installed window, the app fills the viewport and the
+   real safe-area insets apply. On a wider browser — review only, never a
+   design target — it keeps the phone measure and centres, with no device
+   bezel, notch or imitation status bar. */
+
+.ow-app {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--fg-1);
+  font-family: var(--font-body);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@media (min-width: 680px) {
+  body {
+    display: grid;
+    place-items: center;
+    background: var(--bg-sunken);
+    padding: var(--space-6) var(--space-5);
+  }
+
+  #root {
+    min-height: auto;
+    width: 100%;
+    display: grid;
+    justify-items: center;
+  }
+
+  .ow-app {
+    width: var(--screen-w);
+    max-width: 100%;
+    height: min(880px, calc(100dvh - var(--space-12)));
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-2);
+  }
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  body {
+    display: block;
+    padding: 0;
+    background: var(--bg-app);
+  }
+
+  .ow-app {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+.ow-main {
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.ow-main::-webkit-scrollbar,
+.ow-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ow-scroll {
+  scrollbar-width: none;
+}
+
+/* ---- screen entrance ---------------------------------------------------- */
+
+@keyframes ow-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ow-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.ow-screen {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  animation: ow-in var(--motion-base) var(--ease-out) both;
+}
+
+/* ---- press, hover and focus -------------------------------------------- */
+
+.ow-press,
+.ow-press-icon,
+.ow-press-card,
+.ow-press-chip {
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background var(--motion-fast),
+    color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+
+.ow-press:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+
+.ow-press-icon:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.ow-press-card:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.ow-press-chip:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ow-btn[data-variant="primary"]:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .ow-row:hover {
+    background: var(--bg-sunken);
+  }
+}
+
+.ow-row:active {
+  background: var(--bg-sunken);
+}
+
+.ow-field:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: var(--ring);
+}
+
+/* Every screen's scroll container hides its bar; the focus ring must not be
+   clipped by it, so interactive rows keep a little inset instead. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* ---- reduced motion ----------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- utilities ---------------------------------------------------------- */
+
+.ow-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

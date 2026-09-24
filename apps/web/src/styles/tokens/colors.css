@@ -1,0 +1,134 @@
+/* Design-system colour tokens, from the Ownwords design package.
+
+   Three light-mode stops are darker here than in the package, so that small
+   text at 12–13px clears 4.5:1 where the product puts it:
+     --neutral-500  56% → 53%  (--fg-3, and the "suggested" state on its tint)
+     --green-500    54% → 49%  ("confirmed" and "exact" on their tint)
+     --amber-500    62% → 51%  ("waiting", "broader" and "narrower" on theirs)
+   The hues, the roles and the dark-mode scale are unchanged. */
+
+:root {
+  /* accent: pine (brand background #215E49, button variant #29755B) */
+  --pine-50: oklch(97% 0.012 162);
+  --pine-100: oklch(93.5% 0.03 162);
+  --pine-200: oklch(88% 0.05 162);
+  --pine-300: oklch(78% 0.075 162);
+  --pine-400: oklch(66% 0.085 162);
+  --pine-500: #29755b;
+  --pine-600: #215e49;
+  --pine-700: oklch(36% 0.06 162);
+  --pine-800: oklch(29% 0.047 162);
+  --pine-900: oklch(22% 0.034 162);
+  /* true neutrals */
+  --neutral-0: #fff;
+  --neutral-50: oklch(98% 0 0);
+  --neutral-100: oklch(96% 0 0);
+  --neutral-150: oklch(93.5% 0 0);
+  --neutral-200: oklch(90% 0 0);
+  --neutral-300: oklch(83% 0 0);
+  --neutral-400: oklch(70% 0 0);
+  --neutral-500: oklch(53% 0 0);
+  --neutral-600: oklch(45% 0 0);
+  --neutral-700: oklch(35% 0 0);
+  --neutral-800: oklch(25% 0 0);
+  --neutral-850: oklch(20% 0 0);
+  --neutral-900: oklch(15% 0 0);
+  --neutral-950: oklch(11% 0 0);
+  --neutral-1000: oklch(8% 0 0);
+  /* semantic hues (state is always also written in words) */
+  --green-500: oklch(49% 0.16 142);
+  --green-100: oklch(94% 0.055 142);
+  --green-400: oklch(74% 0.17 142);
+  --amber-500: oklch(51% 0.14 80);
+  --amber-100: oklch(95% 0.07 85);
+  --amber-400: oklch(78% 0.15 80);
+  --red-500: oklch(52% 0.2 20);
+  --red-100: oklch(94% 0.04 20);
+  --red-400: oklch(68% 0.19 20);
+  --plum-500: oklch(50% 0.15 330);
+  --plum-100: oklch(94% 0.04 330);
+  --plum-400: oklch(70% 0.14 330);
+  /* ---- semantic aliases: light ---- */
+  --bg-app: var(--neutral-50);
+  --bg-surface: var(--neutral-0);
+  --bg-elevated: var(--neutral-0);
+  --bg-sunken: var(--neutral-100);
+  --bg-inverse: var(--neutral-950);
+  --bg-scrim: oklch(8% 0 0/0.45);
+  --fg-1: var(--neutral-950);
+  --fg-2: var(--neutral-600);
+  --fg-3: var(--neutral-500);
+  --fg-inverse: var(--neutral-0);
+  --fg-on-accent: var(--neutral-0);
+  --accent: var(--pine-500);
+  --accent-hover: var(--pine-600);
+  --accent-press: var(--pine-700);
+  --accent-soft: var(--pine-100);
+  --accent-soft-fg: var(--pine-700);
+  --accent-ring: oklch(47% 0.085 162/0.35);
+  --border-1: var(--neutral-200);
+  --border-2: var(--neutral-300);
+  --border-focus: var(--pine-500);
+  --state-confirmed: var(--green-500);
+  --state-confirmed-soft: var(--green-100);
+  --state-waiting: var(--amber-500);
+  --state-waiting-soft: var(--amber-100);
+  --state-failed: var(--red-500);
+  --state-failed-soft: var(--red-100);
+  --state-false-friend: var(--plum-500);
+  --state-false-friend-soft: var(--plum-100);
+  --state-suggested: var(--neutral-500);
+  --state-suggested-soft: var(--neutral-100);
+  --mastery-empty: var(--neutral-200);
+  --mastery-weak: var(--pine-200);
+  --mastery-mid: var(--pine-400);
+  --mastery-strong: var(--pine-600);
+  --shadow-1: 0 1px 2px oklch(0 0 0/0.05), 0 2px 8px oklch(0 0 0/0.05);
+  --shadow-2: 0 4px 14px oklch(0 0 0/0.08), 0 12px 32px oklch(0 0 0/0.08);
+  --shadow-3: 0 12px 40px oklch(0 0 0/0.14), 0 24px 64px oklch(0 0 0/0.12);
+  --tabbar-bg: oklch(100% 0 0/0.82);
+  --topbar-bg: oklch(98% 0 0/0.82);
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --bg-app: var(--neutral-1000);
+  --bg-surface: oklch(13% 0 0);
+  --bg-elevated: oklch(17% 0 0);
+  --bg-sunken: oklch(6% 0 0);
+  --bg-inverse: var(--neutral-50);
+  --bg-scrim: oklch(0% 0 0/0.6);
+  --fg-1: var(--neutral-50);
+  --fg-2: var(--neutral-400);
+  --fg-3: oklch(60% 0 0);
+  --fg-inverse: var(--neutral-950);
+  --fg-on-accent: var(--neutral-1000);
+  --accent: var(--pine-300);
+  --accent-hover: var(--pine-200);
+  --accent-press: var(--pine-400);
+  --accent-soft: oklch(24% 0.04 162);
+  --accent-soft-fg: var(--pine-300);
+  --accent-ring: oklch(78% 0.075 162/0.4);
+  --border-1: oklch(22% 0 0);
+  --border-2: oklch(30% 0 0);
+  --border-focus: var(--pine-300);
+  --state-confirmed: var(--green-400);
+  --state-confirmed-soft: oklch(24% 0.055 142);
+  --state-waiting: var(--amber-400);
+  --state-waiting-soft: oklch(26% 0.06 80);
+  --state-failed: var(--red-400);
+  --state-failed-soft: oklch(26% 0.07 20);
+  --state-false-friend: var(--plum-400);
+  --state-false-friend-soft: oklch(26% 0.06 330);
+  --state-suggested: oklch(60% 0 0);
+  --state-suggested-soft: oklch(20% 0 0);
+  --mastery-empty: oklch(24% 0 0);
+  --mastery-weak: var(--pine-800);
+  --mastery-mid: var(--pine-500);
+  --mastery-strong: var(--pine-300);
+  --shadow-1: 0 0 0 1px oklch(22% 0 0);
+  --shadow-2: 0 0 0 1px oklch(24% 0 0), 0 12px 32px oklch(0 0 0/0.5);
+  --shadow-3: 0 0 0 1px oklch(26% 0 0), 0 24px 64px oklch(0 0 0/0.7);
+  --tabbar-bg: oklch(13% 0 0/0.84);
+  --topbar-bg: oklch(8% 0 0/0.84);
+  color-scheme: dark;
+}

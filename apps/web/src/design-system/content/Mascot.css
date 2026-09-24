@@ -1,0 +1,166 @@
+/* Kip: a ribbon bookmark wearing the acute, with eyes as its only expression.
+   The mark appears at most once per screen. */
+
+.ow-kip {
+  display: block;
+  overflow: visible;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ow-kip-body {
+  transform-box: fill-box;
+  transform-origin: 50% 92%;
+  transition: transform 420ms var(--ease-spring);
+}
+
+.ow-kip-bob .ow-kip-body {
+  animation: ow-kip-bob 3.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.ow-kip-happy .ow-kip-body {
+  animation: ow-kip-hop 1.6s var(--ease-spring) infinite;
+}
+
+.ow-kip-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 260ms var(--ease-spring);
+}
+
+.ow-kip-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ow-kip-blink 5.4s linear infinite;
+}
+
+.ow-kip-look {
+  animation: ow-kip-look 2.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.ow-kip-joy {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ow-kip-joy 1.6s var(--ease-spring) infinite;
+}
+
+.ow-kip-acute {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+  transition: transform 480ms var(--ease-spring);
+}
+
+.ow-kip-think .ow-kip-acute {
+  animation: ow-kip-tick 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.ow-kip-happy .ow-kip-acute {
+  animation: ow-kip-pop 1.6s var(--ease-spring) infinite;
+}
+
+.ow-kip-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ow-kip-spark 1.6s var(--ease-spring) infinite;
+}
+
+@keyframes ow-kip-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-4px) rotate(-3deg);
+  }
+}
+
+@keyframes ow-kip-hop {
+  0%,
+  62%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  18% {
+    transform: translateY(2px) scale(1.05, 0.93);
+  }
+  38% {
+    transform: translateY(-7px) scale(0.96, 1.06) rotate(-4deg);
+  }
+}
+
+@keyframes ow-kip-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+  97.5% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes ow-kip-look {
+  0%,
+  100% {
+    transform: translate(1.9px, -0.6px);
+  }
+  42%,
+  52% {
+    transform: translate(-1.9px, -1.5px);
+  }
+}
+
+@keyframes ow-kip-joy {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12, 0.9);
+  }
+}
+
+@keyframes ow-kip-tick {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  50% {
+    transform: rotate(-15deg);
+  }
+}
+
+@keyframes ow-kip-pop {
+  0%,
+  100% {
+    transform: rotate(0) translateY(0);
+  }
+  35% {
+    transform: rotate(10deg) translateY(-2px);
+  }
+}
+
+@keyframes ow-kip-spark {
+  0%,
+  100% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  72% {
+    transform: scale(0.7);
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ow-kip * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
