@@ -1,6 +1,6 @@
 // Serves the connected app for the stack browser tests, on local state only:
 // the real API under `wrangler dev` with a fresh local D1 (every composed
-// migration, plus the synthetic test course), and the production build of the
+// migration, plus the authored Russian Foundations course), and the production build of the
 // app under `vite preview`, which forwards /api to it so both share one
 // origin as a deployment does. Sign-in is credential-free: the accounts are
 // real Better Auth session rows signed with a test-only secret, the same
@@ -191,11 +191,11 @@ async function main() {
     persist,
   ]);
   await step(
-    "publishing the synthetic test course",
+    "publishing the authored Russian Foundations course",
     bin("tsx"),
     [
       path.join(apiDirectory, "scripts/local-content.ts"),
-      path.join(root, "packages/learning/test/fixtures/synthetic-russian.json"),
+      path.join(root, "packages/learning/content/russian-foundations-v1.json"),
       "--persist-to",
       persist,
     ],

@@ -1,0 +1,1882 @@
+{
+  "course": {
+    "id": "russian-foundations",
+    "languageTag": "ru",
+    "title": "Russian Foundations",
+    "description": "An original, unreviewed beginner sequence for A0 script and sound followed by early A1 greetings and introductions. It is a practical first course, not a complete syllabus or an exam course. A qualified Russian-language teacher should review it before authoritative publication."
+  },
+  "version": 1,
+  "units": [
+    {
+      "id": "a0-script",
+      "position": 1,
+      "title": "Read the sounds",
+      "canDo": "Read familiar Russian words, notice false friends, and make a few short requests with the Cyrillic alphabet.",
+      "lessons": [
+        {
+          "id": "a0-familiar",
+          "position": 1,
+          "title": "Letters in familiar words",
+          "prerequisites": [],
+          "steps": [
+            {
+              "id": "a0-familiar-alphabet",
+              "position": 1,
+              "kind": "alphabet",
+              "payload": {
+                "title": "Five familiar letters",
+                "lines": [
+                  "А, К, М, О, Т look like familiar Latin shapes.",
+                  "Read these words slowly: ма́ма, кот, там, как.",
+                  "Stress is marked with a small raised line. One syllable carries the beat: ма́ма, ко́т, там, как."
+                ]
+              },
+              "items": []
+            },
+            {
+              "id": "a0-familiar-hear",
+              "position": 2,
+              "kind": "hear",
+              "payload": {
+                "title": "Hear the word",
+                "instruction": "Look at each word, then say it once without the device speech engine. The mark shows the stressed vowel.",
+                "lines": [
+                  "A vowel is not automatically stressed. Learn the marked word, not an imagined English sound."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "mama",
+                  "role": "introduced",
+                  "position": 1
+                },
+                {
+                  "itemId": "kot",
+                  "role": "introduced",
+                  "position": 2
+                },
+                {
+                  "itemId": "tam",
+                  "role": "introduced",
+                  "position": 3
+                },
+                {
+                  "itemId": "kak",
+                  "role": "introduced",
+                  "position": 4
+                }
+              ]
+            },
+            {
+              "id": "a0-familiar-rule",
+              "position": 3,
+              "kind": "rule",
+              "payload": {
+                "title": "A word, not a list of letters",
+                "lines": [
+                  "Russian spelling is read letter by letter after a little practice.",
+                  "The stress mark is a reading aid; it is not typed when you answer.",
+                  "Say the word, then look again. Your first pass is allowed to be tentative."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "mama",
+                  "role": "reviewed",
+                  "position": 1
+                },
+                {
+                  "itemId": "kot",
+                  "role": "reviewed",
+                  "position": 2
+                },
+                {
+                  "itemId": "tam",
+                  "role": "reviewed",
+                  "position": 3
+                },
+                {
+                  "itemId": "kak",
+                  "role": "reviewed",
+                  "position": 4
+                }
+              ]
+            },
+            {
+              "id": "a0-familiar-use",
+              "position": 4,
+              "kind": "perception",
+              "payload": {
+                "title": "Which word is ко́т?",
+                "prompt": "Choose the word that means “cat”.",
+                "options": ["кот", "там", "как"],
+                "answer": "кот",
+                "responses": {
+                  "кот": "Yes. Say ко́т: the final т stays soft enough for a careful beginner.",
+                  "там": "Not this one. The first vowel is stressed: там.",
+                  "как": "Not this one. The first vowel is stressed: как."
+                }
+              },
+              "items": [
+                {
+                  "itemId": "kot",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "a0-false-friends",
+          "position": 2,
+          "title": "Letters that look familiar",
+          "prerequisites": ["a0-familiar"],
+          "steps": [
+            {
+              "id": "a0-friends-alphabet",
+              "position": 1,
+              "kind": "alphabet",
+              "payload": {
+                "title": "В Н Р С У Х Е and lowercase п, и",
+                "lines": [
+                  "These shapes can suggest the wrong sound in English. В is not B, Н is not H, and Р is not P.",
+                  "У looks like y but is /u/. Х is a /kh/ sound, not /h/.",
+                  "Read the words as Russian spellings: рот, нос, сок, суп."
+                ]
+              },
+              "items": []
+            },
+            {
+              "id": "a0-friends-hear",
+              "position": 2,
+              "kind": "hear",
+              "payload": {
+                "title": "Four look-alike words",
+                "instruction": "Read each word aloud. The English comparison is only a warning about the shape, not a translation shortcut.",
+                "lines": [
+                  "рот is not English “rot”; нос is “nose”; сок is “juice”; суп is “soup”."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "rot",
+                  "role": "introduced",
+                  "position": 1
+                },
+                {
+                  "itemId": "nos",
+                  "role": "introduced",
+                  "position": 2
+                },
+                {
+                  "itemId": "sok",
+                  "role": "introduced",
+                  "position": 3
+                },
+                {
+                  "itemId": "sup",
+                  "role": "introduced",
+                  "position": 4
+                }
+              ]
+            },
+            {
+              "id": "a0-friends-rule",
+              "position": 3,
+              "kind": "rule",
+              "payload": {
+                "title": "Trust the Cyrillic",
+                "lines": [
+                  "A familiar outline does not make a Russian word English.",
+                  "Р is a rolling or trilled r; it is not the English p or r.",
+                  "When a comparison helps, change the comparison as soon as you can and use the word in a real Russian phrase."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "rot",
+                  "role": "reviewed",
+                  "position": 1
+                },
+                {
+                  "itemId": "nos",
+                  "role": "reviewed",
+                  "position": 2
+                },
+                {
+                  "itemId": "sok",
+                  "role": "reviewed",
+                  "position": 3
+                },
+                {
+                  "itemId": "sup",
+                  "role": "reviewed",
+                  "position": 4
+                }
+              ]
+            },
+            {
+              "id": "a0-friends-use",
+              "position": 4,
+              "kind": "use",
+              "payload": {
+                "title": "Build a small sentence",
+                "prompt": "Choose the Russian word for “nose”.",
+                "options": ["нос", "сок", "суп"],
+                "answer": "нос",
+                "responses": {
+                  "нос": "Correct: нос. Use it when you point to or discuss a nose.",
+                  "сок": "This is сок, “juice”.",
+                  "суп": "This is суп, “soup”."
+                }
+              },
+              "items": [
+                {
+                  "itemId": "nos",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "a0-early-words",
+          "position": 3,
+          "title": "More shapes, first words",
+          "prerequisites": ["a0-false-friends"],
+          "steps": [
+            {
+              "id": "a0-words-alphabet",
+              "position": 1,
+              "kind": "alphabet",
+              "payload": {
+                "title": "New shapes",
+                "lines": [
+                  "Б Г Д Ж З И Й Л П Ф Ц Ч Ш Щ Э Ю Я Ы add many sounds and endings.",
+                  "Do not try to sound every letter perfectly today. Notice the shape, then meet the word.",
+                  "И is like English i; Й is i with a breve and is a short glide. Compare и and й in the Reference."
+                ]
+              },
+              "items": []
+            },
+            {
+              "id": "a0-words-hear",
+              "position": 2,
+              "kind": "hear",
+              "payload": {
+                "title": "Words to recognize",
+                "instruction": "Read each word and notice its stress. These are small, useful words, not a complete vocabulary list.",
+                "lines": [
+                  "да and нет often answer a question. вот points to something nearby. банк and парк are everyday places."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "da",
+                  "role": "introduced",
+                  "position": 1
+                },
+                {
+                  "itemId": "net",
+                  "role": "introduced",
+                  "position": 2
+                },
+                {
+                  "itemId": "vot",
+                  "role": "introduced",
+                  "position": 3
+                },
+                {
+                  "itemId": "bank",
+                  "role": "introduced",
+                  "position": 4
+                },
+                {
+                  "itemId": "park",
+                  "role": "introduced",
+                  "position": 5
+                },
+                {
+                  "itemId": "metro",
+                  "role": "introduced",
+                  "position": 6
+                }
+              ]
+            },
+            {
+              "id": "a0-words-rule",
+              "position": 3,
+              "kind": "rule",
+              "payload": {
+                "title": "Words travel in phrases",
+                "lines": [
+                  "A word becomes useful when it meets a small phrase.",
+                  "Я в ба́нке means “I am at the bank”; по́йду в метро́ means “I will go into the metro.”",
+                  "Learn the phrase shape now; leave the cases and verbs for their lessons."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "da",
+                  "role": "reviewed",
+                  "position": 1
+                },
+                {
+                  "itemId": "net",
+                  "role": "reviewed",
+                  "position": 2
+                },
+                {
+                  "itemId": "vot",
+                  "role": "reviewed",
+                  "position": 3
+                },
+                {
+                  "itemId": "bank",
+                  "role": "reviewed",
+                  "position": 4
+                },
+                {
+                  "itemId": "park",
+                  "role": "reviewed",
+                  "position": 5
+                },
+                {
+                  "itemId": "metro",
+                  "role": "reviewed",
+                  "position": 6
+                }
+              ]
+            },
+            {
+              "id": "a0-words-use",
+              "position": 4,
+              "kind": "perception",
+              "payload": {
+                "title": "Answer in one word",
+                "prompt": "Choose “no”.",
+                "options": ["нет", "да", "вот"],
+                "answer": "нет",
+                "responses": {
+                  "нет": "Correct: нет means “no.”",
+                  "да": "да means “yes.”",
+                  "вот": "вот means “here” or points to something nearby."
+                }
+              },
+              "items": [
+                {
+                  "itemId": "net",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a1-greetings",
+      "position": 2,
+      "title": "Greetings and introductions",
+      "canDo": "Greet someone, say your name, introduce yourself politely, and ask someone to slow down.",
+      "lessons": [
+        {
+          "id": "a1-hello",
+          "position": 1,
+          "title": "Hello and goodbye",
+          "prerequisites": ["a0-early-words"],
+          "steps": [
+            {
+              "id": "a1-hello-hear",
+              "position": 1,
+              "kind": "hear",
+              "payload": {
+                "title": "Greet before you ask",
+                "instruction": "Read each chunk as one gesture. Здра́вствуйте is a formal or general hello; приве́т is warm and informal.",
+                "lines": [
+                  "Choose the greeting that fits the person and setting. You do not need a translation before you greet."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "zdravstvuyte",
+                  "role": "introduced",
+                  "position": 1
+                },
+                {
+                  "itemId": "privet",
+                  "role": "introduced",
+                  "position": 2
+                }
+              ]
+            },
+            {
+              "id": "a1-hello-rule",
+              "position": 2,
+              "kind": "rule",
+              "payload": {
+                "title": "A greeting is a small conversation",
+                "lines": [
+                  "Здра́вствуйте is safe with an adult, a new acquaintance, or a group.",
+                  "Приве́т is friendly and informal; it is not wrong, only a different register.",
+                  "After a greeting, pause. The other person can answer before you continue."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "zdravstvuyte",
+                  "role": "reviewed",
+                  "position": 1
+                },
+                {
+                  "itemId": "privet",
+                  "role": "reviewed",
+                  "position": 2
+                }
+              ]
+            },
+            {
+              "id": "a1-hello-use",
+              "position": 3,
+              "kind": "use",
+              "payload": {
+                "title": "Choose the warm greeting",
+                "prompt": "Choose “hello” with a friend.",
+                "options": ["привет", "здравствуйте", "спасибо"],
+                "answer": "привет",
+                "responses": {
+                  "привет": "Good choice: приве́т is the warm, informal hello.",
+                  "здравствуйте": "That is a correct general or formal hello; it is more formal here.",
+                  "спасибо": "спаси́бо means “thank you.”"
+                }
+              },
+              "items": [
+                {
+                  "itemId": "privet",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            },
+            {
+              "id": "a1-hello-use-2",
+              "position": 4,
+              "kind": "use",
+              "payload": {
+                "title": "Choose the general hello",
+                "prompt": "Choose a safe hello for someone you have just met.",
+                "options": ["здравствуйте", "привет", "нет"],
+                "answer": "здравствуйте",
+                "responses": {
+                  "здравствуйте": "Yes. This is a neutral, respectful greeting.",
+                  "привет": "This is friendly, but use it when the setting is informal.",
+                  "нет": "нет means “no.”"
+                }
+              },
+              "items": [
+                {
+                  "itemId": "zdravstvuyte",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "a1-name",
+          "position": 2,
+          "title": "Say your name",
+          "prerequisites": ["a1-hello"],
+          "steps": [
+            {
+              "id": "a1-name-hear",
+              "position": 1,
+              "kind": "hear",
+              "payload": {
+                "title": "Name the person, then answer",
+                "instruction": "Read the chunks. Меня́ зову́т is the passive construction for a name; it is a complete, useful answer.",
+                "lines": [
+                  "Я студе́нт is a short statement: “I am a student.” It is more common in a beginner introduction than adding a word for “am.”"
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "menya-zovut",
+                  "role": "introduced",
+                  "position": 1
+                },
+                {
+                  "itemId": "kak-vas-zovut",
+                  "role": "introduced",
+                  "position": 2
+                },
+                {
+                  "itemId": "ya",
+                  "role": "introduced",
+                  "position": 3
+                },
+                {
+                  "itemId": "student",
+                  "role": "introduced",
+                  "position": 4
+                }
+              ]
+            },
+            {
+              "id": "a1-name-rule",
+              "position": 2,
+              "kind": "rule",
+              "payload": {
+                "title": "No present-tense ‘to be’ here",
+                "lines": [
+                  "Russian does not normally use a present-tense verb equivalent of English “am/is” in these introductions.",
+                  "Say Я студе́нт, not a literal Я есть студе́нт unless a teacher or text gives you that wording.",
+                  "For a name, say Меня́ зову́т Анна. The name follows the phrase."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "menya-zovut",
+                  "role": "reviewed",
+                  "position": 1
+                },
+                {
+                  "itemId": "kak-vas-zovut",
+                  "role": "reviewed",
+                  "position": 2
+                },
+                {
+                  "itemId": "ya",
+                  "role": "reviewed",
+                  "position": 3
+                },
+                {
+                  "itemId": "student",
+                  "role": "reviewed",
+                  "position": 4
+                }
+              ]
+            },
+            {
+              "id": "a1-name-use",
+              "position": 3,
+              "kind": "use",
+              "payload": {
+                "title": "Answer with your name",
+                "prompt": "How do you say “My name is …” as a chunk?",
+                "options": ["меня зовут", "как вас зовут", "очень приятно"],
+                "answer": "меня зовут",
+                "responses": {
+                  "меня зовут": "Correct: Меня́ зову́т…",
+                  "как вас зовут": "That asks someone’s name: Как вас зову́т?",
+                  "очень приятно": "О́чень прия́тно means “very pleased” or “nice to meet you.”"
+                }
+              },
+              "items": [
+                {
+                  "itemId": "menya-zovut",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            },
+            {
+              "id": "a1-name-use-2",
+              "position": 4,
+              "kind": "use",
+              "payload": {
+                "title": "Ask politely",
+                "prompt": "Choose the question “What is your name?”",
+                "options": ["как вас зовут", "как дела", "где это"],
+                "answer": "как вас зовут",
+                "responses": {
+                  "как вас зовут": "Yes: Как вас зову́т?",
+                  "как дела": "Как дела́ is a broader “How are things?” greeting.",
+                  "где это": "Где э́то asks “Where is this?”"
+                }
+              },
+              "items": [
+                {
+                  "itemId": "kak-vas-zovut",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "a1-polite",
+          "position": 3,
+          "title": "Keep the conversation going",
+          "prerequisites": ["a1-name"],
+          "steps": [
+            {
+              "id": "a1-polite-hear",
+              "position": 1,
+              "kind": "hear",
+              "payload": {
+                "title": "Politeness in small chunks",
+                "instruction": "Read each phrase as something you could use with a speaker or classmate.",
+                "lines": [
+                  "Повтори́те, пожа́луйста asks for a repetition. Говори́те ме́дленнее asks for a slower pace. Together they are a practical listening routine."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "ochen-priyatno",
+                  "role": "introduced",
+                  "position": 1
+                },
+                {
+                  "itemId": "ya-ne-ponimayu",
+                  "role": "introduced",
+                  "position": 2
+                },
+                {
+                  "itemId": "povtorite",
+                  "role": "introduced",
+                  "position": 3
+                },
+                {
+                  "itemId": "govorite-medlennee",
+                  "role": "introduced",
+                  "position": 4
+                },
+                {
+                  "itemId": "izvinite",
+                  "role": "introduced",
+                  "position": 5
+                }
+              ]
+            },
+            {
+              "id": "a1-polite-rule",
+              "position": 2,
+              "kind": "rule",
+              "payload": {
+                "title": "Choose the tool for the problem",
+                "lines": [
+                  "Я не понима́ю says that you do not understand; it opens a request for help.",
+                  "Повтори́те, пожа́луйста asks for a repeat; add Говори́те ме́дленнее, пожа́луйста when speed is the issue.",
+                  "Извини́те is a polite “excuse me / sorry.” Use it before interrupting or making a small mistake."
+                ]
+              },
+              "items": [
+                {
+                  "itemId": "ochen-priyatno",
+                  "role": "reviewed",
+                  "position": 1
+                },
+                {
+                  "itemId": "ya-ne-ponimayu",
+                  "role": "reviewed",
+                  "position": 2
+                },
+                {
+                  "itemId": "povtorite",
+                  "role": "reviewed",
+                  "position": 3
+                },
+                {
+                  "itemId": "govorite-medlennee",
+                  "role": "reviewed",
+                  "position": 4
+                },
+                {
+                  "itemId": "izvinite",
+                  "role": "reviewed",
+                  "position": 5
+                }
+              ]
+            },
+            {
+              "id": "a1-polite-use",
+              "position": 3,
+              "kind": "use",
+              "payload": {
+                "title": "Ask for a repeat",
+                "prompt": "Choose the polite phrase for “Repeat, please.”",
+                "options": ["повторите, пожалуйста", "извините", "спасибо"],
+                "answer": "повторите, пожалуйста",
+                "responses": {
+                  "повторите, пожалуйста": "Correct: Повтори́те, пожа́луйста.",
+                  "извините": "Извини́те means “excuse me / sorry.”",
+                  "спасибо": "Спаси́бо means “thank you.”"
+                }
+              },
+              "items": [
+                {
+                  "itemId": "povtorite",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            },
+            {
+              "id": "a1-polite-use-2",
+              "position": 4,
+              "kind": "use",
+              "payload": {
+                "title": "Say when you do not understand",
+                "prompt": "Choose “I do not understand.”",
+                "options": ["я не понимаю", "как вас зовут", "очень приятно"],
+                "answer": "я не понимаю",
+                "responses": {
+                  "я не понимаю": "Yes: Я не понима́ю.",
+                  "как вас зовут": "That asks someone’s name.",
+                  "очень приятно": "That means “very pleased / nice to meet you.”"
+                }
+              },
+              "items": [
+                {
+                  "itemId": "ya-ne-ponimayu",
+                  "role": "reviewed",
+                  "position": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "mama",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "мама",
+      "gloss": "mother",
+      "stressText": "ма́ма",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "f.",
+        "examples": ["Я люблю́ ма́му."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "kot",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "кот",
+      "gloss": "cat",
+      "stressText": "ко́т",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["Э́то ко́т.", "У меня́ есть ко́т."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "tam",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "там",
+      "gloss": "there",
+      "stressText": "там",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "adv.",
+        "examples": ["Кот там."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "kak",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "как",
+      "gloss": "how",
+      "stressText": "как",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "adv.",
+        "examples": ["Как дела́?"]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "rot",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "рот",
+      "gloss": "mouth",
+      "stressText": "рот",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["Э́то мой рот."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "nos",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "нос",
+      "gloss": "nose",
+      "stressText": "нос",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["У ко́та нос."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "sok",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "сок",
+      "gloss": "juice",
+      "stressText": "сок",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["Я пью́ сок."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "sup",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "суп",
+      "gloss": "soup",
+      "stressText": "суп",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["Мне нра́вится суп."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "da",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "да",
+      "gloss": "yes",
+      "stressText": "да",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "particle",
+        "examples": ["Да, я понима́ю."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "net",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "нет",
+      "gloss": "no",
+      "stressText": "нет",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "particle",
+        "examples": ["Нет, я не понима́ю."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "vot",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "вот",
+      "gloss": "here / there (pointing)",
+      "stressText": "вот",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "particle",
+        "examples": ["Вот банк."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "bank",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "банк",
+      "gloss": "bank",
+      "stressText": "ба́нк",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["Я в ба́нке."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "park",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "парк",
+      "gloss": "park",
+      "stressText": "парк",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "m.",
+        "examples": ["Я в па́рке."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "metro",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "метро",
+      "gloss": "metro / subway",
+      "stressText": "метро́",
+      "grammaticalMetadata": {
+        "level": "A0",
+        "label": "n.",
+        "examples": ["Я е́ду в метро́."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "zdravstvuyte",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "здравствуйте",
+      "gloss": "hello (general or formal)",
+      "stressText": "здра́вствуйте",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "greeting",
+        "register": "general/formal",
+        "examples": ["Здра́вствуйте, меня́ зову́т Анна."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "privet",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "привет",
+      "gloss": "hi / hello (friendly, informal)",
+      "stressText": "приве́т",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "greeting",
+        "register": "informal",
+        "examples": ["Приве́т, как дела́?"]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "menya-zovut",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "меня зовут",
+      "gloss": "my name is",
+      "stressText": "меня́ зову́т",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "name formula",
+        "examples": ["Меня́ зову́т Анна.", "Меня́ зову́т Ле́ша."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original examples authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "kak-vas-zovut",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "как вас зовут",
+      "gloss": "what is your name?",
+      "stressText": "как вас зову́т",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "question",
+        "examples": ["Как вас зову́т?", "Как вас зову́т, Анна?"]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original examples authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "ya",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "я",
+      "gloss": "I",
+      "stressText": "я",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "pronoun",
+        "person": "1",
+        "examples": ["Я студе́нт."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "student",
+      "kind": "word",
+      "languageTag": "ru",
+      "displayText": "студент",
+      "gloss": "student (masculine)",
+      "stressText": "студе́нт",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "m.",
+        "examples": ["Я студе́нт.", "Он студе́нт."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "ochen-priyatno",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "очень приятно",
+      "gloss": "very pleased / nice to meet you",
+      "stressText": "о́чень прия́тно",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "reaction",
+        "examples": ["О́чень прия́тно познако́миться."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "ya-ne-ponimayu",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "я не понимаю",
+      "gloss": "I do not understand",
+      "stressText": "я не понима́ю",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "statement",
+        "examples": ["Я не понима́ю. Повтори́те, пожа́луйста."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "povtorite",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "повторите, пожалуйста",
+      "gloss": "repeat, please",
+      "stressText": "повтори́те, пожа́луйста",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "request",
+        "examples": ["Повтори́те, пожа́луйста."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "govorite-medlennee",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "говорите медленнее, пожалуйста",
+      "gloss": "speak more slowly, please",
+      "stressText": "говори́те ме́дленнее, пожа́луйста",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "request",
+        "examples": ["Говори́те ме́дленнее, пожа́луйста."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    },
+    {
+      "id": "izvinite",
+      "kind": "expression",
+      "languageTag": "ru",
+      "displayText": "извините",
+      "gloss": "excuse me / sorry",
+      "stressText": "извини́те",
+      "grammaticalMetadata": {
+        "level": "A1",
+        "label": "polite phrase",
+        "examples": ["Извини́те, я не понима́ю."]
+      },
+      "license": {
+        "spdxId": "CC-BY-4.0",
+        "sourceName": "Ownwords original Russian Foundations course",
+        "sourceUrl": "https://github.com/neonunez/ownwords",
+        "attribution": "Ownwords"
+      },
+      "provenance": {
+        "sourceName": "Ownwords authored course",
+        "author": "Ownwords",
+        "note": "Original example authored for this course; not copied from a curriculum or external text."
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "alphabet-1",
+      "category": "alphabet",
+      "position": 1,
+      "title": "А а",
+      "body": {
+        "upper": "А",
+        "lower": "а",
+        "sound": "a",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-2",
+      "category": "alphabet",
+      "position": 2,
+      "title": "Б б",
+      "body": {
+        "upper": "Б",
+        "lower": "б",
+        "sound": "b",
+        "sameAsLatin": false,
+        "looksLike": "looks like B"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-3",
+      "category": "alphabet",
+      "position": 3,
+      "title": "В в",
+      "body": {
+        "upper": "В",
+        "lower": "в",
+        "sound": "v",
+        "sameAsLatin": false,
+        "looksLike": "looks like B"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-4",
+      "category": "alphabet",
+      "position": 4,
+      "title": "Г г",
+      "body": {
+        "upper": "Г",
+        "lower": "г",
+        "sound": "g",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-5",
+      "category": "alphabet",
+      "position": 5,
+      "title": "Д д",
+      "body": {
+        "upper": "Д",
+        "lower": "д",
+        "sound": "d",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-6",
+      "category": "alphabet",
+      "position": 6,
+      "title": "Е е",
+      "body": {
+        "upper": "Е",
+        "lower": "е",
+        "sound": "ye",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-7",
+      "category": "alphabet",
+      "position": 7,
+      "title": "Ё ё",
+      "body": {
+        "upper": "Ё",
+        "lower": "ё",
+        "sound": "yo",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-8",
+      "category": "alphabet",
+      "position": 8,
+      "title": "Ж ж",
+      "body": {
+        "upper": "Ж",
+        "lower": "ж",
+        "sound": "zh",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-9",
+      "category": "alphabet",
+      "position": 9,
+      "title": "З з",
+      "body": {
+        "upper": "З",
+        "lower": "з",
+        "sound": "z",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-10",
+      "category": "alphabet",
+      "position": 10,
+      "title": "И и",
+      "body": {
+        "upper": "И",
+        "lower": "и",
+        "sound": "i",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-11",
+      "category": "alphabet",
+      "position": 11,
+      "title": "Й й",
+      "body": {
+        "upper": "Й",
+        "lower": "й",
+        "sound": "y",
+        "sameAsLatin": false,
+        "looksLike": "looks like И"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-12",
+      "category": "alphabet",
+      "position": 12,
+      "title": "К к",
+      "body": {
+        "upper": "К",
+        "lower": "к",
+        "sound": "k",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-13",
+      "category": "alphabet",
+      "position": 13,
+      "title": "Л л",
+      "body": {
+        "upper": "Л",
+        "lower": "л",
+        "sound": "l",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-14",
+      "category": "alphabet",
+      "position": 14,
+      "title": "М м",
+      "body": {
+        "upper": "М",
+        "lower": "м",
+        "sound": "m",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-15",
+      "category": "alphabet",
+      "position": 15,
+      "title": "Н н",
+      "body": {
+        "upper": "Н",
+        "lower": "н",
+        "sound": "n",
+        "sameAsLatin": false,
+        "looksLike": "looks like H"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-16",
+      "category": "alphabet",
+      "position": 16,
+      "title": "О о",
+      "body": {
+        "upper": "О",
+        "lower": "о",
+        "sound": "o",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-17",
+      "category": "alphabet",
+      "position": 17,
+      "title": "П п",
+      "body": {
+        "upper": "П",
+        "lower": "п",
+        "sound": "p",
+        "sameAsLatin": false,
+        "looksLike": "looks like n"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-18",
+      "category": "alphabet",
+      "position": 18,
+      "title": "Р р",
+      "body": {
+        "upper": "Р",
+        "lower": "р",
+        "sound": "r",
+        "sameAsLatin": false,
+        "looksLike": "looks like P"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-19",
+      "category": "alphabet",
+      "position": 19,
+      "title": "С с",
+      "body": {
+        "upper": "С",
+        "lower": "с",
+        "sound": "s",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-20",
+      "category": "alphabet",
+      "position": 20,
+      "title": "Т т",
+      "body": {
+        "upper": "Т",
+        "lower": "т",
+        "sound": "t",
+        "sameAsLatin": true
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-21",
+      "category": "alphabet",
+      "position": 21,
+      "title": "У у",
+      "body": {
+        "upper": "У",
+        "lower": "у",
+        "sound": "u",
+        "sameAsLatin": false,
+        "looksLike": "looks like y"
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-22",
+      "category": "alphabet",
+      "position": 22,
+      "title": "Ф ф",
+      "body": {
+        "upper": "Ф",
+        "lower": "ф",
+        "sound": "f",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-23",
+      "category": "alphabet",
+      "position": 23,
+      "title": "Х х",
+      "body": {
+        "upper": "Х",
+        "lower": "х",
+        "sound": "kh",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-24",
+      "category": "alphabet",
+      "position": 24,
+      "title": "Ц ц",
+      "body": {
+        "upper": "Ц",
+        "lower": "ц",
+        "sound": "ts",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-25",
+      "category": "alphabet",
+      "position": 25,
+      "title": "Ч ч",
+      "body": {
+        "upper": "Ч",
+        "lower": "ч",
+        "sound": "ch",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-26",
+      "category": "alphabet",
+      "position": 26,
+      "title": "Ш ш",
+      "body": {
+        "upper": "Ш",
+        "lower": "ш",
+        "sound": "sh",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-27",
+      "category": "alphabet",
+      "position": 27,
+      "title": "Щ щ",
+      "body": {
+        "upper": "Щ",
+        "lower": "щ",
+        "sound": "shch",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-28",
+      "category": "alphabet",
+      "position": 28,
+      "title": "Ъ ъ",
+      "body": {
+        "upper": "Ъ",
+        "lower": "ъ",
+        "sound": "hard sign",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-29",
+      "category": "alphabet",
+      "position": 29,
+      "title": "Ы ы",
+      "body": {
+        "upper": "Ы",
+        "lower": "ы",
+        "sound": "y",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-30",
+      "category": "alphabet",
+      "position": 30,
+      "title": "Ь ь",
+      "body": {
+        "upper": "Ь",
+        "lower": "ь",
+        "sound": "soft sign",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-31",
+      "category": "alphabet",
+      "position": 31,
+      "title": "Э э",
+      "body": {
+        "upper": "Э",
+        "lower": "э",
+        "sound": "e",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-32",
+      "category": "alphabet",
+      "position": 32,
+      "title": "Ю ю",
+      "body": {
+        "upper": "Ю",
+        "lower": "ю",
+        "sound": "yu",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "alphabet-33",
+      "category": "alphabet",
+      "position": 33,
+      "title": "Я я",
+      "body": {
+        "upper": "Я",
+        "lower": "я",
+        "sound": "ya",
+        "sameAsLatin": false
+      },
+      "introducedUnitId": "a0-script"
+    },
+    {
+      "id": "grammar-names",
+      "category": "grammar",
+      "position": 1,
+      "title": "Names without ‘am’",
+      "body": {
+        "summary": "In a simple introduction, Russian normally omits a present-tense ‘am/is’: Я студе́нт, ‘I am a student.’",
+        "lines": [
+          "Меня́ зову́т… is the standard way to give a name.",
+          "The short statements and questions in Unit 2 are chunks to use, not a complete case system."
+        ]
+      },
+      "introducedUnitId": "a1-greetings"
+    },
+    {
+      "id": "verbs-gloss",
+      "category": "verbs",
+      "position": 1,
+      "title": "Verbs in this opening unit",
+      "body": {
+        "summary": "The opening unit uses only a few high-value actions in set phrases.",
+        "rows": [
+          {
+            "verb": "пью́",
+            "meaning": "I drink",
+            "example": "Я пью́ сок."
+          },
+          {
+            "verb": "е́ду",
+            "meaning": "I go / ride",
+            "example": "Я е́ду в метро́."
+          },
+          {
+            "verb": "говорю́",
+            "meaning": "I speak",
+            "example": "Я говорю́ по-ру́сски."
+          }
+        ]
+      },
+      "introducedUnitId": "a0-script",
+      "unlockLessonId": "a0-early-words"
+    },
+    {
+      "id": "phrases-conversation",
+      "category": "phrases",
+      "position": 1,
+      "title": "Phrases for a first conversation",
+      "body": {
+        "lines": [
+          "Здра́вствуйте / Приве́т",
+          "Меня́ зову́т…",
+          "Как вас зову́т?",
+          "Я не понима́ю. Повтори́те, пожа́луйста."
+        ]
+      },
+      "introducedUnitId": "a1-greetings",
+      "unlockLessonId": "a1-hello"
+    },
+    {
+      "id": "intonation-basics",
+      "category": "intonation",
+      "position": 1,
+      "title": "A first question",
+      "body": {
+        "summary": "How вас зову́т? is a question about a person. The intonation work is introduced gradually; no audio is claimed here.",
+        "examples": ["Э́то Анна?", "Как вас зову́т?"]
+      },
+      "introducedUnitId": "a1-greetings",
+      "unlockLessonId": "a1-name"
+    },
+    {
+      "id": "numbers-start",
+      "category": "numbers",
+      "position": 1,
+      "title": "Numbers are coming",
+      "body": {
+        "summary": "Numbers 1–10 are intentionally reserved for the next bounded unit. This pack is not a complete A1 syllabus."
+      }
+    },
+    {
+      "id": "vocabulary-mama",
+      "category": "course_vocabulary",
+      "position": 1,
+      "title": "Course vocabulary: first words",
+      "body": {
+        "summary": "The first words are kept in their lessons so the path, the Lexicon export, and the Reference share one identity."
+      },
+      "contentItemId": "mama",
+      "introducedUnitId": "a0-script",
+      "unlockLessonId": "a0-familiar"
+    }
+  ]
+}
