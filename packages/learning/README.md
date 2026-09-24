@@ -12,18 +12,26 @@ Apply `migrations/0200_learning.sql` after core `0001*` and Lexicon `0100*` migr
 app.route(
   "/api/v1/learning",
   createLearningRoutes({
-    lexiconImporter: createCourseLexiconImporter({ db: env.DB }),
+    // A fixed service, or a factory called with each request's bindings.
+    lexiconImporter: (bindings) =>
+      createCourseLexiconImporter({ db: bindings.DB }),
   }),
 );
 ```
 
-`lexiconImporter` structurally matches `@ownwords/lexicon`'s `LexiconCourseImportService`. The tuple
+`lexiconImporter` structurally matches `@ownwords/lexicon`'s `LexiconCourseImportService`, or is a factory returning
+one; the API passes a factory because Workers expose the D1 binding only per request. The tuple
 `(ownerId, courseId, courseVersion, itemId)` is its stable idempotency key. Completion and Learning's pending import
 row commit atomically in one D1 batch; each item is then imported independently. A failure returns completion with
 `lexiconSync.status: "pending"` (HTTP 202), and repeating that lesson's completion retries only its own pending
 rows, so one stuck item never marks a later lesson unsynced. Learning marks a row
 synced only after Lexicon confirms durability. The callback must remain idempotent because no transaction spans the
 two package-owned operations.
+
+Content validation refuses items the Lexicon importer would reject (its language-tag form and 10,000-character
+provenance and script-data limits) and items a lesson uses that no lesson introduces, so every published item can be
+exported. `exportLearnerData(db, userId)` returns one learner's enrollment, lesson progress, and export state for the
+composed account export.
 
 Learning serves only core curriculum content. It has no review scheduling tables, no practice route, and never reads
 personal Lexicon entries; personal practice stays in Maintain.
@@ -61,6 +69,7 @@ All routes require the verified `userId` Hono variable and emit errors as `{ "er
 - `GET /courses` and `GET /courses/:courseId/versions/:version`
 - `GET /courses/:courseId/versions/:version/lessons/:lessonId` (includes the lesson's renderable content items,
   recorded-audio metadata, licences, and provenance)
+- `GET /courses/:courseId/versions/:version/licenses` (each distinct item and recording licence once, for Settings)
 - `GET /courses/:courseId/resume`
 - `GET /references?courseId=&version=&category=&limit=&cursor=`
 - `PUT /courses/:courseId/versions/:version/lessons/:lessonId/progress`

@@ -187,6 +187,48 @@ describe("first-start enrollment and version pinning", () => {
   });
 });
 
+describe("content licences for Settings", () => {
+  it("lists item and recording licences for the version the learner sees", async () => {
+    const learner = await signedInUser("licence-learner");
+    await publishCourseVersions(2);
+    const body = await callJson(
+      learner,
+      "GET",
+      `${course}/versions/2/licenses`,
+      200,
+    );
+    expect(body.licenses).toEqual([
+      {
+        spdxId: "CC-BY-4.0",
+        sourceName: "Synthetic recordings",
+        sourceUrl: "https://audio.example.invalid/synthetic",
+        attribution: "Synthetic Speaker, CC BY 4.0",
+      },
+      {
+        spdxId: "CC0-1.0",
+        sourceName: "Ownwords synthetic test fixture",
+        sourceUrl: null,
+        attribution: null,
+      },
+    ]);
+    await callJson(
+      learner,
+      "PUT",
+      `${course}/versions/2/lessons/greet/progress`,
+      200,
+      {
+        body: { stepId: "greet-hear" },
+      },
+    );
+    const otherVersion = await call(
+      learner,
+      "GET",
+      `${course}/versions/1/licenses`,
+    );
+    expect(otherVersion.status).toBe(409);
+  });
+});
+
 describe("course-to-Lexicon export", () => {
   it("exports each introduced item once, with licence and provenance, only to the learner", async () => {
     const learner = await signedInUser("export-learner");
@@ -233,7 +275,7 @@ describe("course-to-Lexicon export", () => {
       provenance: { license: { spdxId: "CC0-1.0" } },
       scriptData: {
         stressText: "здра́вствуй",
-        audio: { kind: "recorded", license: { spdxId: "CC0-1.0" } },
+        audio: { kind: "recorded", license: { spdxId: "CC-BY-4.0" } },
       },
     });
 

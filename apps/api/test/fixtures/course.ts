@@ -8,6 +8,13 @@ const license = {
   spdxId: "CC0-1.0",
   sourceName: "Ownwords synthetic test fixture",
 };
+/** Recordings carry their own licence, which Settings must credit. */
+const audioLicense = {
+  spdxId: "CC-BY-4.0",
+  sourceName: "Synthetic recordings",
+  sourceUrl: "https://audio.example.invalid/synthetic",
+  attribution: "Synthetic Speaker, CC BY 4.0",
+};
 const provenance = {
   sourceName: "Ownwords integration tests",
   author: "Ownwords test authors",
@@ -37,7 +44,7 @@ function item(
             kind: "recorded",
             url: `https://audio.example.invalid/synthetic/${id}.ogg`,
             mediaType: "audio/ogg",
-            license,
+            license: audioLicense,
             provenance: { ...provenance, note: "Metadata-only fake URL." },
             durationMs: 900,
           },

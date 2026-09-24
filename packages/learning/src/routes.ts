@@ -568,6 +568,43 @@ export function createLearningRoutes(
     },
   );
 
+  // Attribution is shown once, in Settings, rather than beside each item; this
+  // lists every distinct licence the version's items and recordings carry.
+  app.get("/courses/:courseId/versions/:version/licenses", async (c) => {
+    const courseId = parseRouteId(c.req.param("courseId"), "Course id");
+    const version = parseVersion(c.req.param("version"));
+    await requireCourseVersion(c.env.DB, c.get("userId"), courseId, version);
+    const rows = await all<{ license_json: string; audio_json: string | null }>(
+      c.env.DB.prepare(
+        "SELECT license_json, audio_json FROM learning_content_items WHERE course_id = ? AND course_version = ?",
+      ).bind(courseId, version),
+    );
+    const licenses = new Map<string, Record<string, unknown>>();
+    const add = (license: Record<string, unknown>) => {
+      const entry = {
+        spdxId: license.spdxId,
+        sourceName: license.sourceName,
+        sourceUrl: license.sourceUrl ?? null,
+        attribution: license.attribution ?? null,
+      };
+      licenses.set(JSON.stringify(entry), entry);
+    };
+    for (const row of rows) {
+      add(parseJsonObject(row.license_json));
+      const audioLicense: unknown = row.audio_json
+        ? parseJsonObject(row.audio_json).license
+        : null;
+      if (audioLicense !== null && typeof audioLicense === "object") {
+        add(audioLicense as Record<string, unknown>);
+      }
+    }
+    return c.json({
+      licenses: [...licenses.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([, license]) => license),
+    });
+  });
+
   app.get("/references", async (c) => {
     const courseId = parseRouteId(c.req.query("courseId") ?? "", "Course id");
     const version = parseVersion(c.req.query("version") ?? "");

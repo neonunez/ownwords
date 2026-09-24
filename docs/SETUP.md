@@ -17,8 +17,14 @@ npm ci
 cp apps/api/.dev.vars.example apps/api/.dev.vars
 # Replace BETTER_AUTH_SECRET in the ignored file.
 npm run db:migrate:local --workspace @ownwords/api
+# Optional: publish the synthetic test-author course into the local database.
+npm run content:publish:local --workspace @ownwords/api -- ../../packages/learning/test/fixtures/synthetic-russian.json
 npm run dev --workspace @ownwords/api
 ```
+
+`content:publish:local` validates a course pack and publishes it only into the local D1 state that `wrangler dev`
+uses; it has no remote mode. The API scripts build `@ownwords/lexicon` first because that package is consumed from its
+compiled output.
 
 `npm run db:compose --workspace @ownwords/api` gathers migrations by filename from core (`0001–0099`), Lexicon (`0100–0199`), and Learning (`0200–0299`) into an ignored Wrangler directory. Duplicate or out-of-contract names fail before D1 is touched. The same composed directory is used by local migration commands and deployment tooling.
 
@@ -52,9 +58,53 @@ This lets the owner issue their own initial email invitation through the same pr
 
 ## Integration contract
 
-Core currently pins Hono `4.13.8`, Better Auth `1.7.5`, and `@better-auth/passkey` `1.7.5`. `@ownwords/api` exports `createApp`, its dependency seams, and the shared `DomainEnv`: D1 is the `DB` binding and authenticated identity is the server-set `userId` variable. Domain route factories remain `createLexiconRoutes` and `createLearningRoutes`, mounted at `/api/v1/lexicon` and `/api/v1/learning` once their actual packages are supplied. Migration composition accepts core `0001–0099`, Lexicon `0100–0199`, and Learning `0200–0299` in deterministic filename order, rejecting duplicate numeric IDs even with different filenames. Route mounting is intentionally not faked before those packages land.
+Core pins Hono `4.13.8`, Better Auth `1.7.5`, and `@better-auth/passkey` `1.7.5`. `createApp` in
+[`apps/api/src/app.ts`](../apps/api/src/app.ts) is the composition root:
 
-The foundation workflow runs credential-free `npm ci`, `npm run check`, and `npm run build` on pull requests and main. After this foundation is approved and merged by the maintainer, each sibling branch must incorporate it through its validation pipeline, update the workspace lockfile, and run those same checks with its real package included. The subsequent integration change must mount the actual route factories behind verified-session middleware and test cross-package isolation and course-to-Lexicon exports. Standalone package tests do not establish integrated operation.
+- `/api/v1/lexicon/*` serves `createLexiconRoutes`, `/api/v1/learning/*` serves `createLearningRoutes`, and
+  `/api/v1/account/*` serves core account routes. Each prefix first runs the verified Better Auth session middleware,
+  which alone sets the `userId` variable; nothing in a body, query, or header can select an owner. Each prefix also
+  caps request bodies at 256 KiB, below which the packages apply their own field limits.
+- The course-to-Lexicon importer is created per request from that request's D1 binding and injected into Learning
+  as a typed factory. Neither package imports the other or writes the other's tables.
+- Learning validates that every item a lesson uses is introduced by exactly one lesson and fits the Lexicon importer's
+  limits, so a published item can always be exported. Completing a lesson commits the completion and one pending
+  sync row per introduced item in one D1 batch, then imports each item under its stable
+  `(owner, course, version, item)` key. A failed import returns `202` with `lexiconSync.status: "pending"`; completing
+  the lesson again retries only that lesson's pending items and never duplicates an entry.
+- Learn-mode practice uses the Lexicon scheduler with `origin=course` on `GET /api/v1/lexicon/practice/due`, which
+  limits the queue to course-imported entries. Maintain omits it and practises the whole collection, including personal
+  vocabulary in the learned language. Learning itself serves only core curriculum.
+- `GET /api/v1/learning/courses/:courseId/versions/:version/licenses` lists each distinct item and recording licence
+  once, for attribution in Settings rather than beside content.
+
+Migration composition accepts core `0001–0099`, Lexicon `0100–0199`, and Learning `0200–0299` in deterministic
+filename order and rejects duplicate numeric IDs even with different filenames.
+
+### What is verified locally
+
+`npm run check` runs every package's tests plus the integrated suites in [`apps/api/test`](../apps/api/test), which
+execute in the Workers runtime against a local D1 with all composed migrations. They use two or more isolated users
+whose sessions are real Better Auth session rows signed with a test secret, and cover: cross-user denial for entries,
+senses, equivalents, cloze items, reviews, practice queues, progress, and exports; forged, expired, and uninvited
+sessions; spoofed owner fields; version pinning without migration; unsupported version transitions and invalid
+prerequisites; export retry after a simulated Lexicon failure; the course-only practice scope; invalid payloads; and
+administrator invitation issuance through a complete Google sign-in, driven by a stubbed Google token endpoint and
+placeholder client values. [`backup-restore.test.mjs`](../apps/api/scripts/backup-restore.test.mjs) runs two real
+`wrangler dev` servers to rehearse `wrangler d1 export` and restore into a separate local database.
+
+### Still unverified until the owner provides credentials
+
+These need the live resources listed at the top of this file; no test here stands in for them.
+
+1. **Google OAuth:** sign in once with the real client against the deployed origin: the consent screen, the registered
+   redirect URI, and a verified Google email that matches an issued invitation.
+2. **Passkeys:** after that sign-in, register a passkey from Safari on an iPhone, both in the browser and from the
+   Home Screen app, then sign out and sign in with it. Confirm the RP ID and origin match the deployed host.
+3. **Cloudflare:** create the production D1 database, apply the composed migrations remotely, dry-run and deploy the
+   Worker, then run one remote `wrangler d1 export` and restore it into a separate test database.
+4. **Course content:** publish the reviewed production course pack to the remote database. There is no remote
+   publishing command yet; `content:publish:local` deliberately refuses anything but local state.
 
 ## Backup and restore
 
@@ -66,6 +116,18 @@ npx wrangler d1 export ownwords-production --remote --output "backups/ownwords-$
 
 To rehearse a restore without touching production, create a separate D1 database, review the SQL export, and import it there with `wrangler d1 execute <restore-test-name> --remote --file <export.sql>`. D1 Time Travel remains the short-window production recovery mechanism. Never rehearse by overwriting the production database.
 
-## Remaining account lifecycle scope
+The local rehearsal test shows the export restores into an empty database with its migration history, immutability
+triggers, and every user's data intact, and that the restored API keeps enforcing ownership and version pinning.
 
-Full-account export and deletion intentionally wait for the Lexicon and Learning packages to expose ownership-aware export/delete services. Implementing only the core tables would falsely claim that all user data was handled. Better Auth's raw user deletion endpoint is therefore not enabled yet. The integration must compose every package in one authenticated operation before these features ship.
+## Account export and deletion
+
+`GET /api/v1/account/export` returns one JSON document, `ownwords-account-export/1`, for the signed-in user: the
+account, linked sign-in methods and passkey names, onboarding profile, the whole Lexicon including soft-deleted rows
+and review history, and Learning enrollment, lesson progress, and export state. Each package reads only its own
+tables for that owner. Credentials, session tokens, passkey public keys, the translation cache, and session-scoped
+revisit markers are left out. Published course content is not personal data and is not repeated.
+
+Account deletion is still not implemented, and Better Auth's raw user-deletion endpoint stays disabled. Lexicon and
+Learning rows are keyed by owner ID without foreign keys to the auth tables, so deleting only the core user would
+leave them behind. Deletion needs ownership-aware delete services in both packages, composed into one authenticated
+operation.
