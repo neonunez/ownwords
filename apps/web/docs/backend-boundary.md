@@ -42,7 +42,7 @@ domain packages, so the HTTP client is a translation layer and not a redesign.
 | `requestSuggestions`                                 | `POST /entries/:entryId/senses/:senseId/suggestions`                                                        | `@ownwords/lexicon`  |
 | `updateEquivalent`                                   | `PATCH /entries/:entryId/senses/:senseId/equivalents/:equivalentId`                                         | `@ownwords/lexicon`  |
 | `retryTranslation`                                   | `POST /entries/:entryId/senses/:senseId/suggestions`                                                        | `@ownwords/lexicon`  |
-| `getDueQueue`                                        | `GET /practice/due`; `ahead: true` asks for the cards coming up next, a scope the package has yet to expose | `@ownwords/lexicon`  |
+| `getDueQueue`                                        | `GET /practice/due` (Learn adds `origin=course`); `ahead: true` needs a scope the package has yet to expose | `@ownwords/lexicon`  |
 | `submitReview`                                       | `POST /practice/reviews`                                                                                    | `@ownwords/lexicon`  |
 | `getProgress`                                        | `GET /progress`                                                                                             | `@ownwords/lexicon`  |
 | `getCourse`                                          | `GET /courses/:courseId/resume` and `GET /courses/:courseId/versions/:version`                              | `@ownwords/learning` |
@@ -53,8 +53,11 @@ domain packages, so the HTTP client is a translation layer and not a redesign.
 | `getPreferences`, `savePreferences`, `listLanguages` | not yet defined; they belong with the account work                                                          | —                    |
 
 Routes are given as the domain packages mount them. The composition root
-decides the prefix, and the front end reads it from one place rather than
-spelling it anywhere else.
+mounts them under `/api/v1/lexicon` and `/api/v1/learning` behind verified
+sessions, and the front end reads the prefix from one place rather than
+spelling it anywhere else. Content licences for Settings come from
+`GET /courses/:courseId/versions/:version/licenses`, and the account export
+from `GET /api/v1/account/export`; `docs/SETUP.md` describes both.
 
 ## What the HTTP client has to carry
 

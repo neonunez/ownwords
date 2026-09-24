@@ -442,6 +442,31 @@ describe("authenticated learning routes", () => {
     });
   });
 
+  it("lists each distinct content licence once for the Settings attribution screen", async () => {
+    const response = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/licenses",
+      {},
+      "alice-token",
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      licenses: [
+        {
+          spdxId: "CC0-1.0",
+          sourceName: "Ownwords synthetic test fixture",
+          sourceUrl: null,
+          attribution: null,
+        },
+      ],
+    });
+    const missing = await request(
+      "/api/v1/learning/courses/russian-zero/versions/7/licenses",
+      {},
+      "alice-token",
+    );
+    expect(missing.status).toBe(404);
+  });
+
   it("mounts and serves content without any practice adapter", async () => {
     app = createRoot({ lexiconImporter: importer });
     const courses = await request(
@@ -460,6 +485,20 @@ describe("authenticated learning routes", () => {
       "alice-token",
     );
     expect(practice.status).toBe(404);
+  });
+
+  it("resolves a per-request importer against the request's own bindings", async () => {
+    const bindings: unknown[] = [];
+    app = createRoot({
+      lexiconImporter: (env) => {
+        bindings.push(env.DB);
+        return importer;
+      },
+    });
+    const response = await completeHello();
+    expect(response.status).toBe(200);
+    expect(bindings).toEqual([test.db]);
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
   });
 });
 

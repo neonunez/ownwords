@@ -77,6 +77,16 @@ describe("content validation and ingestion", () => {
     );
   });
 
+  it("rejects items a lesson uses that no lesson introduces", () => {
+    const neverIntroduced = structuredClone(pack());
+    const goodbyeIntroduction =
+      neverIntroduced.units[0]?.lessons[1]?.steps[0]?.items[0];
+    if (goodbyeIntroduction) goodbyeIntroduction.role = "reviewed";
+    expect(() => validateContentPack(neverIntroduced)).toThrow(
+      /item 'poka' is used by a lesson but no lesson introduces it/,
+    );
+  });
+
   it("rejects missing content links and invalid prerequisites before touching D1", () => {
     const missingItem = structuredClone(pack());
     const firstStep = missingItem.units[0]?.lessons[0]?.steps[0];

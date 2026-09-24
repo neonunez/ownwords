@@ -54,7 +54,16 @@ export interface LexiconCourseImportService {
   }): Promise<{ entryId: string; created: boolean }>;
 }
 
+/**
+ * Resolves the importer for one request. Workers only expose the D1 binding
+ * per request, so a composition root that builds its routes once injects this
+ * factory instead of a fixed service.
+ */
+export type LexiconCourseImporterFactory = (
+  bindings: LearningBindings,
+) => LexiconCourseImportService;
+
 export interface CreateLearningRoutesOptions {
-  lexiconImporter: LexiconCourseImportService;
+  lexiconImporter: LexiconCourseImportService | LexiconCourseImporterFactory;
   clock?: () => Date;
 }

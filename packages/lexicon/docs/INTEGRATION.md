@@ -39,6 +39,13 @@ card (`mastered` means stability of at least 21 days). The list `mastery` filter
 `mastered`) matches eligible equivalents in the optional `language`, and the optional `direction` scopes it to
 `recognize` or `produce`; `direction` without `mastery` is rejected.
 
+`GET /practice/due` accepts an optional `origin=course`, which limits the queue to entries created by the course
+importer. Learn-mode practice uses it so personal vocabulary is practised only in Maintain; without it the queue
+covers the whole collection.
+
+`exportLexiconOwnerData(db, ownerId)` returns every Lexicon row one owner keeps, including soft-deleted rows and
+review history, for the composed account export. It omits the translation cache and session-scoped revisit markers.
+
 ## Course-to-Lexicon callback
 
 The learning package receives this interface from the composition root:
