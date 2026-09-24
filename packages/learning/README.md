@@ -1,7 +1,7 @@
 # `@ownwords/learning`
 
-Workers-compatible Hono + D1 domain package for published course/reference content and private learner progress. It
-contains only a tiny synthetic fixture; production curriculum and audio are intentionally out of scope.
+Workers-compatible Hono + D1 domain package for published course/reference content and private learner progress. Authored
+course packs live in [`content/`](content/README.md); `test/fixtures/` holds a tiny synthetic fixture for tests.
 
 ## Integration
 

@@ -100,6 +100,18 @@ half of it. Beyond that:
   - any other reference's `body`: `lines`, or else `summary`, `text` or
     `gloss`.
 
+## Course content pack
+
+The first real content is `packages/learning/content/russian-foundations-v1.json`.
+It is a bounded, authored A0 script-and-sound and early-A1 greeting sequence,
+not a synthetic fixture or a complete syllabus. The local stack publishes that
+pack through `apps/api/scripts/local-content.ts` (the supported
+`ingestCourseVersion` / `publishCourseVersion` path) and exercises rendering,
+lesson completion, Lexicon export, and the alphabet/reference. The pack is
+explicitly unreviewed and carries per-item provenance/licensing in
+`packages/learning/content/README.md`; it has no audio until separately
+recorded and rights-checked.
+
 ## What the HTTP client carries
 
 - **Identity.** The API derives the owner from the verified session alone;

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ContentValidationError,
@@ -26,6 +27,58 @@ function database(): TestD1 {
 function pack(): ContentPack {
   return validateContentPack(fixture());
 }
+
+describe("authored course pack", () => {
+  it("is valid, explicitly unreviewed, and has no fabricated audio", async () => {
+    const input = JSON.parse(
+      await readFile(
+        new URL("../content/russian-foundations-v1.json", import.meta.url),
+        "utf8",
+      ),
+    ) as unknown;
+    const authored = validateContentPack(input);
+
+    expect(authored.course).toMatchObject({
+      id: "russian-foundations",
+      languageTag: "ru",
+    });
+    expect(authored.version).toBe(1);
+    expect(authored.course.description).toMatch(/unreviewed/i);
+    expect(authored.units.map((unit) => unit.id)).toEqual([
+      "a0-script",
+      "a1-greetings",
+    ]);
+    expect(authored.units[1]?.lessons[1]?.prerequisites).toEqual(["a1-hello"]);
+    expect(authored.items).toHaveLength(25);
+    expect(
+      authored.items.every((item) => item.license.spdxId === "CC-BY-4.0"),
+    ).toBe(true);
+    expect(authored.items.every((item) => !item.audio)).toBe(true);
+    expect(
+      authored.items.every(
+        (item) =>
+          item.provenance.author === "Ownwords" &&
+          item.grammaticalMetadata.examples !== undefined,
+      ),
+    ).toBe(true);
+    for (const unit of authored.units) {
+      for (const lesson of unit.lessons) {
+        for (const step of lesson.steps) {
+          if (step.kind === "use" || step.kind === "perception") {
+            const options = step.payload.options as unknown[] | undefined;
+            const answer = step.payload.answer as string | undefined;
+            const responses = step.payload.responses as
+              Record<string, unknown> | undefined;
+            expect(options).toEqual(expect.arrayContaining([answer]));
+            expect(Object.keys(responses ?? {})).toEqual(
+              expect.arrayContaining(options ?? []),
+            );
+          }
+        }
+      }
+    }
+  });
+});
 
 describe("content validation and ingestion", () => {
   it("accepts the bounded synthetic pack and rejects unsafe audio URLs", () => {
