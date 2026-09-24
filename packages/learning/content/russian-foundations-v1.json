@@ -11,7 +11,7 @@
       "id": "a0-script",
       "position": 1,
       "title": "Read the sounds",
-      "canDo": "Read familiar Russian words, notice false friends, and make a few short requests with the Cyrillic alphabet.",
+      "canDo": "Read familiar Russian words, notice false friends, and read a few short phrases in the Cyrillic alphabet.",
       "lessons": [
         {
           "id": "a0-familiar",
@@ -28,7 +28,7 @@
                 "lines": [
                   "А, К, М, О, Т look like familiar Latin shapes.",
                   "Read these words slowly: ма́ма, кот, там, как.",
-                  "Stress is marked with a small raised line. One syllable carries the beat: ма́ма, ко́т, там, как."
+                  "Stress is marked with a small raised line over the stressed vowel: ма́ма. Words of one syllable, such as кот, там and как, carry no mark."
                 ]
               },
               "items": []
@@ -107,14 +107,14 @@
               "position": 4,
               "kind": "perception",
               "payload": {
-                "title": "Which word is ко́т?",
+                "title": "Which word is кот?",
                 "prompt": "Choose the word that means “cat”.",
                 "options": ["кот", "там", "как"],
                 "answer": "кот",
                 "responses": {
-                  "кот": "Yes. Say ко́т: the final т stays soft enough for a careful beginner.",
-                  "там": "Not this one. The first vowel is stressed: там.",
-                  "как": "Not this one. The first vowel is stressed: как."
+                  "кот": "Yes. кот means “cat”. The final т is hard: no soft sign or soft vowel follows it.",
+                  "там": "Not this one. там means “there”.",
+                  "как": "Not this one. как means “how”."
                 }
               },
               "items": [
@@ -313,7 +313,7 @@
                 "title": "Words travel in phrases",
                 "lines": [
                   "A word becomes useful when it meets a small phrase.",
-                  "Я в ба́нке means “I am at the bank”; по́йду в метро́ means “I will go into the metro.”",
+                  "Я в ба́нке means “I am at the bank”; пойду́ в метро́ means “I will go into the metro.”",
                   "Learn the phrase shape now; leave the cases and verbs for their lessons."
                 ]
               },
@@ -498,9 +498,9 @@
               "kind": "hear",
               "payload": {
                 "title": "Name the person, then answer",
-                "instruction": "Read the chunks. Меня́ зову́т is the passive construction for a name; it is a complete, useful answer.",
+                "instruction": "Read the chunks. Меня́ зову́т is the set phrase for giving a name (literally “they call me”); it is a complete, useful answer.",
                 "lines": [
-                  "Я студе́нт is a short statement: “I am a student.” It is more common in a beginner introduction than adding a word for “am.”"
+                  "Я студе́нт is a short statement: “I am a student.” Russian uses no word for “am” here; Я есть студе́нт is not said."
                 ]
               },
               "items": [
@@ -776,11 +776,11 @@
       "languageTag": "ru",
       "displayText": "кот",
       "gloss": "cat",
-      "stressText": "ко́т",
+      "stressText": "кот",
       "grammaticalMetadata": {
         "level": "A0",
         "label": "m.",
-        "examples": ["Э́то ко́т.", "У меня́ есть ко́т."]
+        "examples": ["Э́то кот.", "У меня́ есть кот."]
       },
       "license": {
         "spdxId": "CC-BY-4.0",
@@ -876,7 +876,7 @@
       "grammaticalMetadata": {
         "level": "A0",
         "label": "m.",
-        "examples": ["У ко́та нос."]
+        "examples": ["Э́то нос."]
       },
       "license": {
         "spdxId": "CC-BY-4.0",
@@ -900,7 +900,7 @@
       "grammaticalMetadata": {
         "level": "A0",
         "label": "m.",
-        "examples": ["Я пью́ сок."]
+        "examples": ["Я пью сок."]
       },
       "license": {
         "spdxId": "CC-BY-4.0",
@@ -1016,7 +1016,7 @@
       "languageTag": "ru",
       "displayText": "банк",
       "gloss": "bank",
-      "stressText": "ба́нк",
+      "stressText": "банк",
       "grammaticalMetadata": {
         "level": "A0",
         "label": "m.",
@@ -1142,7 +1142,7 @@
       "grammaticalMetadata": {
         "level": "A1",
         "label": "name formula",
-        "examples": ["Меня́ зову́т Анна.", "Меня́ зову́т Ле́ша."]
+        "examples": ["Меня́ зову́т Анна.", "Меня́ зову́т Лёша."]
       },
       "license": {
         "spdxId": "CC-BY-4.0",
@@ -1427,7 +1427,8 @@
         "upper": "Е",
         "lower": "е",
         "sound": "ye",
-        "sameAsLatin": false
+        "sameAsLatin": false,
+        "looksLike": "looks like E"
       },
       "introducedUnitId": "a0-script"
     },
@@ -1479,7 +1480,7 @@
         "upper": "И",
         "lower": "и",
         "sound": "i",
-        "sameAsLatin": true
+        "sameAsLatin": false
       },
       "introducedUnitId": "a0-script"
     },
@@ -1600,7 +1601,8 @@
         "upper": "С",
         "lower": "с",
         "sound": "s",
-        "sameAsLatin": true
+        "sameAsLatin": false,
+        "looksLike": "looks like C"
       },
       "introducedUnitId": "a0-script"
     },
@@ -1653,7 +1655,8 @@
         "upper": "Х",
         "lower": "х",
         "sound": "kh",
-        "sameAsLatin": false
+        "sameAsLatin": false,
+        "looksLike": "looks like X"
       },
       "introducedUnitId": "a0-script"
     },
@@ -1810,9 +1813,9 @@
         "summary": "The opening unit uses only a few high-value actions in set phrases.",
         "rows": [
           {
-            "verb": "пью́",
+            "verb": "пью",
             "meaning": "I drink",
-            "example": "Я пью́ сок."
+            "example": "Я пью сок."
           },
           {
             "verb": "е́ду",
@@ -1851,7 +1854,7 @@
       "position": 1,
       "title": "A first question",
       "body": {
-        "summary": "How вас зову́т? is a question about a person. The intonation work is introduced gradually; no audio is claimed here.",
+        "summary": "Как вас зову́т? is a question about a person. The intonation work is introduced gradually; no audio is claimed here.",
         "examples": ["Э́то Анна?", "Как вас зову́т?"]
       },
       "introducedUnitId": "a1-greetings",
