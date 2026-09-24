@@ -168,6 +168,10 @@ Changed on the way in, deliberately:
 | Press states via inline mouse handlers | CSS classes on `:active` | Touch, keyboard and reduced motion all behave |
 | `--neutral-500`, `--green-500`, `--amber-500` | Three stops darker in light mode | Small text on its own tint was between 3.2:1 and 4.4:1 |
 
+Not imported: the generated review artefacts that ship alongside the package
+(the bundled offline HTML, the manifest and adherence files, the pasted
+screenshots) and the specimen pages that depend on them.
+
 ### One style on every platform
 
 Ownwords keeps one shared visual style on iOS, Android and the desktop
@@ -187,10 +191,6 @@ it:
 - `prefers-reduced-motion` and `prefers-color-scheme`.
 - The `theme-color` meta, which follows the theme so the installed window's
   bars match it.
-
-Not imported: the generated review artefacts that ship alongside the package
-(the bundled offline HTML, the manifest and adherence files, the pasted
-screenshots) and the specimen pages that depend on them.
 
 ## Data
 
