@@ -267,6 +267,7 @@ export function validateContentPack(input: unknown): ContentPack {
   const lessonOrder = new Map<string, number>();
   const lessonIds: string[] = [];
   const stepIds: string[] = [];
+  const introducedBy = new Map<string, string>();
   let order = 0;
 
   for (const unit of [...pack.units].sort((a, b) => a.position - b.position)) {
@@ -306,6 +307,15 @@ export function validateContentPack(input: unknown): ContentPack {
           if (!items.has(link.itemId)) {
             issues.push(
               `step '${step.id}' references missing item '${link.itemId}'`,
+            );
+          }
+          if (link.role !== "introduced") continue;
+          const owner = introducedBy.get(link.itemId);
+          if (owner === undefined) {
+            introducedBy.set(link.itemId, lesson.id);
+          } else if (owner !== lesson.id) {
+            issues.push(
+              `item '${link.itemId}' is introduced by lessons '${owner}' and '${lesson.id}'; each item may be introduced by only one lesson`,
             );
           }
         }

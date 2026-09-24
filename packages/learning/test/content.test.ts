@@ -66,6 +66,17 @@ describe("content validation and ingestion", () => {
     );
   });
 
+  it("rejects a pack where two lessons introduce the same item", () => {
+    const shared = structuredClone(pack());
+    const goodbye = shared.units[0]?.lessons[1];
+    const introduction = goodbye?.steps[0]?.items[0];
+    expect(introduction?.role).toBe("introduced");
+    if (introduction) introduction.itemId = "privet";
+    expect(() => validateContentPack(shared)).toThrow(
+      /item 'privet' is introduced by lessons 'hello' and 'goodbye'/,
+    );
+  });
+
   it("rejects missing content links and invalid prerequisites before touching D1", () => {
     const missingItem = structuredClone(pack());
     const firstStep = missingItem.units[0]?.lessons[0]?.steps[0];

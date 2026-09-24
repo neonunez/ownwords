@@ -43,7 +43,8 @@ The operator-only exports in `@ownwords/learning/operator` are `ingestCourseVers
 `discardDraftCourseVersion`. They are not HTTP routes. Imports validate the whole pack before one D1 batch, require
 sequential versions, reject unsafe/non-HTTPS URLs and broken links, and carry per-item license/provenance plus
 optional recorded-audio metadata. Published rows are immutable through database triggers as well as application
-checks. Stable item identity is `(courseId, version, itemId)`. Course title and description are stored per version,
+checks. Stable item identity is `(courseId, version, itemId)`, and each item may be introduced by only one lesson in a
+version, because that lesson owns the item's Lexicon export and its retries. Course title and description are stored per version,
 so a new version may correct them; the course language tag is stable and a pack that changes it is rejected with
 `COURSE_IDENTITY_MISMATCH`.
 
