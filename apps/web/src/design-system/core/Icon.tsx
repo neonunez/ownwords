@@ -49,26 +49,26 @@ import {
   User,
   Volume2,
   X,
-} from 'lucide-react';
-import type { CSSProperties } from 'react';
+} from "lucide-react";
+import type { CSSProperties } from "react";
 
 const registry = {
-  'alert-circle': AlertCircle,
-  'arrow-right': ArrowRight,
-  'audio-lines': AudioLines,
+  "alert-circle": AlertCircle,
+  "arrow-right": ArrowRight,
+  "audio-lines": AudioLines,
   ban: Ban,
   bell: BellRing,
-  'book-open': BookOpen,
-  'chart-no-axes-column': ChartNoAxesColumn,
+  "book-open": BookOpen,
+  "chart-no-axes-column": ChartNoAxesColumn,
   check: Check,
-  'chevron-left': ChevronLeft,
-  'chevron-right': ChevronRight,
+  "chevron-left": ChevronLeft,
+  "chevron-right": ChevronRight,
   circle: Circle,
-  'circle-check': CircleCheck,
-  'circle-dashed': CircleDashed,
-  'corner-down-left': CornerDownLeft,
+  "circle-check": CircleCheck,
+  "circle-dashed": CircleDashed,
+  "corner-down-left": CornerDownLeft,
   download: Download,
-  'graduation-cap': GraduationCap,
+  "graduation-cap": GraduationCap,
   hash: Hash,
   info: Info,
   languages: Languages,
@@ -76,23 +76,23 @@ const registry = {
   library: Library,
   loader: Loader,
   lock: Lock,
-  'maximize-2': Maximize2,
+  "maximize-2": Maximize2,
   menu: Menu,
-  'message-circle': MessageCircle,
-  'minimize-2': Minimize2,
+  "message-circle": MessageCircle,
+  "minimize-2": Minimize2,
   moon: Moon,
-  'more-horizontal': MoreHorizontal,
+  "more-horizontal": MoreHorizontal,
   pencil: Pencil,
   play: Play,
   plus: Plus,
   repeat: Repeat,
-  'rotate-ccw': RotateCcw,
+  "rotate-ccw": RotateCcw,
   search: Search,
   sparkles: Sparkles,
   sun: Sun,
   type: Type,
   user: User,
-  'volume-2': Volume2,
+  "volume-2": Volume2,
   x: X,
 } as const;
 
@@ -110,7 +110,13 @@ export interface IconProps {
  * Icons never carry meaning on their own: every one is hidden from assistive
  * technology, and the control around it supplies the words.
  */
-export function Icon({ name, size = 22, strokeWidth = 1.75, color = 'currentColor', style }: IconProps) {
+export function Icon({
+  name,
+  size = 22,
+  strokeWidth = 1.75,
+  color = "currentColor",
+  style,
+}: IconProps) {
   const Glyph = registry[name];
   return (
     <Glyph
@@ -119,7 +125,7 @@ export function Icon({ name, size = 22, strokeWidth = 1.75, color = 'currentColo
       color={color}
       aria-hidden="true"
       focusable="false"
-      style={{ flex: 'none', display: 'block', ...style }}
+      style={{ flex: "none", display: "block", ...style }}
     />
   );
 }

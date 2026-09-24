@@ -7,14 +7,21 @@
  * HTTP, no screen should imply it is talking to a server.
  */
 
-import { OwnwordsError, type EquivalentPatch, type OwnwordsClient } from '../client';
+import {
+  OwnwordsError,
+  type EquivalentPatch,
+  type OwnwordsClient,
+} from "../client";
 import type {
   AlphabetLetter,
   Course,
+  Direction,
   DueQueue,
   Entry,
   EntryQuery,
   Language,
+  LanguageProgress,
+  LanguageTag,
   Lesson,
   MasteryBand,
   NewEntry,
@@ -27,9 +34,9 @@ import type {
   Starter,
   SuggestionResult,
   UpcomingItem,
-} from '../types';
-import { forSearch, inWords } from '../../lib/text';
-import { localId } from '../../lib/ids';
+} from "../types";
+import { forSearch, inWords } from "../../lib/text";
+import { localId } from "../../lib/ids";
 import {
   demoAlphabet,
   demoCourse,
@@ -43,7 +50,7 @@ import {
   demoSuggestions,
   demoUpcoming,
   type DemoCard,
-} from './fixtures';
+} from "./fixtures";
 
 export interface DemoClientOptions {
   /**
@@ -58,7 +65,7 @@ export interface DemoClientOptions {
   entries?: readonly Entry[];
 }
 
-const clone = <T,>(value: T): T => structuredClone(value);
+const clone = <T>(value: T): T => structuredClone(value);
 
 function copyEntry(entry: Entry): Entry {
   return clone(entry);
@@ -66,29 +73,47 @@ function copyEntry(entry: Entry): Entry {
 
 /** A session is sized by what is due, and said in words rather than counted. */
 function estimateFor(cards: number): string {
-  if (cards === 0) return '';
+  if (cards === 0) return "";
   const minutes = Math.max(1, Math.round(cards * 1.1));
-  return minutes === 1 ? 'About a minute.' : `About ${inWords(minutes)} minutes.`;
+  return minutes === 1
+    ? "About a minute."
+    : `About ${inWords(minutes)} minutes.`;
 }
 
+const native = demoLanguages.find(
+  (language) => language.role === "native",
+)?.code;
+
+/** Retention the demo scheduler reports; when each is next due follows the practice queue. */
+const retention: Omit<LanguageProgress, "nextDueAt">[] = [
+  { language: "es", direction: "recognise", retention: 0.74 },
+  { language: "es", direction: "produce", retention: 0.48 },
+  { language: "ru", direction: "recognise", retention: 0.22 },
+  { language: "ru", direction: "produce", retention: null },
+];
+
 const learning = new Set(
-  demoLanguages.filter((language) => language.role === 'learning').map((language) => language.code),
+  demoLanguages
+    .filter((language) => language.role === "learning")
+    .map((language) => language.code),
 );
 
 /** Learn practises the language being learned; Maintain practises the rest. */
-const inMode = (mode: 'maintain' | 'learn', card: DemoCard): boolean =>
-  learning.has(card.language) === (mode === 'learn');
+const inMode = (mode: "maintain" | "learn", card: DemoCard): boolean =>
+  learning.has(card.language) === (mode === "learn");
 
 /** Retrievability bands, on the thresholds the mastery meter colours by. */
 function inBand(entry: Entry, band: MasteryBand): boolean {
   const readings = Object.values(entry.mastery)
     .flatMap((mastery) => [mastery.recognise, mastery.produce])
     .filter((value): value is number => value !== null);
-  if (band === 'weak') return readings.some((value) => value < 0.34);
+  if (band === "weak") return readings.some((value) => value < 0.34);
   return readings.length > 0 && readings.every((value) => value >= 0.67);
 }
 
-export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClient {
+export function createDemoClient(
+  options: DemoClientOptions = {},
+): OwnwordsClient {
   const delays = options.suggestionDelaysMs ?? { es: 900, ru: 1700 };
   const failing = new Set(options.failingLanguages ?? []);
 
@@ -101,7 +126,11 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
   const findEntry = (entryId: string): Entry => {
     const entry = entries.find((candidate) => candidate.id === entryId);
     if (!entry) {
-      throw new OwnwordsError('not_found', 'That entry is no longer in your Lexicon.', 404);
+      throw new OwnwordsError(
+        "not_found",
+        "That entry is no longer in your Lexicon.",
+        404,
+      );
     }
     return entry;
   };
@@ -109,12 +138,18 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
   const isUnverified = (entry: Entry): boolean =>
     entry.senses.some((sense) =>
       sense.equivalents.some(
-        (equivalent) => equivalent.state === 'suggested' || equivalent.state === 'waiting' || equivalent.state === 'failed',
+        (equivalent) =>
+          equivalent.state === "suggested" ||
+          equivalent.state === "waiting" ||
+          equivalent.state === "failed",
       ),
     );
 
   /** The cards still waiting in `cards` for this mode, whose entry is still in the Lexicon. */
-  const pending = <T extends DemoCard>(cards: readonly T[], mode: 'maintain' | 'learn'): T[] =>
+  const pending = <T extends DemoCard>(
+    cards: readonly T[],
+    mode: "maintain" | "learn",
+  ): T[] =>
     cards.filter(
       (card) =>
         inMode(mode, card) &&
@@ -151,7 +186,7 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
     },
 
     async listEntries(query: EntryQuery = {}): Promise<Page<Entry>> {
-      const search = query.search ? forSearch(query.search) : '';
+      const search = query.search ? forSearch(query.search) : "";
       const items = entries.filter((entry) => {
         if (search && !forSearch(entry.headword).includes(search)) return false;
         if (query.kind && entry.kind !== query.kind) return false;
@@ -160,7 +195,9 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
         if (query.language) {
           const inEntry = entry.language === query.language;
           const inEquivalents = entry.senses.some((sense) =>
-            sense.equivalents.some((equivalent) => equivalent.language === query.language),
+            sense.equivalents.some(
+              (equivalent) => equivalent.language === query.language,
+            ),
           );
           if (!inEntry && !inEquivalents) return false;
         }
@@ -174,9 +211,9 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
     },
 
     async createEntry(input: NewEntry): Promise<Entry> {
-      const senseId = localId('s');
+      const senseId = localId("s");
       const entry: Entry = {
-        id: localId('e'),
+        id: localId("e"),
         headword: input.headword.trim(),
         note: input.note.trim(),
         kind: input.kind,
@@ -188,11 +225,11 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
             id: senseId,
             gloss: input.senseGloss?.trim() || input.headword.trim(),
             equivalents: input.suggestInto.map((language) => ({
-              id: localId('q'),
+              id: localId("q"),
               language,
-              text: '',
+              text: "",
               fit: null,
-              state: 'waiting' as const,
+              state: "waiting" as const,
             })),
           },
         ],
@@ -213,13 +250,13 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
                 const result: SuggestionResult = failing.has(language)
                   ? {
                       language,
-                      state: 'failed',
-                      text: '',
-                      reason: 'Translation failed. Nothing was dropped.',
+                      state: "failed",
+                      text: "",
+                      reason: "Translation failed. Nothing was dropped.",
                     }
                   : {
                       language,
-                      state: 'suggested',
+                      state: "suggested",
                       text: demoSuggestions[language] ?? input.headword,
                     };
                 onResult(result);
@@ -230,7 +267,7 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
                 return;
               }
               const timer = setTimeout(finish, delay);
-              signal?.addEventListener('abort', () => {
+              signal?.addEventListener("abort", () => {
                 clearTimeout(timer);
                 resolve();
               });
@@ -247,13 +284,19 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
     ): Promise<Entry> {
       const entry = findEntry(entryId);
       const sense = entry.senses.find((candidate) => candidate.id === senseId);
-      const equivalent = sense?.equivalents.find((candidate) => candidate.id === equivalentId);
+      const equivalent = sense?.equivalents.find(
+        (candidate) => candidate.id === equivalentId,
+      );
       if (!sense || !equivalent) {
-        throw new OwnwordsError('not_found', 'That equivalent is no longer on this entry.', 404);
+        throw new OwnwordsError(
+          "not_found",
+          "That equivalent is no longer on this entry.",
+          404,
+        );
       }
       if (patch.text !== undefined) {
         equivalent.text = patch.text.trim();
-        equivalent.state = 'manual';
+        equivalent.state = "manual";
       }
       if (patch.fit !== undefined) equivalent.fit = patch.fit;
       if (patch.state !== undefined) equivalent.state = patch.state;
@@ -261,16 +304,26 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
       return copyEntry(entry);
     },
 
-    async retryTranslation(entryId: string, senseId: string, equivalentId: string): Promise<Entry> {
+    async retryTranslation(
+      entryId: string,
+      senseId: string,
+      equivalentId: string,
+    ): Promise<Entry> {
       const entry = findEntry(entryId);
       const sense = entry.senses.find((candidate) => candidate.id === senseId);
-      const equivalent = sense?.equivalents.find((candidate) => candidate.id === equivalentId);
+      const equivalent = sense?.equivalents.find(
+        (candidate) => candidate.id === equivalentId,
+      );
       if (!sense || !equivalent) {
-        throw new OwnwordsError('not_found', 'That equivalent is no longer on this entry.', 404);
+        throw new OwnwordsError(
+          "not_found",
+          "That equivalent is no longer on this entry.",
+          404,
+        );
       }
-      equivalent.state = 'suggested';
+      equivalent.state = "suggested";
       equivalent.text = demoSuggestions[equivalent.language] ?? equivalent.text;
-      equivalent.fit = equivalent.fit ?? 'exact';
+      equivalent.fit = equivalent.fit ?? "exact";
       entry.version += 1;
       return copyEntry(entry);
     },
@@ -278,24 +331,43 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
     async addSense(entryId: string, gloss: string): Promise<Entry> {
       const entry = findEntry(entryId);
       if (!gloss.trim()) {
-        throw new OwnwordsError('invalid_request', 'A sense needs a gloss that says what it means.', 400);
+        throw new OwnwordsError(
+          "invalid_request",
+          "A sense needs a gloss that says what it means.",
+          400,
+        );
       }
-      entry.senses.push({ id: localId('s'), gloss: gloss.trim(), equivalents: [] });
+      entry.senses.push({
+        id: localId("s"),
+        gloss: gloss.trim(),
+        equivalents: [],
+      });
       entry.version += 1;
       return copyEntry(entry);
     },
 
     async listStarters(): Promise<Starter[]> {
-      return demoStarters.map(({ id, headword, note, language }) => ({ id, headword, note, language }));
+      return demoStarters.map(({ id, headword, note, language }) => ({
+        id,
+        headword,
+        note,
+        language,
+      }));
     },
 
     async addStarter(starterId: string): Promise<Entry> {
-      const starter = demoStarters.find((candidate) => candidate.id === starterId);
+      const starter = demoStarters.find(
+        (candidate) => candidate.id === starterId,
+      );
       if (!starter) {
-        throw new OwnwordsError('not_found', 'That starter expression is no longer offered.', 404);
+        throw new OwnwordsError(
+          "not_found",
+          "That starter expression is no longer offered.",
+          404,
+        );
       }
       const entry: Entry = {
-        id: localId('e'),
+        id: localId("e"),
         headword: starter.headword,
         note: starter.note,
         kind: starter.kind,
@@ -304,9 +376,12 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
         createdAt: new Date().toISOString(),
         senses: [
           {
-            id: localId('s'),
+            id: localId("s"),
             gloss: starter.note,
-            equivalents: starter.equivalents.map((equivalent) => ({ ...equivalent, id: localId('q') })),
+            equivalents: starter.equivalents.map((equivalent) => ({
+              ...equivalent,
+              id: localId("q"),
+            })),
           },
         ],
         mastery: {},
@@ -315,11 +390,11 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
       // Vetted equivalents are due at once, so there is practice on day one.
       for (const equivalent of starter.equivalents) {
         due.push({
-          cardId: localId('c'),
+          cardId: localId("c"),
           entryId: entry.id,
           language: equivalent.language,
           promptLanguage: starter.language,
-          direction: 'produce',
+          direction: "produce",
           prompt: starter.headword,
           answer: equivalent.text,
           hint: starter.note,
@@ -330,7 +405,9 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
 
     async getDueQueue(scope): Promise<DueQueue> {
       const coming = pending(upcoming, scope.mode);
-      const cards = (scope.ahead ? coming : pending(due, scope.mode)).map(toPracticeCard);
+      const cards = (scope.ahead ? coming : pending(due, scope.mode)).map(
+        toPracticeCard,
+      );
       return {
         cards,
         estimate: estimateFor(cards.length),
@@ -340,19 +417,37 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
 
     async submitReview(submission: ReviewSubmission): Promise<void> {
       // "Again" keeps the card in this session, the way the scheduler does.
-      if (submission.rating !== 'again') reviewed.add(submission.cardId);
+      if (submission.rating !== "again") reviewed.add(submission.cardId);
     },
 
     async getProgress(): Promise<ProgressSummary> {
+      const practised = (card: DemoCard): LanguageTag =>
+        card.language === native ? card.promptLanguage : card.language;
+      const has = (
+        cards: readonly DemoCard[],
+        language: LanguageTag,
+        direction: Direction,
+      ): boolean =>
+        pending(cards, "maintain").some(
+          (card) =>
+            practised(card) === language && card.direction === direction,
+        );
+      const nextDueFor = (
+        language: LanguageTag,
+        direction: Direction,
+      ): string | null => {
+        if (has(due, language, direction)) return new Date().toISOString();
+        if (has(upcoming, language, direction))
+          return new Date(Date.now() + 86_400_000).toISOString();
+        return null;
+      };
       return {
-        estimate: estimateFor(pending(due, 'maintain').length),
-        comingUp: pending(upcoming, 'maintain').map(toUpcoming),
-        perLanguage: [
-          { language: 'es', direction: 'recognise', retention: 0.74, nextDueAt: '2026-09-17T18:00:00.000Z' },
-          { language: 'es', direction: 'produce', retention: 0.48, nextDueAt: '2026-09-17T18:00:00.000Z' },
-          { language: 'ru', direction: 'recognise', retention: 0.22, nextDueAt: '2026-09-18T08:00:00.000Z' },
-          { language: 'ru', direction: 'produce', retention: null, nextDueAt: null },
-        ],
+        estimate: estimateFor(pending(due, "maintain").length),
+        comingUp: pending(upcoming, "maintain").map(toUpcoming),
+        perLanguage: retention.map((row) => ({
+          ...row,
+          nextDueAt: nextDueFor(row.language, row.direction),
+        })),
       };
     },
 
@@ -362,7 +457,11 @@ export function createDemoClient(options: DemoClientOptions = {}): OwnwordsClien
 
     async getLesson(lessonId: string): Promise<Lesson> {
       if (lessonId !== demoLesson.id) {
-        throw new OwnwordsError('not_found', 'That lesson is not in the course yet.', 404);
+        throw new OwnwordsError(
+          "not_found",
+          "That lesson is not in the course yet.",
+          404,
+        );
       }
       return clone(demoLesson);
     },

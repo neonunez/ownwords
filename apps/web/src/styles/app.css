@@ -152,7 +152,7 @@ body {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .ow-btn[data-variant='primary']:hover:not(:disabled) {
+  .ow-btn[data-variant="primary"]:hover:not(:disabled) {
     background: var(--accent-hover);
   }
 

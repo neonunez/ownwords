@@ -12,19 +12,21 @@
 export type LanguageTag = string;
 
 /** Practice runs in one direction at a time, and mastery is tracked per direction. */
-export type Direction = 'recognise' | 'produce';
+export type Direction = "recognise" | "produce";
 
 /** What the person stored: a single word, or a fixed expression. */
-export type EntryKind = 'word' | 'expression';
+export type EntryKind = "word" | "expression";
 
 /** How well an equivalent covers the meaning the person owns. */
-export type Fit = 'exact' | 'broader' | 'narrower' | 'context-only' | 'false-friend';
+export type Fit =
+  "exact" | "broader" | "narrower" | "context-only" | "false-friend";
 
 /** Where an equivalent came from, and whether the person has reviewed it. */
-export type TranslationState = 'suggested' | 'confirmed' | 'waiting' | 'failed' | 'manual';
+export type TranslationState =
+  "suggested" | "confirmed" | "waiting" | "failed" | "manual";
 
 /** How a language sits in the collection. */
-export type LanguageRole = 'native' | 'maintained' | 'learning';
+export type LanguageRole = "native" | "maintained" | "learning";
 
 export interface Language {
   code: LanguageTag;
@@ -92,7 +94,7 @@ export interface EntryQuery {
  * `strong`: something has been practised, and every practised direction is at
  * two thirds or above.
  */
-export type MasteryBand = 'weak' | 'strong';
+export type MasteryBand = "weak" | "strong";
 
 export interface Page<T> {
   items: T[];
@@ -125,14 +127,14 @@ export interface Starter {
 
 export interface SuggestionResult {
   language: LanguageTag;
-  state: Extract<TranslationState, 'suggested' | 'failed'>;
+  state: Extract<TranslationState, "suggested" | "failed">;
   text: string;
   /** Present only when the suggestion failed, and always safe to show. */
   reason?: string;
 }
 
 /** One question the scheduler picked, in the format the tab asked for. */
-export type PracticeFormat = 'cloze' | 'flashcard';
+export type PracticeFormat = "cloze" | "flashcard";
 
 export interface PracticeCard {
   cardId: string;
@@ -152,7 +154,7 @@ export interface PracticeCard {
 }
 
 export interface PracticeScope {
-  mode: 'maintain' | 'learn';
+  mode: "maintain" | "learn";
   /** Ask for the cards coming up next, before they are due, instead of what is due now. */
   ahead?: boolean;
 }
@@ -174,7 +176,7 @@ export interface UpcomingItem {
 }
 
 /** What a person did with one card. Mirrors the FSRS ratings the backend takes. */
-export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
+export type ReviewRating = "again" | "hard" | "good" | "easy";
 
 export interface ReviewSubmission {
   cardId: string;
@@ -204,7 +206,7 @@ export interface ProgressSummary {
 
 /* ---- Learn ------------------------------------------------------------- */
 
-export type UnitState = 'done' | 'current' | 'locked';
+export type UnitState = "done" | "current" | "locked";
 
 export interface CourseUnit {
   id: string;
@@ -241,7 +243,7 @@ export interface Course {
   milestones: Milestone[];
 }
 
-export type LessonStepKind = 'hear' | 'rule' | 'use' | 'perception';
+export type LessonStepKind = "hear" | "rule" | "use" | "perception";
 
 export interface LessonItem {
   id: string;
@@ -306,5 +308,5 @@ export interface Preferences {
   audioInCourse: boolean;
   suggestTranslations: boolean;
   /** Reminders are asked for after install, never before. */
-  reminders: 'after-install' | 'on' | 'off';
+  reminders: "after-install" | "on" | "off";
 }

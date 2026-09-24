@@ -108,7 +108,7 @@ schedule.
 
 ## Platform requirements
 
-- Installable web app that feels native on the phone: iOS styling on iOS, Material styling on Android. A native app stays a later option.
+- Installable web app that feels native on the phone: one shared Ownwords visual style on every platform, with platform-specific behaviour (safe areas, standalone display, the back gesture) where the platform expects it. A native app stays a later option.
 - Online-first; the desktop browser works but is not a design target.
 - Sign-in without passwords: federated sign-in and passkeys, with access by invitation.
 - Learning content is versioned; translations are fetched on demand and cached.

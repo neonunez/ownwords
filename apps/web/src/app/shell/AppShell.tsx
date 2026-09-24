@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { TabBar } from '../../design-system';
-import { activeTabKey, homeFor, modeFromPath, tabsFor, type Mode } from '../navigation';
-import { OverlayProvider, useOverlayHost } from './OverlayHost';
-import { SidePanel } from './SidePanel';
-import { ToastProvider } from './ToastProvider';
-import { UpdatePrompt } from '../../pwa/UpdatePrompt';
-import { useAsync } from './useAsync';
-import { useClient } from './ClientProvider';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { TabBar } from "../../design-system";
+import {
+  activeTabKey,
+  homeFor,
+  modeFromPath,
+  tabsFor,
+  type Mode,
+} from "../navigation";
+import { OverlayProvider, useOverlayHost } from "./OverlayHost";
+import { SidePanel } from "./SidePanel";
+import { ToastProvider } from "./ToastProvider";
+import { UpdatePrompt } from "../../pwa/UpdatePrompt";
+import { useAsync } from "./useAsync";
+import { useClient } from "./ClientProvider";
 
 interface PanelState {
   panel?: boolean;
@@ -32,7 +38,11 @@ export function AppShell() {
   );
 }
 
-function ShellBody({ setHost }: { setHost: (node: HTMLDivElement | null) => void }) {
+function ShellBody({
+  setHost,
+}: {
+  setHost: (node: HTMLDivElement | null) => void;
+}) {
   const location = useLocation();
   const navigate = useNavigate();
   const client = useClient();
@@ -47,7 +57,9 @@ function ShellBody({ setHost }: { setHost: (node: HTMLDivElement | null) => void
   const languages = useAsync(() => client.listLanguages(), [client]);
 
   const openPanel = useCallback(() => {
-    navigate(`${location.pathname}${location.search}`, { state: { panel: true } });
+    navigate(`${location.pathname}${location.search}`, {
+      state: { panel: true },
+    });
   }, [navigate, location.pathname, location.search]);
 
   const closePanel = useCallback(() => {
@@ -72,12 +84,7 @@ function ShellBody({ setHost }: { setHost: (node: HTMLDivElement | null) => void
 
   return (
     <>
-      <main
-        ref={mainRef}
-        className="ow-main"
-        id="ow-main"
-        inert={sealed}
-      >
+      <main ref={mainRef} className="ow-main" id="ow-main" inert={sealed}>
         <div className="ow-screen" key={location.pathname}>
           <Outlet context={{ openPanel }} />
         </div>
@@ -91,9 +98,15 @@ function ShellBody({ setHost }: { setHost: (node: HTMLDivElement | null) => void
         <TabBar
           tabs={tabs}
           activeKey={activeKey}
-          label={mode === 'learn' ? 'Learn' : 'Maintain'}
+          label={mode === "learn" ? "Learn" : "Maintain"}
           onSelect={(href, event) => {
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+            if (
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.button !== 0
+            )
+              return;
             event.preventDefault();
             navigate(href);
           }}

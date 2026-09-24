@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom/vitest';
+import "@testing-library/jest-dom/vitest";
 
 // jsdom has no layout engine, so these are stubbed rather than asserted on.
 if (!window.matchMedia) {
@@ -16,7 +16,10 @@ if (!window.matchMedia) {
 
 if (!window.requestAnimationFrame) {
   window.requestAnimationFrame = ((callback: FrameRequestCallback) =>
-    setTimeout(() => callback(performance.now()), 0) as unknown as number) as typeof requestAnimationFrame;
+    setTimeout(
+      () => callback(performance.now()),
+      0,
+    ) as unknown as number) as typeof requestAnimationFrame;
 }
 
 // jsdom implements no scrolling, and the shell scrolls a new screen to the top.

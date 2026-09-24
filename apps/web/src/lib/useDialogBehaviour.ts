@@ -1,5 +1,5 @@
-import { useEffect, useRef, type RefObject } from 'react';
-import { focusableWithin } from './focus';
+import { useEffect, useRef, type RefObject } from "react";
+import { focusableWithin } from "./focus";
 
 /**
  * Modal behaviour for an overlay that lives inside the app frame rather than
@@ -28,8 +28,8 @@ export function useDialogBehaviour(
       const target = event.target as HTMLElement | null;
       if (target && target !== document.body) trigger.current = target;
     };
-    document.addEventListener('focusin', remember);
-    return () => document.removeEventListener('focusin', remember);
+    document.addEventListener("focusin", remember);
+    return () => document.removeEventListener("focusin", remember);
   }, [active]);
 
   useEffect(() => {
@@ -41,12 +41,12 @@ export function useDialogBehaviour(
     (first ?? panel).focus({ preventScroll: true });
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.stopPropagation();
         close.current();
         return;
       }
-      if (event.key !== 'Tab') return;
+      if (event.key !== "Tab") return;
       const focusable = focusableWithin(panel);
       if (focusable.length === 0) {
         event.preventDefault();
@@ -64,9 +64,9 @@ export function useDialogBehaviour(
       }
     };
 
-    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
       // Focus cannot land in an inert subtree, and the shell lifts `inert` in
       // a render scheduled after this cleanup. Rather than guess when that
       // lands, ask for the focus each frame until it takes, and give up.
@@ -74,11 +74,16 @@ export function useDialogBehaviour(
         const node = trigger.current;
         if (!node) return;
         node.focus({ preventScroll: true });
-        if (document.activeElement !== node && attempt < 5 && typeof requestAnimationFrame === 'function') {
+        if (
+          document.activeElement !== node &&
+          attempt < 5 &&
+          typeof requestAnimationFrame === "function"
+        ) {
           requestAnimationFrame(() => restore(attempt + 1));
         }
       };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => restore(0));
+      if (typeof requestAnimationFrame === "function")
+        requestAnimationFrame(() => restore(0));
       else restore(0);
     };
   }, [ref, active]);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState } from "react";
 import {
   Button,
   Card,
@@ -8,17 +8,17 @@ import {
   SegmentedControl,
   TextField,
   TopBar,
-} from '../../design-system';
-import { Screen } from '../layout';
-import { Failed, Loading } from './ScreenState';
-import { useAsync } from '../shell/useAsync';
-import { useClient } from '../shell/ClientProvider';
-import { useScreen } from '../shell/useScreen';
-import { answersMatch, firstWord } from '../../lib/text';
-import { localId } from '../../lib/ids';
-import type { PracticeCard, PracticeFormat } from '../../api/types';
+} from "../../design-system";
+import { Screen } from "../layout";
+import { Failed, Loading } from "./ScreenState";
+import { useAsync } from "../shell/useAsync";
+import { useClient } from "../shell/ClientProvider";
+import { useScreen } from "../shell/useScreen";
+import { answersMatch, firstWord } from "../../lib/text";
+import { localId } from "../../lib/ids";
+import type { PracticeCard, PracticeFormat } from "../../api/types";
 
-type Phase = 'ask' | 'hint' | 'shown' | 'right';
+type Phase = "ask" | "hint" | "shown" | "right";
 
 export interface PracticeScreenProps {
   /** The tab chooses the format; the scheduler chooses the content. */
@@ -26,13 +26,13 @@ export interface PracticeScreenProps {
   /** Whether the format can be switched from this tab. */
   allowFormatChange?: boolean;
   title: string;
-  mode: 'maintain' | 'learn';
+  mode: "maintain" | "learn";
   modeLabel: string;
 }
 
 const formats: { value: PracticeFormat; label: string }[] = [
-  { value: 'cloze', label: 'Complete the phrase' },
-  { value: 'flashcard', label: 'Flashcards' },
+  { value: "cloze", label: "Complete the phrase" },
+  { value: "flashcard", label: "Flashcards" },
 ];
 
 export function PracticeScreen({
@@ -48,13 +48,16 @@ export function PracticeScreen({
   // Null until the person answers something: until then the queue is exactly
   // what the scheduler handed over.
   const [answered, setAnswered] = useState<PracticeCard[] | null>(null);
-  const [phase, setPhase] = useState<Phase>('ask');
-  const [typed, setTyped] = useState('');
+  const [phase, setPhase] = useState<Phase>("ask");
+  const [typed, setTyped] = useState("");
   const [flipped, setFlipped] = useState(false);
   // Once the due queue is done, the person may practise what is coming next.
   const [ahead, setAhead] = useState(false);
 
-  const state = useAsync(() => client.getDueQueue({ mode, ahead }), [client, mode, ahead]);
+  const state = useAsync(
+    () => client.getDueQueue({ mode, ahead }),
+    [client, mode, ahead],
+  );
 
   const queue = answered ?? state.data?.cards ?? [];
   const card = queue[0] ?? null;
@@ -64,35 +67,35 @@ export function PracticeScreen({
 
   const comingUp = useMemo(() => state.data?.comingUp ?? [], [state.data]);
 
-  const advance = (rating: 'again' | 'good') => {
+  const advance = (rating: "again" | "good") => {
     if (!card) return;
     void client.submitReview({
       cardId: card.cardId,
       rating,
       format,
-      submissionId: localId('r'),
+      submissionId: localId("r"),
     });
     const [head, ...rest] = queue;
     // "Again" brings the card back later in the same session.
-    setAnswered(rating === 'again' && head ? [...rest, head] : rest);
-    setPhase('ask');
-    setTyped('');
+    setAnswered(rating === "again" && head ? [...rest, head] : rest);
+    setPhase("ask");
+    setTyped("");
     setFlipped(false);
   };
 
   const check = () => {
     if (!card || !typed.trim()) return;
     if (answersMatch(typed, card.answer)) {
-      setPhase('right');
+      setPhase("right");
       return;
     }
-    setPhase(phase === 'hint' ? 'shown' : 'hint');
+    setPhase(phase === "hint" ? "shown" : "hint");
   };
 
   const practiseAhead = () => {
     setAnswered(null);
-    setPhase('ask');
-    setTyped('');
+    setPhase("ask");
+    setTyped("");
     setFlipped(false);
     setAhead(true);
     state.reload();
@@ -115,7 +118,10 @@ export function PracticeScreen({
     return (
       <>
         {header}
-        <Failed message="What is due could not be read. Nothing was lost." onRetry={state.reload} />
+        <Failed
+          message="What is due could not be read. Nothing was lost."
+          onRetry={state.reload}
+        />
       </>
     );
   }
@@ -132,23 +138,41 @@ export function PracticeScreen({
             onChange={(next) => {
               setFormat(next);
               setFlipped(false);
-              setPhase('ask');
-              setTyped('');
+              setPhase("ask");
+              setTyped("");
             }}
           />
         )}
 
         {!card ? (
-          <Card tone="soft" padding={24} style={{ textAlign: 'center' }}>
-            <Mascot expression="happy" size={80} bob style={{ margin: '0 auto 12px' }} />
-            <p style={{ margin: 0, font: 'var(--type-title)' }}>That is everything due.</p>
+          <Card tone="soft" padding={24} style={{ textAlign: "center" }}>
+            <Mascot
+              expression="happy"
+              size={80}
+              bob
+              style={{ margin: "0 auto 12px" }}
+            />
+            <p style={{ margin: 0, font: "var(--type-title)" }}>
+              That is everything due.
+            </p>
             {comingUp[0] ? (
               <>
-                <p style={{ margin: '6px 0 16px', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
-                  Next up:{' '}
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}>
+                <p
+                  style={{
+                    margin: "6px 0 16px",
+                    font: "var(--type-body)",
+                    color: "var(--fg-2)",
+                  }}
+                >
+                  Next up:{" "}
+                  <span
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      fontWeight: 500,
+                    }}
+                  >
                     {comingUp[0].headword}
-                  </span>{' '}
+                  </span>{" "}
                   in {comingUp[0].language.toUpperCase()}, {comingUp[0].when}.
                 </p>
                 <Button variant="secondary" onClick={practiseAhead}>
@@ -156,7 +180,13 @@ export function PracticeScreen({
                 </Button>
               </>
             ) : (
-              <p style={{ margin: '6px 0 0', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  font: "var(--type-body)",
+                  color: "var(--fg-2)",
+                }}
+              >
                 Nothing else is coming up yet.
               </p>
             )}
@@ -165,38 +195,38 @@ export function PracticeScreen({
           <>
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
+                display: "flex",
+                justifyContent: "space-between",
                 gap: 12,
-                padding: '0 4px',
-                font: 'var(--type-caption)',
-                color: 'var(--fg-3)',
+                padding: "0 4px",
+                font: "var(--type-caption)",
+                color: "var(--fg-3)",
               }}
             >
               <span>
-                {position} of {total} {ahead ? 'ahead of time' : 'due'}
+                {position} of {total} {ahead ? "ahead of time" : "due"}
               </span>
               <span>
                 {card.language.toUpperCase()} · {card.direction}
               </span>
             </div>
 
-            {format === 'cloze' ? (
+            {format === "cloze" ? (
               <ClozeCard
                 card={card}
                 phase={phase}
                 typed={typed}
                 onTyped={setTyped}
                 onCheck={check}
-                onNext={() => advance(phase === 'right' ? 'good' : 'again')}
+                onNext={() => advance(phase === "right" ? "good" : "again")}
               />
             ) : (
               <FlashCard
                 card={card}
                 flipped={flipped}
                 onFlip={() => setFlipped((value) => !value)}
-                onAgain={() => advance('again')}
-                onGotIt={() => advance('good')}
+                onAgain={() => advance("again")}
+                onGotIt={() => advance("good")}
               />
             )}
           </>
@@ -222,91 +252,106 @@ function ClozeCard({
   onNext: () => void;
 }) {
   return (
-    <Card padding={20} style={{ minHeight: 200, display: 'grid', alignContent: 'space-between', gap: 16 }}>
+    <Card
+      padding={20}
+      style={{
+        minHeight: 200,
+        display: "grid",
+        alignContent: "space-between",
+        gap: 16,
+      }}
+    >
       <div>
         <p
           style={{
             margin: 0,
-            font: 'var(--type-overline)',
-            letterSpacing: 'var(--tracking-wide)',
-            textTransform: 'uppercase',
-            color: 'var(--fg-3)',
+            font: "var(--type-overline)",
+            letterSpacing: "var(--tracking-wide)",
+            textTransform: "uppercase",
+            color: "var(--fg-3)",
           }}
         >
-          {card.direction === 'produce' ? 'Complete it' : 'What does it mean?'}
+          {card.direction === "produce" ? "Complete it" : "What does it mean?"}
         </p>
         <p
           lang={card.promptLanguage}
           style={{
-            margin: '10px 0 0',
-            font: 'var(--type-headword)',
-            fontSize: '1.5rem',
+            margin: "10px 0 0",
+            font: "var(--type-headword)",
+            fontSize: "1.5rem",
             lineHeight: 1.3,
-            letterSpacing: 'var(--tracking-display)',
+            letterSpacing: "var(--tracking-display)",
           }}
         >
           {card.prompt}
         </p>
 
-        {phase === 'hint' && (
+        {phase === "hint" && (
           <p
             role="status"
             style={{
-              margin: '12px 0 0',
-              padding: '10px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--state-waiting-soft)',
-              color: 'var(--fg-1)',
-              font: 'var(--type-body)',
-              fontSize: '.9375rem',
+              margin: "12px 0 0",
+              padding: "10px 12px",
+              borderRadius: "var(--radius-md)",
+              background: "var(--state-waiting-soft)",
+              color: "var(--fg-1)",
+              font: "var(--type-body)",
+              fontSize: ".9375rem",
             }}
           >
-            <b style={{ fontWeight: 600 }}>Not quite.</b>{' '}
-            {card.hint ?? `It starts with “${firstWord(card.answer)}”.`} Once more?
+            <b style={{ fontWeight: 600 }}>Not quite.</b>{" "}
+            {card.hint ?? `It starts with “${firstWord(card.answer)}”.`} Once
+            more?
           </p>
         )}
 
-        {phase === 'shown' && (
+        {phase === "shown" && (
           <p
             role="status"
             style={{
-              margin: '12px 0 0',
-              padding: '10px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-sunken)',
-              font: 'var(--type-body)',
-              fontSize: '.9375rem',
+              margin: "12px 0 0",
+              padding: "10px 12px",
+              borderRadius: "var(--radius-md)",
+              background: "var(--bg-sunken)",
+              font: "var(--type-body)",
+              fontSize: ".9375rem",
             }}
           >
-            The answer is{' '}
-            <span lang={card.language} style={{ fontFamily: 'var(--font-display)', fontSize: '1.0625rem' }}>
+            The answer is{" "}
+            <span
+              lang={card.language}
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "1.0625rem",
+              }}
+            >
               {card.answer}
             </span>
             . It comes back later this session.
           </p>
         )}
 
-        {phase === 'right' && (
+        {phase === "right" && (
           <p
             role="status"
             style={{
-              margin: '12px 0 0',
-              display: 'flex',
-              alignItems: 'center',
+              margin: "12px 0 0",
+              display: "flex",
+              alignItems: "center",
               gap: 8,
-              color: 'var(--state-confirmed)',
-              font: 'var(--type-label)',
+              color: "var(--state-confirmed)",
+              font: "var(--type-label)",
             }}
           >
             <Icon name="check" size={18} strokeWidth={2.2} />
-            Right —{' '}
+            Right —{" "}
             <span
               lang={card.language}
               style={{
-                fontFamily: 'var(--font-display)',
+                fontFamily: "var(--font-display)",
                 fontWeight: 400,
-                fontSize: '1.0625rem',
-                color: 'var(--fg-1)',
+                fontSize: "1.0625rem",
+                color: "var(--fg-1)",
               }}
             >
               {card.answer}
@@ -315,7 +360,7 @@ function ClozeCard({
         )}
       </div>
 
-      {phase === 'ask' || phase === 'hint' ? (
+      {phase === "ask" || phase === "hint" ? (
         <TextField
           display
           size="lg"
@@ -329,7 +374,7 @@ function ClozeCard({
           autoCorrect="off"
           spellCheck={false}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
+            if (event.key === "Enter") {
               event.preventDefault();
               onCheck();
             }
@@ -338,7 +383,7 @@ function ClozeCard({
             <IconButton
               name="corner-down-left"
               label="Check your answer"
-              variant={typed ? 'filled' : 'tonal'}
+              variant={typed ? "filled" : "tonal"}
               size={36}
               onClick={onCheck}
             />
@@ -374,79 +419,89 @@ function FlashCard({
           onClick={onFlip}
           aria-pressed={flipped}
           style={{
-            display: 'block',
-            width: '100%',
+            display: "block",
+            width: "100%",
             minHeight: 240,
             border: 0,
             padding: 0,
-            background: 'transparent',
-            cursor: 'pointer',
-            transformStyle: 'preserve-3d',
-            transition: 'transform var(--motion-slow) var(--ease-spring)',
-            transform: flipped ? 'rotateY(180deg)' : 'none',
-            position: 'relative',
-            font: 'inherit',
-            color: 'inherit',
+            background: "transparent",
+            cursor: "pointer",
+            transformStyle: "preserve-3d",
+            transition: "transform var(--motion-slow) var(--ease-spring)",
+            transform: flipped ? "rotateY(180deg)" : "none",
+            position: "relative",
+            font: "inherit",
+            color: "inherit",
           }}
         >
           <span
             style={{
-              position: 'absolute',
+              position: "absolute",
               inset: 0,
-              backfaceVisibility: 'hidden',
-              borderRadius: 'var(--radius-lg)',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-1)',
-              boxShadow: 'var(--shadow-2)',
-              display: 'grid',
-              placeContent: 'center',
+              backfaceVisibility: "hidden",
+              borderRadius: "var(--radius-lg)",
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border-1)",
+              boxShadow: "var(--shadow-2)",
+              display: "grid",
+              placeContent: "center",
               gap: 8,
               padding: 24,
-              textAlign: 'center',
+              textAlign: "center",
             }}
           >
             <span
               style={{
-                font: 'var(--type-overline)',
-                letterSpacing: 'var(--tracking-wide)',
-                textTransform: 'uppercase',
-                color: 'var(--fg-3)',
+                font: "var(--type-overline)",
+                letterSpacing: "var(--tracking-wide)",
+                textTransform: "uppercase",
+                color: "var(--fg-3)",
               }}
             >
               {card.promptLanguage.toUpperCase()}
             </span>
             <span
               lang={card.promptLanguage}
-              style={{ font: 'var(--type-hero)', fontSize: '2rem', letterSpacing: 'var(--tracking-display)' }}
+              style={{
+                font: "var(--type-hero)",
+                fontSize: "2rem",
+                letterSpacing: "var(--tracking-display)",
+              }}
             >
               {card.headword}
             </span>
-            <span style={{ font: 'var(--type-caption)', color: 'var(--fg-3)', marginTop: 8 }}>
-              {flipped ? 'Tap to see it again' : 'Tap to turn it over'}
+            <span
+              style={{
+                font: "var(--type-caption)",
+                color: "var(--fg-3)",
+                marginTop: 8,
+              }}
+            >
+              {flipped ? "Tap to see it again" : "Tap to turn it over"}
             </span>
           </span>
           <span
             aria-hidden={!flipped}
             style={{
-              position: 'absolute',
+              position: "absolute",
               inset: 0,
-              backfaceVisibility: 'hidden',
-              transform: 'rotateY(180deg)',
-              borderRadius: 'var(--radius-lg)',
-              background: 'var(--bg-inverse)',
-              color: 'var(--fg-inverse)',
-              display: 'grid',
-              placeContent: 'center',
+              backfaceVisibility: "hidden",
+              transform: "rotateY(180deg)",
+              borderRadius: "var(--radius-lg)",
+              background: "var(--bg-inverse)",
+              color: "var(--fg-inverse)",
+              display: "grid",
+              placeContent: "center",
               gap: 8,
               padding: 24,
-              textAlign: 'center',
+              textAlign: "center",
             }}
           >
             <span
               style={{
-                font: 'var(--type-overline)',
-                letterSpacing: 'var(--tracking-wide)',
-                textTransform: 'uppercase',
+                font: "var(--type-overline)",
+                letterSpacing: "var(--tracking-wide)",
+                textTransform: "uppercase",
                 opacity: 0.6,
               }}
             >
@@ -454,7 +509,11 @@ function FlashCard({
             </span>
             <span
               lang={card.language}
-              style={{ font: 'var(--type-hero)', fontSize: '2rem', letterSpacing: 'var(--tracking-display)' }}
+              style={{
+                font: "var(--type-hero)",
+                fontSize: "2rem",
+                letterSpacing: "var(--tracking-display)",
+              }}
             >
               {card.answer}
             </span>
@@ -463,8 +522,20 @@ function FlashCard({
       </div>
 
       {flipped && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-          <Button variant="outline" size="lg" icon="rotate-ccw" onClick={onAgain}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            marginTop: 14,
+          }}
+        >
+          <Button
+            variant="outline"
+            size="lg"
+            icon="rotate-ccw"
+            onClick={onAgain}
+          >
             Again
           </Button>
           <Button size="lg" icon="check" onClick={onGotIt}>

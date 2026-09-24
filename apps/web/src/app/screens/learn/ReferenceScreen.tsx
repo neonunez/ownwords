@@ -1,11 +1,11 @@
-import { Card, Icon, TopBar } from '../../../design-system';
-import type { IconName } from '../../../design-system';
-import { Note, Screen } from '../../layout';
-import { Failed, Loading } from '../ScreenState';
-import { useAsync } from '../../shell/useAsync';
-import { useClient } from '../../shell/ClientProvider';
-import { useScreen } from '../../shell/useScreen';
-import { useToast } from '../../shell/ToastProvider';
+import { Card, Icon, TopBar } from "../../../design-system";
+import type { IconName } from "../../../design-system";
+import { Note, Screen } from "../../layout";
+import { Failed, Loading } from "../ScreenState";
+import { useAsync } from "../../shell/useAsync";
+import { useClient } from "../../shell/ClientProvider";
+import { useScreen } from "../../shell/useScreen";
+import { useToast } from "../../shell/ToastProvider";
 
 /** One lookup tab, with grammar and verbs as its first and largest screen. */
 export function ReferenceScreen() {
@@ -14,7 +14,9 @@ export function ReferenceScreen() {
   const { showToast } = useToast();
   const state = useAsync(() => client.listReferenceTopics(), [client]);
 
-  const header = <TopBar title="Reference" large mode="Learn · Русский" onMenu={openPanel} />;
+  const header = (
+    <TopBar title="Reference" large mode="Learn · Русский" onMenu={openPanel} />
+  );
 
   if (state.loading && !state.data) {
     return (
@@ -28,7 +30,10 @@ export function ReferenceScreen() {
     return (
       <>
         {header}
-        <Failed message="The reference could not be read. Nothing was lost." onRetry={state.reload} />
+        <Failed
+          message="The reference could not be read. Nothing was lost."
+          onRetry={state.reload}
+        />
       </>
     );
   }
@@ -44,24 +49,27 @@ export function ReferenceScreen() {
             <button
               key={topic.id}
               type="button"
-              className={topic.locked ? undefined : 'ow-row'}
+              className={topic.locked ? undefined : "ow-row"}
               disabled={topic.locked}
-              onClick={() => showToast(`${topic.title} opens with the course content.`)}
+              onClick={() =>
+                showToast(`${topic.title} opens with the course content.`)
+              }
               style={{
-                display: 'grid',
-                gridTemplateColumns: '40px minmax(0, 1fr) auto',
+                display: "grid",
+                gridTemplateColumns: "40px minmax(0, 1fr) auto",
                 gap: 14,
-                alignItems: 'center',
-                width: '100%',
-                padding: '14px 16px',
+                alignItems: "center",
+                width: "100%",
+                padding: "14px 16px",
                 minHeight: 64,
                 border: 0,
-                borderBottom: index < topics.length - 1 ? '1px solid var(--border-1)' : 0,
-                background: 'transparent',
-                color: 'inherit',
-                textAlign: 'left',
-                cursor: topic.locked ? 'default' : 'pointer',
-                font: 'inherit',
+                borderBottom:
+                  index < topics.length - 1 ? "1px solid var(--border-1)" : 0,
+                background: "transparent",
+                color: "inherit",
+                textAlign: "left",
+                cursor: topic.locked ? "default" : "pointer",
+                font: "inherit",
                 opacity: topic.locked ? 0.6 : 1,
               }}
             >
@@ -70,23 +78,29 @@ export function ReferenceScreen() {
                   width: 40,
                   height: 40,
                   borderRadius: 99,
-                  background: 'var(--accent-soft)',
-                  color: 'var(--accent-soft-fg)',
-                  display: 'grid',
-                  placeItems: 'center',
+                  background: "var(--accent-soft)",
+                  color: "var(--accent-soft-fg)",
+                  display: "grid",
+                  placeItems: "center",
                 }}
               >
                 <Icon name={topic.icon as IconName} size={20} />
               </span>
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', font: 'var(--type-label)', fontSize: '1rem' }}>
+                <span
+                  style={{
+                    display: "block",
+                    font: "var(--type-label)",
+                    fontSize: "1rem",
+                  }}
+                >
                   {topic.title}
                 </span>
                 <span
                   style={{
-                    display: 'block',
-                    font: 'var(--type-caption)',
-                    color: 'var(--fg-3)',
+                    display: "block",
+                    font: "var(--type-caption)",
+                    color: "var(--fg-3)",
                     marginTop: 2,
                   }}
                 >
@@ -95,22 +109,24 @@ export function ReferenceScreen() {
               </span>
               <span
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
+                  display: "flex",
+                  alignItems: "center",
                   gap: 6,
-                  font: 'var(--type-caption)',
-                  color: 'var(--fg-3)',
+                  font: "var(--type-caption)",
+                  color: "var(--fg-3)",
                 }}
               >
-                {topic.locked ? `${topic.introducedIn} · locked` : topic.introducedIn}
+                {topic.locked
+                  ? `${topic.introducedIn} · locked`
+                  : topic.introducedIn}
                 <Icon name="chevron-right" size={18} />
               </span>
             </button>
           ))}
         </Card>
         <Note>
-          Each topic says which unit introduced it and what is still locked, and offers practice on the
-          spot.
+          Each topic says which unit introduced it and what is still locked, and
+          offers practice on the spot.
         </Note>
       </Screen>
     </>

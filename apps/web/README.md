@@ -164,6 +164,26 @@ Changed on the way in, deliberately:
 | Press states via inline mouse handlers | CSS classes on `:active` | Touch, keyboard and reduced motion all behave |
 | `--neutral-500`, `--green-500`, `--amber-500` | Three stops darker in light mode | Small text on its own tint was between 3.2:1 and 4.4:1 |
 
+### One style on every platform
+
+Ownwords keeps one shared visual style on iOS, Android and the desktop
+browser. It does not build a Material, or any other platform-native, visual
+variant. The design package ships only the iOS-flavoured kit and says the
+Material flavouring is not built. For this release that decision replaces the
+root README's "iOS styling on iOS, Material styling on Android".
+
+What changes per platform is behaviour, and only where the platform expects
+it:
+
+- Safe-area insets, through `viewport-fit=cover` and `env(safe-area-inset-*)`.
+- Standalone and fullscreen display when installed, handled by
+  `display-mode` media queries.
+- The phone's back gesture, which works because every screen is a history
+  entry.
+- `prefers-reduced-motion` and `prefers-color-scheme`.
+- The `theme-color` meta, which follows the theme so the installed window's
+  bars match it.
+
 Not imported: the generated review artefacts that ship alongside the package
 (the bundled offline HTML, the manifest and adherence files, the pasted
 screenshots) and the specimen pages that depend on them.

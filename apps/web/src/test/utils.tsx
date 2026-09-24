@@ -1,12 +1,15 @@
-import type { ReactElement, ReactNode } from 'react';
-import { render, type RenderResult } from '@testing-library/react';
-import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
-import { ClientProvider } from '../app/shell/ClientProvider';
-import { ThemeProvider } from '../app/shell/ThemeProvider';
-import { ToastProvider } from '../app/shell/ToastProvider';
-import { OverlayProvider } from '../app/shell/OverlayHost';
-import { createDemoClient, type DemoClientOptions } from '../api/demo/demoClient';
-import type { OwnwordsClient } from '../api/client';
+import type { ReactElement, ReactNode } from "react";
+import { render, type RenderResult } from "@testing-library/react";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { ClientProvider } from "../app/shell/ClientProvider";
+import { ThemeProvider } from "../app/shell/ThemeProvider";
+import { ToastProvider } from "../app/shell/ToastProvider";
+import { OverlayProvider } from "../app/shell/OverlayHost";
+import {
+  createDemoClient,
+  type DemoClientOptions,
+} from "../api/demo/demoClient";
+import type { OwnwordsClient } from "../api/client";
 
 export interface RenderOptions {
   /** The location the screen is rendered at, so route params resolve. */
@@ -17,7 +20,13 @@ export interface RenderOptions {
   demo?: DemoClientOptions;
 }
 
-function Providers({ client, children }: { client: OwnwordsClient; children: ReactNode }) {
+function Providers({
+  client,
+  children,
+}: {
+  client: OwnwordsClient;
+  children: ReactNode;
+}) {
   return (
     <ThemeProvider>
       <ClientProvider client={client}>
@@ -30,10 +39,15 @@ function Providers({ client, children }: { client: OwnwordsClient; children: Rea
 }
 
 /** Renders one screen inside the shell's providers and a router. */
-export function renderScreen(ui: ReactElement, options: RenderOptions = {}): RenderResult {
-  const route = options.route ?? '/';
+export function renderScreen(
+  ui: ReactElement,
+  options: RenderOptions = {},
+): RenderResult {
+  const route = options.route ?? "/";
   const path = options.path ?? route;
-  const client = options.client ?? createDemoClient({ suggestionDelaysMs: {}, ...options.demo });
+  const client =
+    options.client ??
+    createDemoClient({ suggestionDelaysMs: {}, ...options.demo });
   return render(
     <Providers client={client}>
       <MemoryRouter initialEntries={[route]}>

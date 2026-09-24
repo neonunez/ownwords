@@ -1,6 +1,14 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Toast } from '../../design-system';
-import type { IconName } from '../../design-system';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Toast } from "../../design-system";
+import type { IconName } from "../../design-system";
 
 export interface ToastOptions {
   icon?: IconName;
@@ -31,38 +39,39 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToast(null);
   }, []);
 
-  const showToast = useCallback(
-    (text: string, options: ToastOptions = {}) => {
-      if (timer.current) clearTimeout(timer.current);
-      setToast({ text, ...options });
-      if (!options.persistent) {
-        timer.current = setTimeout(() => setToast(null), 3600);
-      }
-    },
-    [],
-  );
+  const showToast = useCallback((text: string, options: ToastOptions = {}) => {
+    if (timer.current) clearTimeout(timer.current);
+    setToast({ text, ...options });
+    if (!options.persistent) {
+      timer.current = setTimeout(() => setToast(null), 3600);
+    }
+  }, []);
 
-  const value = useMemo(() => ({ showToast, dismissToast }), [showToast, dismissToast]);
+  const value = useMemo(
+    () => ({ showToast, dismissToast }),
+    [showToast, dismissToast],
+  );
 
   return (
     <ToastContext.Provider value={value}>
       {children}
       <div
         style={{
-          position: 'absolute',
+          position: "absolute",
           left: 0,
           right: 0,
           // Clear of the floating action, which sits in the corner just above
           // the tab bar: a toast that waits for an answer must not cover it.
-          bottom: 'calc(var(--tabbar-h) + var(--safe-bottom) + 84px)',
-          display: 'grid',
-          justifyContent: 'center',
-          padding: '0 var(--gutter)',
-          pointerEvents: 'none',
+          bottom: "calc(var(--tabbar-h) + var(--safe-bottom) + 84px)",
+          display: "grid",
+          justifyContent: "center",
+          padding: "0 var(--gutter)",
+          pointerEvents: "none",
           zIndex: 35,
-          transform: toast ? 'none' : 'translateY(16px)',
+          transform: toast ? "none" : "translateY(16px)",
           opacity: toast ? 1 : 0,
-          transition: 'transform var(--motion-base) var(--ease-spring), opacity var(--motion-base)',
+          transition:
+            "transform var(--motion-base) var(--ease-spring), opacity var(--motion-base)",
         }}
       >
         {toast && (
@@ -83,6 +92,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast(): ToastValue {
   const value = useContext(ToastContext);
-  if (!value) throw new Error('useToast must be used inside a ToastProvider.');
+  if (!value) throw new Error("useToast must be used inside a ToastProvider.");
   return value;
 }

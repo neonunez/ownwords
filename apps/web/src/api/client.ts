@@ -27,7 +27,7 @@ import type {
   ReviewSubmission,
   Starter,
   SuggestionResult,
-} from './types';
+} from "./types";
 
 /** The error every implementation throws, shaped like the backend's body. */
 export class OwnwordsError extends Error {
@@ -36,7 +36,7 @@ export class OwnwordsError extends Error {
 
   constructor(code: string, message: string, status = 0) {
     super(message);
-    this.name = 'OwnwordsError';
+    this.name = "OwnwordsError";
     this.code = code;
     this.status = status;
   }
@@ -45,7 +45,7 @@ export class OwnwordsError extends Error {
 export interface EquivalentPatch {
   text?: string;
   fit?: Fit;
-  state?: Extract<'confirmed' | 'manual', string>;
+  state?: Extract<"confirmed" | "manual", string>;
 }
 
 export interface OwnwordsClient {
@@ -62,7 +62,7 @@ export interface OwnwordsClient {
    * "waiting" to "suggested" or "failed" as each answer arrives.
    */
   requestSuggestions(
-    input: Pick<NewEntry, 'headword' | 'language' | 'note'>,
+    input: Pick<NewEntry, "headword" | "language" | "note">,
     into: readonly string[],
     onResult: (result: SuggestionResult) => void,
     signal?: AbortSignal,
@@ -75,7 +75,11 @@ export interface OwnwordsClient {
     patch: EquivalentPatch,
   ): Promise<Entry>;
 
-  retryTranslation(entryId: string, senseId: string, equivalentId: string): Promise<Entry>;
+  retryTranslation(
+    entryId: string,
+    senseId: string,
+    equivalentId: string,
+  ): Promise<Entry>;
 
   /** The gloss is required; a blank one is refused rather than stored. */
   addSense(entryId: string, gloss: string): Promise<Entry>;

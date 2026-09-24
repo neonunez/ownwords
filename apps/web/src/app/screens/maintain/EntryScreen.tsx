@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Button,
   Card,
@@ -8,24 +8,46 @@ import {
   StateLabel,
   TextField,
   TopBar,
-} from '../../../design-system';
-import { Screen, Section } from '../../layout';
-import { Failed, Loading } from '../ScreenState';
-import { AppSheet } from '../../shell/OverlayHost';
-import { useAsync } from '../../shell/useAsync';
-import { useClient } from '../../shell/ClientProvider';
-import { useToast } from '../../shell/ToastProvider';
-import type { Entry, Equivalent, Fit, Language, Sense } from '../../../api/types';
+} from "../../../design-system";
+import { Screen, Section } from "../../layout";
+import { Failed, Loading } from "../ScreenState";
+import { AppSheet } from "../../shell/OverlayHost";
+import { useAsync } from "../../shell/useAsync";
+import { useClient } from "../../shell/ClientProvider";
+import { useToast } from "../../shell/ToastProvider";
+import type {
+  Entry,
+  Equivalent,
+  Fit,
+  Language,
+  Sense,
+} from "../../../api/types";
 
 const fits: { value: Fit; label: string; description: string }[] = [
-  { value: 'exact', label: 'Exact', description: 'It means the same, in the same situations.' },
-  { value: 'broader', label: 'Broader', description: 'It covers more than I mean.' },
-  { value: 'narrower', label: 'Narrower', description: 'It covers less than I mean.' },
-  { value: 'context-only', label: 'Context-only', description: 'It works only in some situations.' },
   {
-    value: 'false-friend',
-    label: 'False friend',
-    description: 'It looks right and is wrong. Kept, and marked “not this”.',
+    value: "exact",
+    label: "Exact",
+    description: "It means the same, in the same situations.",
+  },
+  {
+    value: "broader",
+    label: "Broader",
+    description: "It covers more than I mean.",
+  },
+  {
+    value: "narrower",
+    label: "Narrower",
+    description: "It covers less than I mean.",
+  },
+  {
+    value: "context-only",
+    label: "Context-only",
+    description: "It works only in some situations.",
+  },
+  {
+    value: "false-friend",
+    label: "False friend",
+    description: "It looks right and is wrong. Kept, and marked “not this”.",
   },
 ];
 
@@ -35,14 +57,14 @@ interface SheetTarget {
 }
 
 export function EntryScreen() {
-  const { entryId = '' } = useParams();
+  const { entryId = "" } = useParams();
   const client = useClient();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [target, setTarget] = useState<SheetTarget | null>(null);
-  const [typed, setTyped] = useState('');
+  const [typed, setTyped] = useState("");
   const [addingSense, setAddingSense] = useState(false);
-  const [gloss, setGloss] = useState('');
+  const [gloss, setGloss] = useState("");
 
   const state = useAsync(
     async () => ({
@@ -52,7 +74,7 @@ export function EntryScreen() {
     [client, entryId],
   );
 
-  const back = () => navigate('/maintain/lexicon');
+  const back = () => navigate("/maintain/lexicon");
 
   if (state.loading && !state.data) {
     return (
@@ -77,29 +99,30 @@ export function EntryScreen() {
 
   const { entry, languages } = state.data;
   const nameOf = (code: string) =>
-    languages.find((language: Language) => language.code === code)?.name ?? code.toUpperCase();
+    languages.find((language: Language) => language.code === code)?.name ??
+    code.toUpperCase();
 
   const apply = async (next: Promise<Entry>, message: string) => {
     const updated = await next;
     state.set({ entry: updated, languages });
-    showToast(message, { icon: 'check' });
+    showToast(message, { icon: "check" });
   };
 
   const closeSheet = () => {
     setTarget(null);
-    setTyped('');
+    setTyped("");
   };
 
   const closeSenseSheet = () => {
     setAddingSense(false);
-    setGloss('');
+    setGloss("");
   };
 
   const saveSense = () => {
     const text = gloss.trim();
     if (!text) return;
     closeSenseSheet();
-    void apply(client.addSense(entry.id, text), 'Sense added.');
+    void apply(client.addSense(entry.id, text), "Sense added.");
   };
 
   return (
@@ -112,19 +135,21 @@ export function EntryScreen() {
           <IconButton
             name="pencil"
             label="Edit this entry"
-            onClick={() => showToast('Editing an entry arrives with the collection backend.')}
+            onClick={() =>
+              showToast("Editing an entry arrives with the collection backend.")
+            }
           />
         }
       />
       <Screen>
-        <div style={{ padding: '4px 4px 0' }}>
+        <div style={{ padding: "4px 4px 0" }}>
           <p
             style={{
               margin: 0,
-              font: 'var(--type-overline)',
-              letterSpacing: 'var(--tracking-wide)',
-              textTransform: 'uppercase',
-              color: 'var(--fg-3)',
+              font: "var(--type-overline)",
+              letterSpacing: "var(--tracking-wide)",
+              textTransform: "uppercase",
+              color: "var(--fg-3)",
             }}
           >
             {nameOf(entry.language)} · {entry.kind}
@@ -132,16 +157,22 @@ export function EntryScreen() {
           <p
             lang={entry.language}
             style={{
-              margin: '6px 0 0',
-              font: 'var(--type-hero)',
-              fontSize: '2.25rem',
-              letterSpacing: 'var(--tracking-display)',
+              margin: "6px 0 0",
+              font: "var(--type-hero)",
+              fontSize: "2.25rem",
+              letterSpacing: "var(--tracking-display)",
             }}
           >
             {entry.headword}
           </p>
           {entry.note && (
-            <p style={{ margin: '8px 0 0', font: 'var(--type-body)', color: 'var(--fg-2)' }}>
+            <p
+              style={{
+                margin: "8px 0 0",
+                font: "var(--type-body)",
+                color: "var(--fg-2)",
+              }}
+            >
               “{entry.note}”
             </p>
           )}
@@ -150,11 +181,22 @@ export function EntryScreen() {
         {entry.senses.map((sense, index) => (
           <Section
             key={sense.id}
-            title={entry.senses.length > 1 ? `Sense ${index + 1} · ${sense.gloss}` : sense.gloss}
+            title={
+              entry.senses.length > 1
+                ? `Sense ${index + 1} · ${sense.gloss}`
+                : sense.gloss
+            }
           >
             <Card padding={0}>
               {sense.equivalents.length === 0 && (
-                <p style={{ margin: 0, padding: '16px', font: 'var(--type-body)', color: 'var(--fg-3)' }}>
+                <p
+                  style={{
+                    margin: 0,
+                    padding: "16px",
+                    font: "var(--type-body)",
+                    color: "var(--fg-3)",
+                  }}
+                >
                   No equivalents on this sense yet.
                 </p>
               )}
@@ -162,20 +204,22 @@ export function EntryScreen() {
                 <div
                   key={equivalent.id}
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '32px minmax(0, 1fr) auto',
+                    display: "grid",
+                    gridTemplateColumns: "32px minmax(0, 1fr) auto",
                     gap: 12,
-                    alignItems: 'center',
-                    padding: '12px 16px',
+                    alignItems: "center",
+                    padding: "12px 16px",
                     borderBottom:
-                      position < sense.equivalents.length - 1 ? '1px solid var(--border-1)' : 0,
+                      position < sense.equivalents.length - 1
+                        ? "1px solid var(--border-1)"
+                        : 0,
                   }}
                 >
                   <span
                     style={{
-                      font: 'var(--type-overline)',
-                      letterSpacing: '.06em',
-                      color: 'var(--fg-3)',
+                      font: "var(--type-overline)",
+                      letterSpacing: ".06em",
+                      color: "var(--fg-3)",
                     }}
                   >
                     {equivalent.language.toUpperCase()}
@@ -185,34 +229,56 @@ export function EntryScreen() {
                       <div
                         lang={equivalent.language}
                         style={{
-                          font: 'var(--type-headword)',
-                          fontSize: '1.125rem',
-                          letterSpacing: 'var(--tracking-display)',
-                          textDecoration: equivalent.fit === 'false-friend' ? 'line-through' : 'none',
-                          color: equivalent.fit === 'false-friend' ? 'var(--fg-3)' : 'var(--fg-1)',
+                          font: "var(--type-headword)",
+                          fontSize: "1.125rem",
+                          letterSpacing: "var(--tracking-display)",
+                          textDecoration:
+                            equivalent.fit === "false-friend"
+                              ? "line-through"
+                              : "none",
+                          color:
+                            equivalent.fit === "false-friend"
+                              ? "var(--fg-3)"
+                              : "var(--fg-1)",
                         }}
                       >
                         {equivalent.text}
                       </div>
                     ) : (
-                      <div style={{ font: 'var(--type-body)', color: 'var(--fg-3)' }}>
-                        {equivalent.state === 'failed'
-                          ? 'Translation failed. Nothing was dropped.'
-                          : 'Waiting for a translation.'}
+                      <div
+                        style={{
+                          font: "var(--type-body)",
+                          color: "var(--fg-3)",
+                        }}
+                      >
+                        {equivalent.state === "failed"
+                          ? "Translation failed. Nothing was dropped."
+                          : "Waiting for a translation."}
                       </div>
                     )}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        marginTop: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
                       {equivalent.fit && <StateLabel state={equivalent.fit} />}
                       <StateLabel state={equivalent.state} />
                     </div>
                   </div>
-                  {equivalent.state === 'failed' ? (
+                  {equivalent.state === "failed" ? (
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={() =>
                         void apply(
-                          client.retryTranslation(entry.id, sense.id, equivalent.id),
+                          client.retryTranslation(
+                            entry.id,
+                            sense.id,
+                            equivalent.id,
+                          ),
                           `Translated into ${nameOf(equivalent.language)}.`,
                         )
                       }
@@ -234,15 +300,24 @@ export function EntryScreen() {
 
         <Section title="Mastery">
           <Card padding={14}>
-            <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: "grid", gap: 12 }}>
               {Object.entries(entry.mastery).length === 0 && (
-                <p style={{ margin: 0, font: 'var(--type-body)', color: 'var(--fg-3)' }}>
-                  Not practised yet. It joins the queue once an equivalent is confirmed.
+                <p
+                  style={{
+                    margin: 0,
+                    font: "var(--type-body)",
+                    color: "var(--fg-3)",
+                  }}
+                >
+                  Not practised yet. It joins the queue once an equivalent is
+                  confirmed.
                 </p>
               )}
               {Object.entries(entry.mastery).map(([code, mastery]) => (
-                <div key={code} style={{ display: 'grid', gap: 8 }}>
-                  <span style={{ font: 'var(--type-label)' }}>{nameOf(code)}</span>
+                <div key={code} style={{ display: "grid", gap: 8 }}>
+                  <span style={{ font: "var(--type-label)" }}>
+                    {nameOf(code)}
+                  </span>
                   <MasteryMeter
                     recognise={mastery.recognise}
                     produce={mastery.produce}
@@ -275,7 +350,7 @@ export function EntryScreen() {
           </Button>
         }
       >
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: "grid", gap: 8 }}>
           <TextField
             label="What does it mean in this sense?"
             name="sense-gloss"
@@ -283,15 +358,19 @@ export function EntryScreen() {
             onChange={setGloss}
             placeholder="A short gloss"
             hint="Adding a sense never rewrites another."
-            lang={entry.language}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') {
+              if (event.key === "Enter") {
                 event.preventDefault();
                 saveSense();
               }
             }}
           />
-          <Button full disabled={!gloss.trim()} icon="check" onClick={saveSense}>
+          <Button
+            full
+            disabled={!gloss.trim()}
+            icon="check"
+            onClick={saveSense}
+          >
             Add this sense
           </Button>
         </div>
@@ -307,7 +386,7 @@ export function EntryScreen() {
           </Button>
         }
       >
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: "grid", gap: 8 }}>
           {fits.map((option) => (
             <button
               key={option.value}
@@ -320,29 +399,35 @@ export function EntryScreen() {
                 void apply(
                   client.updateEquivalent(entry.id, sense.id, equivalent.id, {
                     fit: option.value,
-                    state: 'confirmed',
+                    state: "confirmed",
                   }),
                   `Marked as ${option.label.toLowerCase()}.`,
                 );
               }}
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'auto minmax(0, 1fr)',
+                display: "grid",
+                gridTemplateColumns: "auto minmax(0, 1fr)",
                 gap: 12,
-                alignItems: 'center',
-                textAlign: 'left',
-                padding: '12px 14px',
+                alignItems: "center",
+                textAlign: "left",
+                padding: "12px 14px",
                 minHeight: 52,
-                border: '1px solid var(--border-1)',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-surface)',
-                cursor: 'pointer',
-                font: 'inherit',
-                color: 'inherit',
+                border: "1px solid var(--border-1)",
+                borderRadius: "var(--radius-md)",
+                background: "var(--bg-surface)",
+                cursor: "pointer",
+                font: "inherit",
+                color: "inherit",
               }}
             >
               <StateLabel state={option.value} />
-              <span style={{ font: 'var(--type-caption)', color: 'var(--fg-2)', fontSize: '.8125rem' }}>
+              <span
+                style={{
+                  font: "var(--type-caption)",
+                  color: "var(--fg-2)",
+                  fontSize: ".8125rem",
+                }}
+              >
                 {option.description}
               </span>
             </button>
@@ -367,8 +452,10 @@ export function EntryScreen() {
               const text = typed.trim();
               closeSheet();
               void apply(
-                client.updateEquivalent(entry.id, sense.id, equivalent.id, { text }),
-                'Saved, typed by hand.',
+                client.updateEquivalent(entry.id, sense.id, equivalent.id, {
+                  text,
+                }),
+                "Saved, typed by hand.",
               );
             }}
           >

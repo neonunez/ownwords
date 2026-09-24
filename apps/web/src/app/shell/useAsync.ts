@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 export interface AsyncState<T> {
   data: T | null;
@@ -23,8 +23,15 @@ interface Held<T> {
  * is called on every change and its answer is kept only if it is still the
  * latest one, so a fast second read never loses to a slow first.
  */
-export function useAsync<T>(read: () => Promise<T>, keys: readonly unknown[]): AsyncState<T> {
-  const [held, setHeld] = useState<Held<T>>({ data: null, error: null, run: -1 });
+export function useAsync<T>(
+  read: () => Promise<T>,
+  keys: readonly unknown[],
+): AsyncState<T> {
+  const [held, setHeld] = useState<Held<T>>({
+    data: null,
+    error: null,
+    run: -1,
+  });
   const [run, setRun] = useState(0);
 
   useEffect(() => {

@@ -8,7 +8,7 @@
  */
 
 /** The stress mark the course writes, and the only one an answer may omit. */
-const COMBINING_ACUTE = '́';
+const COMBINING_ACUTE = "́";
 
 /**
  * Fold the accents a search should ignore: those on Latin letters, plus the
@@ -17,14 +17,18 @@ const COMBINING_ACUTE = '́';
  * would merge two different words.
  */
 export function foldAccents(value: string): string {
-  return stripStress(value.normalize('NFD').replace(/(\p{Script=Latin})\p{Mn}+/gu, '$1')).normalize(
-    'NFC',
-  );
+  return stripStress(
+    value.normalize("NFD").replace(/(\p{Script=Latin})\p{Mn}+/gu, "$1"),
+  ).normalize("NFC");
 }
 
 /** Drop only the stress mark, leaving every other diacritic in place. */
 export function stripStress(value: string): string {
-  return value.normalize('NFD').split(COMBINING_ACUTE).join('').normalize('NFC');
+  return value
+    .normalize("NFD")
+    .split(COMBINING_ACUTE)
+    .join("")
+    .normalize("NFC");
 }
 
 /** Case- and accent-insensitive form used for searching the Lexicon. */
@@ -37,8 +41,8 @@ export function answersMatch(typed: string, answer: string): boolean {
   const clean = (value: string) =>
     stripStress(value)
       .toLocaleLowerCase()
-      .replace(/[.,!?;:]/g, '')
-      .replace(/\s+/g, ' ')
+      .replace(/[.,!?;:]/g, "")
+      .replace(/\s+/g, " ")
       .trim();
   const left = clean(typed);
   return left.length > 0 && left === clean(answer);
@@ -55,19 +59,19 @@ export function asPercentage(value: number): string {
 }
 
 const words = [
-  'zero',
-  'one',
-  'two',
-  'three',
-  'four',
-  'five',
-  'six',
-  'seven',
-  'eight',
-  'nine',
-  'ten',
-  'eleven',
-  'twelve',
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
 ];
 
 /** Small numbers read better as words in a sentence: "about four minutes". */

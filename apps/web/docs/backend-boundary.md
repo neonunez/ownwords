@@ -21,7 +21,7 @@ The demo client is deliberately more than a stub: it enforces the behaviour
 the backend enforces, so the screens are exercised against the real rules.
 It searches accent-insensitively, keeps unreviewed suggestions out of
 practice, returns `retention: null` for a direction that has never been
-reviewed, keeps a card rated *again* inside the session, and reports a missing
+reviewed, keeps a card rated _again_ inside the session, and reports a missing
 record as an `OwnwordsError` rather than inventing one.
 
 ## What replaces it
@@ -32,25 +32,25 @@ An `HttpOwnwordsClient` implementing the same interface, mounted in
 The types in `src/api/types.ts` already mirror the contracts published by the
 domain packages, so the HTTP client is a translation layer and not a redesign.
 
-| `OwnwordsClient` method | Route it will call | Package |
-| --- | --- | --- |
-| `listEntries` | `GET /api/v1/lexicon/entries` (`mastery` is a `weak` or `strong` band) | `@ownwords/lexicon` |
-| `getEntry` | `GET /entries/:entryId` | `@ownwords/lexicon` |
-| `createEntry` | `POST /entries` | `@ownwords/lexicon` |
-| `addSense` | `POST /entries/:entryId/senses` (a blank gloss is refused) | `@ownwords/lexicon` |
-| `listStarters`, `addStarter` | not yet defined: the three vetted starter expressions an empty Lexicon offers | `@ownwords/lexicon` |
-| `requestSuggestions` | `POST /entries/:entryId/senses/:senseId/suggestions` | `@ownwords/lexicon` |
-| `updateEquivalent` | `PATCH /entries/:entryId/senses/:senseId/equivalents/:equivalentId` | `@ownwords/lexicon` |
-| `retryTranslation` | `POST /entries/:entryId/senses/:senseId/suggestions` | `@ownwords/lexicon` |
-| `getDueQueue` | `GET /practice/due`; `ahead: true` asks for the cards coming up next, a scope the package has yet to expose | `@ownwords/lexicon` |
-| `submitReview` | `POST /practice/reviews` | `@ownwords/lexicon` |
-| `getProgress` | `GET /progress` | `@ownwords/lexicon` |
-| `getCourse` | `GET /courses/:courseId/resume` and `GET /courses/:courseId/versions/:version` | `@ownwords/learning` |
-| `getLesson` | `GET /courses/:courseId/versions/:version/lessons/:lessonId` | `@ownwords/learning` |
-| `completeLessonStep` | `PUT …/lessons/:lessonId/progress` | `@ownwords/learning` |
-| `listReferenceTopics` | `GET /references` | `@ownwords/learning` |
-| `getAlphabet` | part of the course content, unit 0 | `@ownwords/learning` |
-| `getPreferences`, `savePreferences`, `listLanguages` | not yet defined; they belong with the account work | — |
+| `OwnwordsClient` method                              | Route it will call                                                                                          | Package              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------- |
+| `listEntries`                                        | `GET /api/v1/lexicon/entries` (`mastery` is a `weak` or `strong` band)                                      | `@ownwords/lexicon`  |
+| `getEntry`                                           | `GET /entries/:entryId`                                                                                     | `@ownwords/lexicon`  |
+| `createEntry`                                        | `POST /entries`                                                                                             | `@ownwords/lexicon`  |
+| `addSense`                                           | `POST /entries/:entryId/senses` (a blank gloss is refused)                                                  | `@ownwords/lexicon`  |
+| `listStarters`, `addStarter`                         | not yet defined: the three vetted starter expressions an empty Lexicon offers                               | `@ownwords/lexicon`  |
+| `requestSuggestions`                                 | `POST /entries/:entryId/senses/:senseId/suggestions`                                                        | `@ownwords/lexicon`  |
+| `updateEquivalent`                                   | `PATCH /entries/:entryId/senses/:senseId/equivalents/:equivalentId`                                         | `@ownwords/lexicon`  |
+| `retryTranslation`                                   | `POST /entries/:entryId/senses/:senseId/suggestions`                                                        | `@ownwords/lexicon`  |
+| `getDueQueue`                                        | `GET /practice/due`; `ahead: true` asks for the cards coming up next, a scope the package has yet to expose | `@ownwords/lexicon`  |
+| `submitReview`                                       | `POST /practice/reviews`                                                                                    | `@ownwords/lexicon`  |
+| `getProgress`                                        | `GET /progress`                                                                                             | `@ownwords/lexicon`  |
+| `getCourse`                                          | `GET /courses/:courseId/resume` and `GET /courses/:courseId/versions/:version`                              | `@ownwords/learning` |
+| `getLesson`                                          | `GET /courses/:courseId/versions/:version/lessons/:lessonId`                                                | `@ownwords/learning` |
+| `completeLessonStep`                                 | `PUT …/lessons/:lessonId/progress`                                                                          | `@ownwords/learning` |
+| `listReferenceTopics`                                | `GET /references`                                                                                           | `@ownwords/learning` |
+| `getAlphabet`                                        | part of the course content, unit 0                                                                          | `@ownwords/learning` |
+| `getPreferences`, `savePreferences`, `listLanguages` | not yet defined; they belong with the account work                                                          | —                    |
 
 Routes are given as the domain packages mount them. The composition root
 decides the prefix, and the front end reads it from one place rather than

@@ -1,15 +1,21 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from "react";
 
 /** The standard screen body: one column, screen gutter, sections stacked. */
-export function Screen({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+export function Screen({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         minWidth: 0,
         gap: 20,
-        padding: '8px var(--gutter) 24px',
+        padding: "8px var(--gutter) 24px",
         flex: 1,
         ...style,
       }}
@@ -30,24 +36,31 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, minWidth: 0 }}>
+    <section
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr)",
+        gap: 10,
+        minWidth: 0,
+      }}
+    >
       {title && (
         <div
           style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
             gap: 12,
-            padding: '0 4px',
+            padding: "0 4px",
           }}
         >
           <h2
             style={{
               margin: 0,
-              font: 'var(--type-overline)',
-              letterSpacing: 'var(--tracking-wide)',
-              textTransform: 'uppercase',
-              color: 'var(--fg-3)',
+              font: "var(--type-overline)",
+              letterSpacing: "var(--tracking-wide)",
+              textTransform: "uppercase",
+              color: "var(--fg-3)",
             }}
           >
             {title}
@@ -68,7 +81,14 @@ export function Spacer() {
 /** A quiet line of explanation under a card. */
 export function Note({ children }: { children: ReactNode }) {
   return (
-    <p style={{ margin: 0, padding: '0 4px', font: 'var(--type-caption)', color: 'var(--fg-3)' }}>
+    <p
+      style={{
+        margin: 0,
+        padding: "0 4px",
+        font: "var(--type-caption)",
+        color: "var(--fg-3)",
+      }}
+    >
       {children}
     </p>
   );

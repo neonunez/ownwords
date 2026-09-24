@@ -1,5 +1,5 @@
-import type { MouseEvent } from 'react';
-import { Icon, type IconName } from '../core/Icon';
+import type { MouseEvent } from "react";
+import { Icon, type IconName } from "../core/Icon";
 
 export interface TabItem {
   key: string;
@@ -27,14 +27,14 @@ export function TabBar({ tabs, activeKey, onSelect, label }: TabBarProps) {
     <nav
       aria-label={label}
       style={{
-        display: 'grid',
+        display: "grid",
         gridTemplateColumns: `repeat(${tabs.length}, 1fr)`,
-        height: 'calc(var(--tabbar-h) + var(--safe-bottom))',
-        paddingBottom: 'var(--safe-bottom)',
-        background: 'var(--tabbar-bg)',
-        backdropFilter: 'var(--blur-bar)',
-        WebkitBackdropFilter: 'var(--blur-bar)',
-        borderTop: '1px solid var(--border-1)',
+        height: "calc(var(--tabbar-h) + var(--safe-bottom))",
+        paddingBottom: "var(--safe-bottom)",
+        background: "var(--tabbar-bg)",
+        backdropFilter: "var(--blur-bar)",
+        WebkitBackdropFilter: "var(--blur-bar)",
+        borderTop: "1px solid var(--border-1)",
       }}
     >
       {tabs.map((tab) => {
@@ -43,40 +43,40 @@ export function TabBar({ tabs, activeKey, onSelect, label }: TabBarProps) {
           <a
             key={tab.key}
             href={tab.href}
-            aria-current={active ? 'page' : undefined}
+            aria-current={active ? "page" : undefined}
             onClick={(event) => onSelect(tab.href, event)}
             style={{
               minHeight: 44,
-              display: 'grid',
-              justifyItems: 'center',
-              alignContent: 'center',
+              display: "grid",
+              justifyItems: "center",
+              alignContent: "center",
               gap: 3,
-              color: active ? 'var(--accent)' : 'var(--fg-3)',
-              textDecoration: 'none',
-              transition: 'color var(--motion-fast)',
+              color: active ? "var(--accent)" : "var(--fg-3)",
+              textDecoration: "none",
+              transition: "color var(--motion-fast)",
             }}
           >
             <span
               style={{
-                display: 'grid',
-                placeItems: 'center',
+                display: "grid",
+                placeItems: "center",
                 width: 44,
                 height: 26,
                 borderRadius: 99,
-                background: active ? 'var(--accent-soft)' : 'transparent',
+                background: active ? "var(--accent-soft)" : "transparent",
                 transition:
-                  'background var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-spring)',
-                transform: active ? 'translateY(-1px)' : 'none',
+                  "background var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-spring)",
+                transform: active ? "translateY(-1px)" : "none",
               }}
             >
               <Icon name={tab.icon} size={22} strokeWidth={active ? 2 : 1.75} />
             </span>
             <span
               style={{
-                font: 'var(--type-caption)',
+                font: "var(--type-caption)",
                 fontWeight: active ? 600 : 500,
-                fontSize: '.6875rem',
-                letterSpacing: '.01em',
+                fontSize: ".6875rem",
+                letterSpacing: ".01em",
               }}
             >
               {tab.label}

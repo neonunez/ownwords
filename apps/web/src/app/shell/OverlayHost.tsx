@@ -6,9 +6,9 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
-import { Sheet, type SheetProps } from '../../design-system';
+} from "react";
+import { createPortal } from "react-dom";
+import { Sheet, type SheetProps } from "../../design-system";
 
 interface OverlayValue {
   host: HTMLDivElement | null;
@@ -22,7 +22,8 @@ const OverlayContext = createContext<OverlayValue | null>(null);
 
 export function useOverlayHost(): OverlayValue {
   const value = useContext(OverlayContext);
-  if (!value) throw new Error('Overlays must be rendered inside the app shell.');
+  if (!value)
+    throw new Error("Overlays must be rendered inside the app shell.");
   return value;
 }
 
@@ -35,12 +36,17 @@ export function OverlayProvider({
 }) {
   const [count, setCount] = useState(0);
   const lock = useCallback(() => setCount((value) => value + 1), []);
-  const unlock = useCallback(() => setCount((value) => Math.max(0, value - 1)), []);
+  const unlock = useCallback(
+    () => setCount((value) => Math.max(0, value - 1)),
+    [],
+  );
   const value = useMemo(
     () => ({ host, locked: count > 0, lock, unlock }),
     [host, count, lock, unlock],
   );
-  return <OverlayContext.Provider value={value}>{children}</OverlayContext.Provider>;
+  return (
+    <OverlayContext.Provider value={value}>{children}</OverlayContext.Provider>
+  );
 }
 
 /**

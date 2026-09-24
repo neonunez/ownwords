@@ -1,5 +1,5 @@
-import type { CSSProperties } from 'react';
-import { asPercentage } from '../../lib/text';
+import type { CSSProperties } from "react";
+import { asPercentage } from "../../lib/text";
 
 export interface MasteryMeterProps {
   /** 0–1, or `null` when the direction has not been practised yet. */
@@ -15,14 +15,14 @@ export interface MasteryMeterProps {
 }
 
 const colourFor = (value: number | null): string => {
-  if (value === null || value <= 0) return 'var(--mastery-empty)';
-  if (value < 0.34) return 'var(--mastery-weak)';
-  if (value < 0.67) return 'var(--mastery-mid)';
-  return 'var(--mastery-strong)';
+  if (value === null || value <= 0) return "var(--mastery-empty)";
+  if (value < 0.34) return "var(--mastery-weak)";
+  if (value < 0.67) return "var(--mastery-mid)";
+  return "var(--mastery-strong)";
 };
 
 const written = (value: number | null): string =>
-  value === null ? 'not practised yet' : asPercentage(value);
+  value === null ? "not practised yet" : asPercentage(value);
 
 /**
  * Two bars, one per direction. The reading is written out in the accessible
@@ -37,9 +37,16 @@ export function MasteryMeter({
   style,
 }: MasteryMeterProps) {
   const bar = (value: number | null, name: string) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} key={name}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }} key={name}>
       {labels && (
-        <span style={{ font: 'var(--type-caption)', color: 'var(--fg-3)', width: 60, flex: 'none' }}>
+        <span
+          style={{
+            font: "var(--type-caption)",
+            color: "var(--fg-3)",
+            width: 60,
+            flex: "none",
+          }}
+        >
           {name}
         </span>
       )}
@@ -50,28 +57,28 @@ export function MasteryMeter({
           minWidth: 0,
           height: 5,
           borderRadius: 99,
-          background: 'var(--mastery-empty)',
-          overflow: 'hidden',
+          background: "var(--mastery-empty)",
+          overflow: "hidden",
         }}
       >
         <div
           style={{
             width: `${Math.round((value ?? 0) * 100)}%`,
-            height: '100%',
+            height: "100%",
             borderRadius: 99,
             background: colourFor(value),
-            transition: 'width var(--motion-slow) var(--ease-out)',
+            transition: "width var(--motion-slow) var(--ease-out)",
           }}
         />
       </div>
       {labels && (
         <span
           style={{
-            font: 'var(--type-caption)',
-            color: 'var(--fg-2)',
+            font: "var(--type-caption)",
+            color: "var(--fg-2)",
             width: 96,
-            flex: 'none',
-            textAlign: 'right',
+            flex: "none",
+            textAlign: "right",
           }}
         >
           {written(value)}
@@ -84,10 +91,10 @@ export function MasteryMeter({
     <div
       role="img"
       aria-label={`${label}: recognise ${written(recognise)}, produce ${written(produce)}`}
-      style={{ display: 'grid', gap: 3, ...style }}
+      style={{ display: "grid", gap: 3, ...style }}
     >
-      {bar(recognise, 'recognise')}
-      {bar(produce, 'produce')}
+      {bar(recognise, "recognise")}
+      {bar(produce, "produce")}
     </div>
   );
 }

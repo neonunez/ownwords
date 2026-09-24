@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
-import { useRegisterSW } from 'virtual:pwa-register/react';
-import { useToast } from '../app/shell/ToastProvider';
+import { useEffect } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
+import { useToast } from "../app/shell/ToastProvider";
 
 /** How often a running app looks for a newer build: once an hour. */
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -29,9 +29,9 @@ export function UpdatePrompt() {
 
   useEffect(() => {
     if (!needRefresh) return;
-    showToast('A new version of Ownwords is ready.', {
-      icon: 'sparkles',
-      action: 'Reload',
+    showToast("A new version of Ownwords is ready.", {
+      icon: "sparkles",
+      action: "Reload",
       persistent: true,
       onAction: () => {
         setNeedRefresh(false);

@@ -1,4 +1,4 @@
-import { useId, useRef, type CSSProperties, type KeyboardEvent } from 'react';
+import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -55,29 +55,29 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={label}
       style={{
-        position: 'relative',
-        display: 'grid',
+        position: "relative",
+        display: "grid",
         gridTemplateColumns: `repeat(${options.length}, 1fr)`,
         height: 44,
         minHeight: 44,
-        borderRadius: 'var(--radius-pill)',
-        background: 'var(--bg-sunken)',
+        borderRadius: "var(--radius-pill)",
+        background: "var(--bg-sunken)",
         ...style,
       }}
     >
       <span
         aria-hidden="true"
         style={{
-          position: 'absolute',
+          position: "absolute",
           top: 3,
           bottom: 3,
           left: 3,
           width: `calc((100% - 6px) / ${options.length})`,
           borderRadius: 99,
-          background: 'var(--bg-surface)',
-          boxShadow: 'var(--shadow-1)',
+          background: "var(--bg-surface)",
+          boxShadow: "var(--shadow-1)",
           transform: `translateX(${index * 100}%)`,
-          transition: 'transform var(--motion-base) var(--ease-spring)',
+          transition: "transform var(--motion-base) var(--ease-spring)",
         }}
       />
       {options.map((option, position) => {
@@ -96,20 +96,20 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.value)}
             onKeyDown={move}
             style={{
-              position: 'relative',
+              position: "relative",
               border: 0,
-              background: 'transparent',
+              background: "transparent",
               borderRadius: 99,
-              font: 'var(--type-label)',
-              color: selected ? 'var(--fg-1)' : 'var(--fg-2)',
-              cursor: 'pointer',
-              transition: 'color var(--motion-fast)',
+              font: "var(--type-label)",
+              color: selected ? "var(--fg-1)" : "var(--fg-2)",
+              cursor: "pointer",
+              transition: "color var(--motion-fast)",
               minHeight: 44,
-              padding: '0 6px',
+              padding: "0 6px",
               minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {option.label}
