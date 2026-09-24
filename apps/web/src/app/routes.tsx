@@ -9,6 +9,8 @@ import { CourseScreen } from "./screens/learn/CourseScreen";
 import { LessonScreen } from "./screens/learn/LessonScreen";
 import { AlphabetScreen } from "./screens/learn/AlphabetScreen";
 import { ReferenceScreen } from "./screens/learn/ReferenceScreen";
+import { ReferenceTopicScreen } from "./screens/learn/ReferenceTopicScreen";
+import { LanguagesScreen } from "./screens/LanguagesScreen";
 
 /**
  * Every screen sits under the shell, so a pushed screen keeps the tab bar and
@@ -30,6 +32,7 @@ export const routeTree = [
       { path: "maintain/lexicon", element: <LexiconScreen /> },
       { path: "maintain/lexicon/:entryId", element: <EntryScreen /> },
       { path: "maintain/add", element: <AddEntryScreen /> },
+      { path: "maintain/languages", element: <LanguagesScreen /> },
       {
         path: "maintain/practice",
         element: (
@@ -70,6 +73,8 @@ export const routeTree = [
       },
       { path: "learn/alphabet", element: <AlphabetScreen /> },
       { path: "learn/reference", element: <ReferenceScreen /> },
+      { path: "learn/reference/:topicId", element: <ReferenceTopicScreen /> },
+      { path: "learn/languages", element: <LanguagesScreen /> },
 
       { path: "*", element: <Navigate to="/maintain/progress" replace /> },
     ],

@@ -353,11 +353,17 @@ describe("progress", () => {
 
   it("says nothing is due once Maintain practice is done, whatever Learn holds", async () => {
     const client = createDemoClient({ suggestionDelaysMs: {} });
-    for (const card of (await client.getDueQueue({ mode: "maintain" })).cards) {
+    const scope = {
+      mode: "maintain",
+      format: "cloze",
+      sessionId: "s",
+    } as const;
+    for (const card of (await client.getDueQueue(scope)).cards) {
       await client.submitReview({
         cardId: card.cardId,
         rating: "good",
         format: "cloze",
+        sessionId: "s",
         submissionId: card.cardId,
       });
     }

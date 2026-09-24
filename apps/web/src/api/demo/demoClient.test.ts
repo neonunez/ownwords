@@ -5,6 +5,13 @@ import type { OwnwordsClient } from "../client";
 
 let client: OwnwordsClient;
 
+const scope = (mode: "maintain" | "learn", ahead = false) => ({
+  mode,
+  format: "cloze" as const,
+  sessionId: "s",
+  ahead,
+});
+
 beforeEach(() => {
   client = createDemoClient({ suggestionDelaysMs: {} });
 });
@@ -54,6 +61,22 @@ describe("reading the collection", () => {
 });
 
 describe("fixing a translation", () => {
+  it("refuses a change made against a version somebody replaced", async () => {
+    const entry = await client.getEntry("e1");
+    const sense = entry.senses[0]!;
+    const equivalent = sense.equivalents[0]!;
+    await client.updateEquivalent(entry.id, sense.id, equivalent.id, {
+      version: equivalent.version,
+      fit: "broader",
+    });
+    await expect(
+      client.updateEquivalent(entry.id, sense.id, equivalent.id, {
+        version: equivalent.version,
+        fit: "narrower",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
   it("records a fit and confirms the equivalent", async () => {
     const entry = await client.getEntry("e1");
     const sense = entry.senses[0]!;
@@ -63,6 +86,7 @@ describe("fixing a translation", () => {
       sense.id,
       equivalent.id,
       {
+        version: equivalent.version,
         fit: "false-friend",
         state: "confirmed",
       },
@@ -82,6 +106,7 @@ describe("fixing a translation", () => {
       sense.id,
       equivalent.id,
       {
+        version: equivalent.version,
         text: "apañárselas con",
       },
     );
@@ -133,7 +158,7 @@ describe("starting from an empty Lexicon", () => {
 
   it("adds a starter with vetted equivalents and makes it due at once", async () => {
     const empty = createDemoClient({ suggestionDelaysMs: {}, entries: [] });
-    expect((await empty.getDueQueue({ mode: "maintain" })).cards).toEqual([]);
+    expect((await empty.getDueQueue(scope("maintain"))).cards).toEqual([]);
 
     const [starter] = await empty.listStarters();
     const entry = await empty.addStarter(starter!.id);
@@ -145,10 +170,12 @@ describe("starting from an empty Lexicon", () => {
     ).toBe(true);
     expect((await empty.listEntries()).items).toHaveLength(1);
 
-    const maintain = await empty.getDueQueue({ mode: "maintain" });
-    const learn = await empty.getDueQueue({ mode: "learn" });
-    expect(maintain.cards.map((card) => card.entryId)).toEqual([entry.id]);
-    expect(learn.cards.map((card) => card.entryId)).toEqual([entry.id]);
+    const maintain = await empty.getDueQueue(scope("maintain"));
+    const learn = await empty.getDueQueue(scope("learn"));
+    expect(maintain.cards.map((card) => card.headword)).toEqual([
+      entry.headword,
+    ]);
+    expect(learn.cards.map((card) => card.headword)).toEqual([entry.headword]);
   });
 
   it("refuses a starter it never offered", async () => {
@@ -159,27 +186,49 @@ describe("starting from an empty Lexicon", () => {
 });
 
 describe("adding an entry", () => {
-  it("stores it and starts its equivalents waiting", async () => {
-    const created = await client.createEntry({
-      headword: "to let it slide",
-      note: "when it is not worth the argument",
-      kind: "expression",
-      language: "en",
-      suggestInto: ["es", "ru"],
-    });
+  const newEntry = {
+    headword: "to let it slide",
+    note: "when it is not worth the argument",
+    kind: "expression" as const,
+    language: "en",
+  };
+
+  it("stores the headword first, and the reviewed equivalents after", async () => {
+    const created = await client.createEntry(newEntry);
+    expect(created.senses[0]!.equivalents).toEqual([]);
+    const saved = await client.addEquivalents(
+      created.id,
+      created.senses[0]!.id,
+      [
+        { language: "es", text: "dejarlo pasar", state: "confirmed" },
+        { language: "ru", text: "", state: "failed" },
+      ],
+    );
     expect(
-      created.senses[0]!.equivalents.map((candidate) => candidate.state),
-    ).toEqual(["waiting", "waiting"]);
+      saved.senses[0]!.equivalents.map(
+        (candidate) => `${candidate.language}:${candidate.state}`,
+      ),
+    ).toEqual(["es:confirmed", "ru:failed"]);
     const page = await client.listEntries({ search: "let it slide" });
     expect(page.items).toHaveLength(1);
   });
 
+  it("sets a stored draft aside, and refuses a stale version", async () => {
+    const created = await client.createEntry(newEntry);
+    await expect(
+      client.deleteEntry(created.id, created.version + 1),
+    ).rejects.toMatchObject({ status: 409 });
+    await client.deleteEntry(created.id, created.version);
+    await expect(client.getEntry(created.id)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
   it("reports each suggestion as it arrives", async () => {
     const seen: string[] = [];
-    await client.requestSuggestions(
-      { headword: "to let it slide", language: "en", note: "" },
-      ["es", "ru"],
-      (result) => seen.push(`${result.language}:${result.state}`),
+    const created = await client.createEntry(newEntry);
+    await client.requestSuggestions(created, ["es", "ru"], (result) =>
+      seen.push(`${result.language}:${result.state}`),
     );
     expect(seen.sort()).toEqual(["es:suggested", "ru:suggested"]);
   });
@@ -191,7 +240,7 @@ describe("adding an entry", () => {
     });
     const results: string[] = [];
     await failing.requestSuggestions(
-      { headword: "sobremesa", language: "es", note: "" },
+      await failing.getEntry("e4"),
       ["ru"],
       (result) => results.push(`${result.state}:${result.reason ?? ""}`),
     );
@@ -201,31 +250,32 @@ describe("adding an entry", () => {
 
 describe("practice", () => {
   it("keeps Learn practice to the language being learned", async () => {
-    const queue = await client.getDueQueue({ mode: "learn" });
+    const queue = await client.getDueQueue(scope("learn"));
     expect(queue.cards.every((card) => card.language === "ru")).toBe(true);
   });
 
   it("sizes the session in words, not counts", async () => {
-    const queue = await client.getDueQueue({ mode: "maintain" });
+    const queue = await client.getDueQueue(scope("maintain"));
     expect(queue.estimate).toMatch(/^About (a minute|[a-z]+ minutes)\.$/);
   });
 
   it("keeps a card that was rated again in the session", async () => {
-    const before = await client.getDueQueue({ mode: "maintain" });
+    const before = await client.getDueQueue(scope("maintain"));
     const card = before.cards[0]!;
     await client.submitReview({
       cardId: card.cardId,
       rating: "again",
       format: "cloze",
+      sessionId: "s",
       submissionId: "a",
     });
-    const after = await client.getDueQueue({ mode: "maintain" });
+    const after = await client.getDueQueue(scope("maintain"));
     expect(after.cards.map((one) => one.cardId)).toContain(card.cardId);
   });
 
   it("keeps Maintain practice away from the language being learned", async () => {
-    const due = await client.getDueQueue({ mode: "maintain" });
-    const ahead = await client.getDueQueue({ mode: "maintain", ahead: true });
+    const due = await client.getDueQueue(scope("maintain"));
+    const ahead = await client.getDueQueue(scope("maintain", true));
     expect(
       [...due.cards, ...ahead.cards].some((card) => card.language === "ru"),
     ).toBe(false);
@@ -233,23 +283,24 @@ describe("practice", () => {
   });
 
   it("offers the cards coming up next once everything due is done", async () => {
-    const due = await client.getDueQueue({ mode: "maintain" });
+    const due = await client.getDueQueue(scope("maintain"));
     for (const card of due.cards) {
       await client.submitReview({
         cardId: card.cardId,
         rating: "good",
         format: "cloze",
+        sessionId: "s",
         submissionId: card.cardId,
       });
     }
-    const empty = await client.getDueQueue({ mode: "maintain" });
+    const empty = await client.getDueQueue(scope("maintain"));
     expect(empty.cards).toEqual([]);
     expect(empty.comingUp.map((item) => item.headword)).toEqual([
       "sobremesa",
       "actually",
     ]);
 
-    const ahead = await client.getDueQueue({ mode: "maintain", ahead: true });
+    const ahead = await client.getDueQueue(scope("maintain", true));
     expect(ahead.cards.map((card) => card.headword)).toEqual([
       "sobremesa",
       "actually",
@@ -258,31 +309,33 @@ describe("practice", () => {
   });
 
   it("stops offering a card coming up once it has been practised ahead", async () => {
-    const ahead = await client.getDueQueue({ mode: "learn", ahead: true });
+    const ahead = await client.getDueQueue(scope("learn", true));
     expect(ahead.cards.every((card) => card.language === "ru")).toBe(true);
     const first = ahead.cards[0]!;
     await client.submitReview({
       cardId: first.cardId,
       rating: "good",
       format: "cloze",
+      sessionId: "s",
       submissionId: "c",
     });
-    const due = await client.getDueQueue({ mode: "learn" });
+    const due = await client.getDueQueue(scope("learn"));
     expect(due.comingUp.map((item) => item.headword)).not.toContain(
       first.headword,
     );
   });
 
   it("retires a card that was answered", async () => {
-    const before = await client.getDueQueue({ mode: "maintain" });
+    const before = await client.getDueQueue(scope("maintain"));
     const card = before.cards[0]!;
     await client.submitReview({
       cardId: card.cardId,
       rating: "good",
       format: "cloze",
+      sessionId: "s",
       submissionId: "b",
     });
-    const after = await client.getDueQueue({ mode: "maintain" });
+    const after = await client.getDueQueue(scope("maintain"));
     expect(after.cards.map((one) => one.cardId)).not.toContain(card.cardId);
   });
 });
@@ -309,16 +362,17 @@ describe("progress", () => {
 
   it("says what Maintain practice is due, and not what Learn practice is", async () => {
     expect((await client.getProgress()).estimate).not.toBe("");
-    const due = await client.getDueQueue({ mode: "maintain" });
+    const due = await client.getDueQueue(scope("maintain"));
     for (const card of due.cards) {
       await client.submitReview({
         cardId: card.cardId,
         rating: "good",
         format: "cloze",
+        sessionId: "s",
         submissionId: card.cardId,
       });
     }
-    expect((await client.getDueQueue({ mode: "learn" })).cards).not.toEqual([]);
+    expect((await client.getDueQueue(scope("learn"))).cards).not.toEqual([]);
     const summary = await client.getProgress();
     expect(summary.estimate).toBe("");
     expect(summary.comingUp.some((item) => item.language === "ru")).toBe(false);

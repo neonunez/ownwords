@@ -6,32 +6,46 @@ Ownwords design system and the product requirements in the repository's root
 
 It is a TypeScript React application, served as a static bundle and
 installable on a phone. Once installed, its shell opens without a network; the
-collection, practice, progress and the course are backend data, and Ownwords
-is online-first, so reading and changing them needs a connection. It talks to
-the backend through one typed interface, which today is answered from local
-fixtures — see [docs/backend-boundary.md](docs/backend-boundary.md).
+account, the collection, practice, progress and the course are backend data,
+and Ownwords is online-first, so reading and changing them needs a connection.
+It talks to the Ownwords API (`apps/api`) on its own origin, under `/api`,
+through one typed interface — see
+[docs/backend-boundary.md](docs/backend-boundary.md).
 
 ## Running it
 
 ```sh
 npm install          # from the repository root; one lockfile for every workspace
 cd apps/web
-npm run dev          # http://localhost:5173
+npm run stack        # the connected app on http://localhost:4180, with a local API
+npm run dev:demo     # or: the screens alone on sample data, http://localhost:5173
 ```
 
-Node 24 or newer. While the demo client answers, nothing else is required:
-no backend, no account, no keys, no network at runtime. Once the HTTP client
-replaces it, every data flow needs the backend and a connection.
+Node 24 or newer. `npm run stack` builds the app and serves it in front of the
+real API under `wrangler dev`, on a fresh local D1 with every migration, the
+synthetic test course and a set of synthetic accounts; it prints how to sign
+in as one from the browser console. Nothing in it needs a credential or leaves
+the machine.
+
+To work on the app with hot reload against a local API, run
+`npm run db:migrate:local` and `npm run dev:app` in `apps/api` (the API then
+trusts `http://localhost:5173`), and `npm run dev` here. Signing in there needs
+either Google credentials in `apps/api/.dev.vars` or a session you seed
+yourself; `docs/SETUP.md` has both.
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Dev server with hot reload. No service worker. |
-| `npm run build` | Type-check every project, then build into `dist/`. |
-| `npm run preview` | Serve `dist/` on <http://localhost:4173>. The service worker, the manifest and the real bundle only exist here. |
+| `npm run dev` | Dev server with hot reload, forwarding `/api` to `OWNWORDS_API_URL` (default `http://127.0.0.1:8787`). No service worker. |
+| `npm run dev:demo` | The same, answered by the demo client: sample data, no backend, nothing kept. |
+| `npm run build` | Type-check every project, then build the app into `dist/`. |
+| `npm run build:demo` | Build the demo into `demo-dist/`, never into `dist/`. |
+| `npm run preview` | Serve `dist/` on <http://localhost:4173>, forwarding `/api` the same way. The service worker, the manifest and the real bundle only exist here. |
+| `npm run stack` | The connected app, end to end on local state: see above. |
 | `npm run typecheck` | Types only. |
 | `npm run lint` | ESLint, including the React Hooks and `jsx-a11y` rules. |
 | `npm test` | Unit and component tests (Vitest, jsdom). |
-| `npm run test:e2e` | Browser smoke tests (Playwright). Builds and previews first. |
+| `npm run test:e2e` | Browser tests of the screens (Playwright), against a demo build. |
+| `npm run test:stack` | Browser journeys of the connected app against the real API and a fresh local D1 (Playwright). |
 | `npm run test:all` | Everything above, in order. |
 
 The root `npm run check` and `npm run build`, which CI runs, cover this
@@ -39,8 +53,13 @@ package's type-check, unit tests and build; lint and the browser tests run
 only from here.
 
 `npm run test:e2e` runs against Chromium in two shapes, a phone and a desktop
-window, and uses the browser Playwright has already installed. If it is
-missing, `npx playwright install chromium` fetches it.
+window. `npm run test:stack` runs the phone shape against `stack/serve.mjs`:
+signing in with seeded sessions, the first run, invitations, the Google
+redirect (answered by a stand-in, never Google), passkeys on a virtual
+authenticator, the Lexicon, practice, progress, a lesson through to its
+Lexicon sync, account isolation, export, sign-out and a cut network. Both use
+the browser Playwright has already installed; if it is missing,
+`npx playwright install chromium` fetches it.
 
 ## How it is put together
 
@@ -49,13 +68,15 @@ src/
   styles/            tokens from the design system, the fonts, the shell's CSS
   assets/            the Nunito subsets (OFL) and the brand mark
   design-system/     Button, Chip, TabBar, Card, Sheet, Mascot … in TypeScript
-  api/               the one boundary: types.ts, client.ts, demo/
+  api/               the one boundary: types.ts, client.ts, http/, demo/
   app/
+    session/         the sign-in and first-run gate in front of everything
     shell/           the frame, routing, appearance, toasts, overlays
     screens/         one file per screen, grouped by mode
   lib/               text normalisation, focus handling
   pwa/               the manifest and the update prompt
-e2e/                 browser smoke tests
+e2e/                 browser tests of the screens, on a demo build
+stack/               browser journeys of the connected app, and its local server
 ```
 
 **Two modes, one collection.** Maintain and Learn each own four tabs and never
@@ -67,6 +88,11 @@ holds the tab definitions and the rule for which tab owns a given address.
 `OwnwordsClient`, and `useAsync()` handles the loading and failure states.
 Nothing else reaches for data.
 
+**Nothing renders without a session.** `SessionGate` asks the backend who is
+signed in. Signed out, it shows sign-in; signed in without a finished first
+run, it shows the first run; any `401` later brings the person back to sign
+in, saying the session ended.
+
 **The design system is a library, not a theme.** Every colour, size, radius
 and duration is a token from `styles/tokens/`. Components take tokens, never
 literal colours. Three light-mode stops are darker than the design package
@@ -75,28 +101,46 @@ of `styles/tokens/colors.css`.
 
 ## What the app does today
 
-Both modes are built, with the flows the design package specifies:
+Connected to the API, end to end:
 
+- **Account** — sign-in with a passkey, or with Google for the first time
+  (access by invitation, redeemed on the sign-in screen); the first run
+  (languages and their levels, then three preferences); changing languages and
+  preferences later; adding a passkey on this device; exporting the account as
+  a file; signing out.
 - **Maintain** — Progress (retention per language and direction, whether
-  practice is due, and what is coming, with no card counts), Lexicon (search,
-  filters by language, mastery, "unverified" and words vs expressions,
-  per-language mastery, three one-tap starter expressions when it is empty,
-  entry capture with optional auto-translation and a review step), the entry
-  screen (senses, a new sense only once it has a gloss, equivalents, fit
-  labels, translation states, "fix this translation", retry after a failure),
-  Practice (complete the phrase, with a prompt before the answer, and practice
-  ahead once nothing is due) and Flashcards.
-- **Learn** — Course (resume card, units, can-do milestones), the lesson
-  (hear it, a rule of four lines, use it, a perception drill), Alphabet (all
-  33 letters, with the ones that look Latin but are not marked in words as
-  well as in colour) and Reference.
-- **Everywhere** — the side panel (mode, languages, preferences, appearance,
-  export, account), light and dark, the installable manifest and icons, and an
-  offline shell.
+  practice is due, and when it comes next, with no card counts), Lexicon
+  (search, filters by language, stage, "unverified" and words vs expressions,
+  paging, per-language mastery), entry capture with optional suggestions and a
+  review step whose every row can be confirmed, retried or typed by hand, the
+  entry screen (senses, a new sense only once it has a gloss, equivalents,
+  fit labels, translation states, "fix this translation", adding a missing
+  language by hand, retry after a failure, editing the note and kind, deleting
+  with a confirmation), Practice and Flashcards on the real scheduler.
+- **Learn** — Course (resume card, units, can-do milestones), the lesson (its
+  steps as the course content writes them, recorded audio where an item has
+  one, carrying on from the step reached, finishing into the Lexicon),
+  Learn practice on what the course taught, Alphabet and Reference as the
+  course publishes them.
+- **Everywhere** — the side panel, light and dark, the installable manifest
+  and icons, an offline shell, and a written failure with "Try again" on every
+  screen when the backend cannot be reached.
 
-Screens that depend on work the backend has not delivered — editing an entry,
-adding a language, exporting, signing in, recorded audio — say so plainly when
-they are used, rather than pretending to act.
+What the backend does not offer yet, the app says plainly rather than
+pretending:
+
+- **Translation suggestions** — the provider is switched off until its policy
+  is approved, so each language in the review step says so and can be typed
+  by hand. Nothing is stored as a suggestion that did not come back.
+- **Starter expressions** — the backend defines none, so an empty Lexicon
+  offers only "Add your first entry".
+- **Complete the phrase** — nothing creates cloze items yet, so that format
+  says none are due and offers flashcards.
+- **Practising ahead** — the scheduler has no such scope, so it is not offered.
+- **Reminders** — shown as "After install"; nothing stores or sends them.
+- **Account deletion** — deliberately deferred; see `docs/SETUP.md`.
+- **Course content** — only the synthetic test course exists; production
+  content and its recordings are separate work.
 
 ## Accessibility
 
@@ -132,10 +176,11 @@ gone.
 That is all that works offline. Ownwords is online-first and offline use is
 not a goal for the first release: the service worker precaches only the built
 bundle, caches nothing at runtime, and never serves `/api/` from its fallback,
-so no backend answer is ever kept or replayed. With the HTTP client in place,
-a screen opened without a connection shows its written failure and a retry,
-and the collection, practice, progress and the course come back once the
-backend can be reached.
+so no backend answer is ever kept or replayed. Opened without a connection,
+the app says Ownwords could not be reached and offers to try again; a screen
+that loses the connection later shows its own written failure and a retry, and
+the collection, practice, progress and the course come back once the backend
+can be reached.
 
 A new build never replaces a running one silently. The waiting worker stays
 waiting, the app says "A new version of Ownwords is ready" and offers a
@@ -194,10 +239,9 @@ it:
 
 ## Data
 
-Everything on screen comes from `src/api/demo/fixtures.ts`. It is the sample
-collection the design package's UI kit used, written into the typed shapes the
-backend will answer, and it lives in memory for one session. Storing a
-collection, scheduling practice and keeping progress are the backend's; the
-connected flows need it, and nothing entered here is kept. The demo
-translator returns canned equivalents after a short, visible wait, so the
-waiting state is real rather than decorative.
+Everything on screen comes from the Ownwords API through `src/api/http/`.
+`src/api/demo/fixtures.ts` holds the sample collection the design package's
+UI kit used; it is loaded only by the unit tests and by a demo build
+(`npm run dev:demo`, `npm run build:demo`), which says in the side panel that
+it keeps nothing. The demo translator returns canned equivalents after a
+short, visible wait, so the waiting state can be seen without a provider.

@@ -1,14 +1,14 @@
 import type { CSSProperties } from "react";
 import { Icon } from "../core/Icon";
 import { StateLabel, type StateKind } from "../core/StateLabel";
-import { MasteryMeter } from "./MasteryMeter";
+import { MasteryMeter, type MasteryValue } from "./MasteryMeter";
 
 export interface EntryRowLanguage {
   code: string;
   /** The language's own name, for the meter's written label. */
   name: string;
-  recognise: number | null;
-  produce: number | null;
+  recognise: MasteryValue;
+  produce: MasteryValue;
 }
 
 export interface EntryRowProps {

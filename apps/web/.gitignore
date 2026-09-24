@@ -1,7 +1,10 @@
 node_modules/
 dist/
+demo-dist/
 dev-dist/
 playwright-report/
 test-results/
+stack-report/
+stack-results/
 coverage/
 *.local

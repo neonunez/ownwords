@@ -23,7 +23,6 @@ interface Row {
 function rowsFor(
   languages: readonly Language[],
   progress: readonly LanguageProgress[],
-  now: number,
 ): Row[] {
   return languages
     .filter((language) => language.role !== "native")
@@ -38,10 +37,7 @@ function rowsFor(
         language,
         recognise: direction("recognise"),
         produce: direction("produce"),
-        due: forLanguage.some(
-          (entry) =>
-            entry.nextDueAt !== null && Date.parse(entry.nextDueAt) <= now,
-        ),
+        due: forLanguage.some((entry) => entry.dueNow),
       };
     });
 }
@@ -59,7 +55,7 @@ export function ProgressScreen() {
     return {
       progress,
       languages,
-      rows: rowsFor(languages, progress.perLanguage, Date.now()),
+      rows: rowsFor(languages, progress.perLanguage),
     };
   }, [client]);
 
@@ -84,7 +80,10 @@ export function ProgressScreen() {
     );
   }
 
-  const { progress, rows } = state.data;
+  const { progress, rows, languages } = state.data;
+  const nameOf = (code: string) =>
+    languages.find((language) => language.code === code)?.name ??
+    code.toUpperCase();
 
   return (
     <>
@@ -138,6 +137,19 @@ export function ProgressScreen() {
 
         <Section title="Retention per language">
           <Card padding={0}>
+            {rows.length === 0 && (
+              <p
+                style={{
+                  margin: 0,
+                  padding: "14px 16px",
+                  font: "var(--type-body)",
+                  color: "var(--fg-2)",
+                }}
+              >
+                Retention shows here for each language you keep that is not your
+                own.
+              </p>
+            )}
             {rows.map((row, index) => (
               <div
                 key={row.language.code}
@@ -206,7 +218,7 @@ export function ProgressScreen() {
               )}
               {progress.comingUp.map((item) => (
                 <div
-                  key={`${item.headword}-${item.language}-${item.direction}`}
+                  key={`${item.when}-${item.headword ?? ""}-${item.language}-${item.direction}`}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -217,17 +229,19 @@ export function ProgressScreen() {
                 >
                   <span style={{ color: "var(--fg-2)" }}>{item.when}</span>
                   <span style={{ textAlign: "right", minWidth: 0 }}>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-display)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {item.headword}
-                    </span>
+                    {item.headword && (
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {item.headword}
+                        {" · "}
+                      </span>
+                    )}
                     <span style={{ color: "var(--fg-3)" }}>
-                      {" "}
-                      · {item.language.toUpperCase()} · {item.direction}
+                      {nameOf(item.language)} · {item.direction}
                     </span>
                   </span>
                 </div>

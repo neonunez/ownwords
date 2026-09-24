@@ -30,7 +30,7 @@ export type { EntryRowLanguage, EntryRowProps } from "./content/EntryRow";
 export { Mascot } from "./content/Mascot";
 export type { MascotExpression, MascotProps } from "./content/Mascot";
 export { MasteryMeter } from "./content/MasteryMeter";
-export type { MasteryMeterProps } from "./content/MasteryMeter";
+export type { MasteryMeterProps, MasteryValue } from "./content/MasteryMeter";
 export { Sheet } from "./content/Sheet";
 export type { SheetProps } from "./content/Sheet";
 export { Toast } from "./content/Toast";

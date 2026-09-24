@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Button,
   Card,
@@ -14,9 +14,10 @@ import { Failed, Loading } from "./ScreenState";
 import { useAsync } from "../shell/useAsync";
 import { useClient } from "../shell/ClientProvider";
 import { useScreen } from "../shell/useScreen";
+import { useToast } from "../shell/ToastProvider";
 import { answersMatch, firstWord } from "../../lib/text";
-import { localId } from "../../lib/ids";
-import type { PracticeCard, PracticeFormat } from "../../api/types";
+import { newId } from "../../lib/ids";
+import type { DueQueue, PracticeCard, PracticeFormat } from "../../api/types";
 
 type Phase = "ask" | "hint" | "shown" | "right";
 
@@ -44,10 +45,20 @@ export function PracticeScreen({
 }: PracticeScreenProps) {
   const client = useClient();
   const { openPanel } = useScreen();
+  const { showToast } = useToast();
+  // One sitting: a card missed now comes back within it.
+  const [sessionId] = useState(newId);
   const [format, setFormat] = useState<PracticeFormat>(initialFormat);
-  // Null until the person answers something: until then the queue is exactly
-  // what the scheduler handed over.
-  const [answered, setAnswered] = useState<PracticeCard[] | null>(null);
+  // What is left of one queue the scheduler handed over, once the person has
+  // answered something in it. A fresh read of the queue starts over.
+  const [answered, setAnswered] = useState<{
+    from: DueQueue;
+    cards: PracticeCard[];
+  } | null>(null);
+  // Reviews still on their way to the scheduler.
+  const submissions = useRef<Promise<unknown>[]>([]);
+  // Whether anything has been answered in this sitting.
+  const [practised, setPractised] = useState(false);
   const [phase, setPhase] = useState<Phase>("ask");
   const [typed, setTyped] = useState("");
   const [flipped, setFlipped] = useState(false);
@@ -55,11 +66,14 @@ export function PracticeScreen({
   const [ahead, setAhead] = useState(false);
 
   const state = useAsync(
-    () => client.getDueQueue({ mode, ahead }),
-    [client, mode, ahead],
+    () => client.getDueQueue({ mode, format, sessionId, ahead }),
+    [client, mode, format, sessionId, ahead],
   );
 
-  const queue = answered ?? state.data?.cards ?? [];
+  const queue =
+    answered && answered.from === state.data
+      ? answered.cards
+      : (state.data?.cards ?? []);
   const card = queue[0] ?? null;
   const remaining = queue.length;
   const total = state.data?.cards.length ?? 0;
@@ -68,16 +82,33 @@ export function PracticeScreen({
   const comingUp = useMemo(() => state.data?.comingUp ?? [], [state.data]);
 
   const advance = (rating: "again" | "good") => {
-    if (!card) return;
-    void client.submitReview({
-      cardId: card.cardId,
-      rating,
-      format,
-      submissionId: localId("r"),
-    });
+    if (!card || !state.data) return;
+    submissions.current.push(
+      client
+        .submitReview({
+          cardId: card.cardId,
+          rating,
+          format,
+          sessionId,
+          submissionId: newId(),
+        })
+        .catch(() =>
+          showToast(
+            "That answer was not saved, so the card stays due. Check the connection.",
+          ),
+        ),
+    );
     const [head, ...rest] = queue;
     // "Again" brings the card back later in the same session.
-    setAnswered(rating === "again" && head ? [...rest, head] : rest);
+    const left = rating === "again" && head ? [...rest, head] : rest;
+    setAnswered({ from: state.data, cards: left });
+    setPractised(true);
+    if (left.length === 0) {
+      // Once every answer is stored, ask the scheduler what comes next.
+      const sent = submissions.current;
+      submissions.current = [];
+      void Promise.allSettled(sent).then(state.reload);
+    }
     setPhase("ask");
     setTyped("");
     setFlipped(false);
@@ -85,7 +116,11 @@ export function PracticeScreen({
 
   const check = () => {
     if (!card || !typed.trim()) return;
-    if (answersMatch(typed, card.answer)) {
+    if (
+      [card.answer, ...card.accepted].some((answer) =>
+        answersMatch(typed, answer),
+      )
+    ) {
       setPhase("right");
       return;
     }
@@ -137,6 +172,8 @@ export function PracticeScreen({
             value={format}
             onChange={(next) => {
               setFormat(next);
+              setAnswered(null);
+              setPractised(false);
               setFlipped(false);
               setPhase("ask");
               setTyped("");
@@ -152,9 +189,36 @@ export function PracticeScreen({
               bob
               style={{ margin: "0 auto 12px" }}
             />
-            <p style={{ margin: 0, font: "var(--type-title)" }}>
-              That is everything due.
-            </p>
+            {format === "cloze" && allowFormatChange && !practised ? (
+              <>
+                <p style={{ margin: 0, font: "var(--type-title)" }}>
+                  No phrases to complete are due.
+                </p>
+                <p
+                  style={{
+                    margin: "6px 0 16px",
+                    font: "var(--type-body)",
+                    color: "var(--fg-2)",
+                  }}
+                >
+                  Flashcards practise the same words.
+                </p>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setFormat("flashcard");
+                    setAnswered(null);
+                    setPractised(false);
+                  }}
+                >
+                  Practise with flashcards
+                </Button>
+              </>
+            ) : (
+              <p style={{ margin: 0, font: "var(--type-title)" }}>
+                That is everything due.
+              </p>
+            )}
             {comingUp[0] ? (
               <>
                 <p
@@ -165,19 +229,28 @@ export function PracticeScreen({
                   }}
                 >
                   Next up:{" "}
-                  <span
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {comingUp[0].headword}
-                  </span>{" "}
-                  in {comingUp[0].language.toUpperCase()}, {comingUp[0].when}.
+                  {comingUp[0].headword ? (
+                    <>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {comingUp[0].headword}
+                      </span>{" "}
+                      in {comingUp[0].language.toUpperCase()}
+                    </>
+                  ) : (
+                    <>{comingUp[0].language.toUpperCase()}</>
+                  )}
+                  , {comingUp[0].when}.
                 </p>
-                <Button variant="secondary" onClick={practiseAhead}>
-                  Practise what is coming
-                </Button>
+                {state.data.aheadAvailable && (
+                  <Button variant="secondary" onClick={practiseAhead}>
+                    Practise what is coming
+                  </Button>
+                )}
               </>
             ) : (
               <p
@@ -274,7 +347,7 @@ function ClozeCard({
           {card.direction === "produce" ? "Complete it" : "What does it mean?"}
         </p>
         <p
-          lang={card.promptLanguage}
+          lang={card.promptLanguage ?? undefined}
           style={{
             margin: "10px 0 0",
             font: "var(--type-headword)",
@@ -319,7 +392,7 @@ function ClozeCard({
           >
             The answer is{" "}
             <span
-              lang={card.language}
+              lang={card.answerLanguage ?? undefined}
               style={{
                 fontFamily: "var(--font-display)",
                 fontSize: "1.0625rem",
@@ -346,7 +419,7 @@ function ClozeCard({
             <Icon name="check" size={18} strokeWidth={2.2} />
             Right —{" "}
             <span
-              lang={card.language}
+              lang={card.answerLanguage ?? undefined}
               style={{
                 fontFamily: "var(--font-display)",
                 fontWeight: 400,
@@ -365,11 +438,11 @@ function ClozeCard({
           display
           size="lg"
           name="practice-answer"
-          ariaLabel={`Your answer in ${card.language.toUpperCase()}`}
+          ariaLabel={`Your answer in ${(card.answerLanguage ?? card.language).toUpperCase()}`}
           placeholder="Type your answer"
           value={typed}
           onChange={onTyped}
-          lang={card.language}
+          lang={card.answerLanguage ?? undefined}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
@@ -458,10 +531,10 @@ function FlashCard({
                 color: "var(--fg-3)",
               }}
             >
-              {card.promptLanguage.toUpperCase()}
+              {card.promptLanguage?.toUpperCase() ?? "Meaning"}
             </span>
             <span
-              lang={card.promptLanguage}
+              lang={card.promptLanguage ?? undefined}
               style={{
                 font: "var(--type-hero)",
                 fontSize: "2rem",
@@ -505,10 +578,10 @@ function FlashCard({
                 opacity: 0.6,
               }}
             >
-              {card.language.toUpperCase()}
+              {card.answerLanguage?.toUpperCase() ?? "Meaning"}
             </span>
             <span
-              lang={card.language}
+              lang={card.answerLanguage ?? undefined}
               style={{
                 font: "var(--type-hero)",
                 fontSize: "2rem",

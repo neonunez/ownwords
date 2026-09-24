@@ -1,5 +1,5 @@
 export type * from "./types";
-export { OwnwordsError } from "./client";
-export type { EquivalentPatch, OwnwordsClient } from "./client";
-export { createDemoClient } from "./demo/demoClient";
-export type { DemoClientOptions } from "./demo/demoClient";
+export { OwnwordsError, isSignedOut } from "./client";
+export type { EntryPatch, EquivalentPatch, OwnwordsClient } from "./client";
+export { createHttpClient } from "./http/httpClient";
+export type { HttpClientOptions } from "./http/httpClient";

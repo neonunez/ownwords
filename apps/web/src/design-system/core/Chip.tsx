@@ -12,7 +12,7 @@ export interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /**
  * A filter or choice chip. The visible pill is 28 or 36px tall; the button
- * around it keeps the 44px target the product requires. Selection inverts to
+ * around it keeps the 44px target the product requires, across as well as up. Selection inverts to
  * ink, because the accent is reserved for the one primary action on a screen.
  */
 export function Chip({
@@ -35,6 +35,8 @@ export function Chip({
       style={{
         minHeight: 44,
         height: 44,
+        minWidth: 44,
+        justifyContent: "center",
         padding: 0,
         border: 0,
         background: "transparent",

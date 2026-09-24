@@ -5,7 +5,7 @@ Everything except live provider verification runs locally without external crede
 ## What the owner must provide later
 
 1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. Add zone-scoped `Workers Routes Write` only when the deployment will create or change a custom domain or route. These are deploy-time credentials only; local work and CI do not need them.
-2. **Google OAuth:** create a **Web application** OAuth client. Register the PWA origin as an authorized JavaScript origin and exactly `https://<production-host>/api/auth/callback/google` as an authorized redirect URI. Add `http://localhost:8787` and `http://localhost:8787/api/auth/callback/google` only when someone intentionally tests Google locally. Store the client ID and client secret as Worker secrets/configuration, never in Git.
+2. **Google OAuth:** create a **Web application** OAuth client. Register the PWA origin as an authorized JavaScript origin and exactly `https://<production-host>/api/auth/callback/google` as an authorized redirect URI. Add `http://localhost:5173` and `http://localhost:5173/api/auth/callback/google` only when someone intentionally tests Google locally through the app's dev server (`npm run dev:app` below). Store the client ID and client secret as Worker secrets/configuration, never in Git.
 3. **Authentication secret:** generate locally with `openssl rand -base64 32`. Put it in `apps/api/.dev.vars` for local work and later run `wrangler secret put BETTER_AUTH_SECRET` for the deployed Worker. Do not reuse the example value.
 4. **Passkey domain:** choose the final HTTPS browser/auth origin and RP ID. Prefer serving `/api/auth` on the PWA origin so the WebAuthn ceremony is same-origin. For `https://app.example.com`, the narrow RP ID is `app.example.com`; a parent such as `example.com` deliberately shares credentials with eligible subdomains. Local development uses origin `http://localhost:8787` and RP ID `localhost`. Real iPhone/PWA validation remains a post-deployment device check.
 5. **OpenCode:** provider-policy approval is still pending. No translation key or account is requested, and this backend does not call the provider.
@@ -26,6 +26,28 @@ npm run dev --workspace @ownwords/api
 uses; it has no remote mode. The API scripts build `@ownwords/lexicon` first because that package is consumed from its
 compiled output.
 
+### The app against the local API
+
+The app calls the API on its own origin, under `/api`, so the session cookie is first-party and a passkey ceremony
+runs on the relying party's origin. Locally, the app's dev server and preview forward `/api` to `wrangler dev`:
+
+```sh
+# The whole connected app on http://localhost:4180, on a fresh local D1 with the
+# synthetic course and synthetic accounts. It prints how to sign in as one.
+npm run stack --workspace @ownwords/web
+
+# Or, with hot reload: the API trusting the dev server's origin, then the app.
+npm run dev:app --workspace @ownwords/api
+npm run dev --workspace @ownwords/web
+```
+
+`dev:app` is `dev` with `BETTER_AUTH_URL`, `TRUSTED_ORIGINS` and `PASSKEY_RP_ORIGIN` set to `http://localhost:5173`,
+the origin the browser sees. Without Google credentials, sign in there with a session you seed yourself, the same
+way the tests do: insert a `user`, an `authorized_users` row and a `session` row into the local D1 with
+`wrangler d1 execute ownwords-local --local`, then set the cookie `ownwords.session_token=<token>.<signature>` in the
+browser, where `<signature>` is the base64 HMAC-SHA256 of the token keyed with `BETTER_AUTH_SECRET`.
+`apps/web/stack/serve.mjs` does exactly this.
+
 `npm run db:compose --workspace @ownwords/api` gathers migrations by filename from core (`0001–0099`), Lexicon (`0100–0199`), and Learning (`0200–0299`) into an ignored Wrangler directory. Duplicate or out-of-contract names fail before D1 is touched. The same composed directory is used by local migration commands and deployment tooling.
 
 The checked-in Wrangler configuration is local-only and contains a non-deployable placeholder D1 ID. No repository workflow deploys. Before a first deployment, create the production database with the approved Eastern North America hint, copy the production template, and replace its hostnames and returned D1 ID:
@@ -44,6 +66,11 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET --config apps/api/wrangler.producti
 ```
 
 Compose and review every core/domain migration, apply them explicitly with `wrangler d1 migrations apply ownwords-production --remote --config apps/api/wrangler.production.jsonc`, and only then run `wrangler deploy --config apps/api/wrangler.production.jsonc`.
+
+The app (`npm run build --workspace @ownwords/web`, output `apps/web/dist/`) must be served from the same HTTPS origin
+as `BETTER_AUTH_URL` and `PASSKEY_RP_ORIGIN`, with `/api/*` on that host routed to the Worker; it calls no other
+host. How the static files are hosted on that origin is part of the deployment decision and is not configured in
+this repository. Never deploy `apps/web/demo-dist/`: it is the sample-data demo.
 
 ## Invitation administration
 
@@ -83,6 +110,16 @@ filename order and rejects duplicate numeric IDs even with different filenames.
 
 ### What is verified locally
 
+`npm run test:stack --workspace @ownwords/web` drives the production build of the app in Chromium against the real
+API under `wrangler dev` and a fresh local D1 (`apps/web/stack/serve.mjs`), with synthetic sessions and no
+credentials. Its journeys: the sign-in gate; a wrong and a real invitation; the Google redirect carrying this
+origin's callback, answered by a stand-in so nothing reaches Google; the first run; adding a passkey after sign-in
+and signing in with it alone, on a Chromium virtual authenticator against the real passkey endpoints; capturing an
+entry whose suggestions fail because the provider is off, typing equivalents by hand, search without stress marks,
+flashcard practice and the retention it records; finishing a synthetic lesson, carrying on from the step reached,
+the Lexicon import and Learn practice; the alphabet and reference; cross-account denial; export; a session ending
+mid-use; sign-out that revokes the session; and a cut network with recovery.
+
 `npm run check` runs every package's tests plus the integrated suites in [`apps/api/test`](../apps/api/test), which
 execute in the Workers runtime against a local D1 with all composed migrations. They use two or more isolated users
 whose sessions are real Better Auth session rows signed with a test secret, and cover: cross-user denial for entries,
@@ -98,13 +135,19 @@ placeholder client values. [`backup-restore.test.mjs`](../apps/api/scripts/backu
 These need the live resources listed at the top of this file; no test here stands in for them.
 
 1. **Google OAuth:** sign in once with the real client against the deployed origin: the consent screen, the registered
-   redirect URI, and a verified Google email that matches an issued invitation.
+   redirect URI, the callback into the app, and a verified Google email that matches an issued invitation. Locally
+   only the redirect to Google, with the right callback, is checked.
 2. **Passkeys:** after that sign-in, register a passkey from Safari on an iPhone, both in the browser and from the
-   Home Screen app, then sign out and sign in with it. Confirm the RP ID and origin match the deployed host.
+   Home Screen app, then sign out and sign in with it. Confirm the RP ID and origin match the deployed host. Locally
+   the same ceremony is checked only on a Chromium virtual authenticator, which says nothing about Safari, iCloud
+   Keychain or the installed app.
 3. **Cloudflare:** create the production D1 database, apply the composed migrations remotely, dry-run and deploy the
    Worker, then run one remote `wrangler d1 export` and restore it into a separate test database.
 4. **Course content:** publish the reviewed production course pack to the remote database. There is no remote
    publishing command yet; `content:publish:local` deliberately refuses anything but local state.
+5. **The app on the deployed origin:** serve `apps/web/dist` on the auth origin with `/api/*` routed to the Worker,
+   add it to an iPhone Home Screen, and check the standalone launch, safe areas, the offline shell and the "new
+   version" prompt there. Every browser check so far is Chromium on a desktop, shaped like a phone.
 
 ## Backup and restore
 

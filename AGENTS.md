@@ -7,9 +7,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `apps/api/src/app.ts` is the composition root that mounts the domain packages behind verified sessions. Migration ownership, composition order, identity boundaries, and what is verified versus still needing live credentials are in `docs/SETUP.md`; migration order is enforced by `apps/api/scripts/compose-migrations.mjs`.
 - The API consumes `@ownwords/lexicon` from its compiled `dist/`; the API's pre-scripts build it, so run API commands through npm scripts rather than bare `tsc`/`vitest` after changing Lexicon sources.
 - Domain packages are independently testable; `packages/lexicon/README.md` documents the Lexicon package commands and integration boundary.
-- The front end is `apps/web`. Its `README.md` covers setup, commands and the design provenance; `apps/web/docs/backend-boundary.md` is the seam between it and the backend.
+- The front end is `apps/web`. Its `README.md` covers setup, commands and the design provenance; `apps/web/docs/backend-boundary.md` is the seam between it and the backend: each client method's route, and the authored course-content fields the app reads.
 - The visual and behavioural source for the front end is the supplied Ownwords Design System package, read together with the product README. Deviations from it are recorded in `apps/web/README.md` and, for the colour tokens, at the top of `apps/web/src/styles/tokens/colors.css`.
-- Every screen reads through `apps/web/src/api/client.ts` and nothing else. Swapping the demo implementation for an HTTP one must not change a screen.
+- Every screen reads through `apps/web/src/api/client.ts` and nothing else. `src/api/http/` answers it for the app (API on the app's own origin under `/api`); `src/api/demo/` only for unit tests and Vite `demo`-mode builds (`demo-dist/`), never as a fallback.
+- Browser tests run only from `apps/web`: `npm run test:e2e` (screens, demo build) and `npm run test:stack` (connected app against real `wrangler dev` + fresh local D1 with synthetic sessions, via `stack/serve.mjs`; also `npm run stack` for manual use).
 
 ## Maintaining this file
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, Chip, StateLabel, TopBar } from "../../../design-system";
 import { Note, Screen } from "../../layout";
-import { Failed, Loading } from "../ScreenState";
+import { Empty, Failed, Loading } from "../ScreenState";
 import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
 import { useScreen } from "../../shell/useScreen";
@@ -9,8 +9,8 @@ import type { AlphabetLetter } from "../../../api/types";
 
 type Filter = "all" | "traps" | "same";
 
-const filters: { key: Filter; label: string }[] = [
-  { key: "all", label: "All 33" },
+const filters = (count: number): { key: Filter; label: string }[] => [
+  { key: "all", label: `All ${count}` },
   { key: "traps", label: "Look Latin, are not" },
   { key: "same", label: "Same as Latin" },
 ];
@@ -50,6 +50,17 @@ export function AlphabetScreen() {
     );
   }
 
+  if (state.data.length === 0) {
+    return (
+      <>
+        {header}
+        <Screen>
+          <Empty message="The alphabet is not published with the course yet." />
+        </Screen>
+      </>
+    );
+  }
+
   const letters = state.data.filter((letter) =>
     filter === "all"
       ? true
@@ -67,7 +78,7 @@ export function AlphabetScreen() {
           aria-label="Filter the alphabet"
           style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
         >
-          {filters.map((option) => (
+          {filters(state.data.length).map((option) => (
             <Chip
               key={option.key}
               selected={filter === option.key}

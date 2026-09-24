@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -13,6 +14,7 @@ import { useDialogBehaviour } from "../../lib/useDialogBehaviour";
 import { useTheme, type Appearance } from "./ThemeProvider";
 import { useClient } from "./ClientProvider";
 import { useToast } from "./ToastProvider";
+import { useSession } from "../session/SessionGate";
 import type { Language, Preferences } from "../../api/types";
 import type { Mode } from "../navigation";
 
@@ -54,15 +56,25 @@ export function SidePanel({
   const suggestId = useId();
   const { appearance, setAppearance } = useTheme();
   const client = useClient();
+  const session = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const [preferences, setPreferences] = useState<Preferences | null>(null);
+  const [busy, setBusy] = useState(false);
+  const demo = client.kind === "demo";
 
   useEffect(() => {
     if (!open) return;
     let live = true;
-    void client.getPreferences().then((value) => {
-      if (live) setPreferences(value);
-    });
+    client.getPreferences().then(
+      (value) => {
+        if (live) setPreferences(value);
+      },
+      () => {
+        if (live) setPreferences(null);
+      },
+    );
     return () => {
       live = false;
     };
@@ -72,9 +84,74 @@ export function SidePanel({
 
   const update = (patch: Partial<Preferences>) => {
     if (!preferences) return;
+    const before = preferences;
     const next = { ...preferences, ...patch };
     setPreferences(next);
-    void client.savePreferences(next);
+    client.savePreferences(next).then(
+      (saved) => {
+        setPreferences(saved);
+        session?.refresh();
+      },
+      (error: unknown) => {
+        setPreferences(before);
+        showToast(
+          error instanceof Error
+            ? `Not saved. ${error.message}`
+            : "That preference was not saved. Try again.",
+        );
+      },
+    );
+  };
+
+  /** Runs an account action, saying in words when it did not work. */
+  const act = async (action: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await action();
+    } catch (error) {
+      showToast(
+        error instanceof Error && error.message
+          ? error.message
+          : "That did not work. Nothing changed; try again.",
+      );
+    }
+    setBusy(false);
+  };
+
+  const exportData = () =>
+    act(async () => {
+      const { filename, blob } = await client.exportAccount();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      // Give the browser a moment to start the download before letting go.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      showToast("Your data is saved as a file.", { icon: "download" });
+    });
+
+  const addPasskey = () =>
+    act(async () => {
+      await client.addPasskey();
+      showToast("Passkey added. Next time, sign in with it.", {
+        icon: "check",
+      });
+    });
+
+  const signOut = () =>
+    act(async () => {
+      await session?.signOut();
+      // Close the panel in place, so the next sign-in does not reopen it.
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: null,
+      });
+    });
+
+  const changeLanguages = () => {
+    // Replacing the panel's own history entry closes it on the way.
+    navigate(`/${mode}/languages`, { replace: true, state: null });
   };
 
   const maintained = languages
@@ -275,12 +352,11 @@ export function SidePanel({
             <Button
               variant="ghost"
               size="sm"
-              icon="plus"
-              onClick={() =>
-                showToast("Adding a language arrives with the account backend.")
-              }
+              icon="languages"
+              disabled={demo}
+              onClick={changeLanguages}
             >
-              Add a language
+              Change languages
             </Button>
           </Section>
 
@@ -292,9 +368,7 @@ export function SidePanel({
                 <span
                   style={{ font: "var(--type-caption)", color: "var(--fg-3)" }}
                 >
-                  {languages.find(
-                    (language) => language.code === preferences?.explanationsIn,
-                  )?.name ?? "English"}
+                  {preferences?.explanationsIn === "es" ? "Español" : "English"}
                 </span>
               </div>
               <div style={row(true)}>
@@ -304,6 +378,7 @@ export function SidePanel({
                   checked={preferences?.audioInCourse ?? true}
                   labelledBy={audioId}
                   label="Audio in the course"
+                  disabled={!preferences}
                   onChange={(next) => update({ audioInCourse: next })}
                 />
               </div>
@@ -314,6 +389,7 @@ export function SidePanel({
                   checked={preferences?.suggestTranslations ?? true}
                   labelledBy={suggestId}
                   label="Suggest translations"
+                  disabled={!preferences}
                   onChange={(next) => update({ suggestTranslations: next })}
                 />
               </div>
@@ -355,40 +431,69 @@ export function SidePanel({
             </Card>
           </Section>
 
-          <div style={{ display: "grid", gap: 4 }}>
-            <Button
-              variant="ghost"
-              icon="download"
-              style={{ justifyContent: "flex-start" }}
-              onClick={() =>
-                showToast("Export arrives with the account backend.")
-              }
-            >
-              Export my data
-            </Button>
-            <Button
-              variant="ghost"
-              icon="user"
-              style={{ justifyContent: "flex-start" }}
-              onClick={() =>
-                showToast("Sign-in arrives with the account backend.")
-              }
-            >
-              Account
-            </Button>
-          </div>
+          <Section title="Account">
+            {session && (
+              <p
+                style={{
+                  margin: 0,
+                  padding: "0 4px",
+                  font: "var(--type-body)",
+                  fontSize: ".9375rem",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                <span className="ow-visually-hidden">Signed in as </span>
+                {session.account.email}
+              </p>
+            )}
+            <div style={{ display: "grid", gap: 4 }}>
+              <Button
+                variant="ghost"
+                icon="download"
+                style={{ justifyContent: "flex-start" }}
+                disabled={busy}
+                onClick={() => void exportData()}
+              >
+                Export my data
+              </Button>
+              {!demo && (
+                <>
+                  <Button
+                    variant="ghost"
+                    icon="key-round"
+                    style={{ justifyContent: "flex-start" }}
+                    disabled={busy}
+                    onClick={() => void addPasskey()}
+                  >
+                    Add a passkey on this device
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    icon="log-out"
+                    style={{ justifyContent: "flex-start" }}
+                    disabled={busy}
+                    onClick={() => void signOut()}
+                  >
+                    Sign out
+                  </Button>
+                </>
+              )}
+            </div>
+          </Section>
 
-          <p
-            style={{
-              margin: 0,
-              padding: "0 4px",
-              font: "var(--type-caption)",
-              color: "var(--fg-3)",
-            }}
-          >
-            Your collection lives in this browser for now. Nothing is sent
-            anywhere, and nothing is kept when you close the tab.
-          </p>
+          {demo && (
+            <p
+              style={{
+                margin: 0,
+                padding: "0 4px",
+                font: "var(--type-caption)",
+                color: "var(--fg-3)",
+              }}
+            >
+              This is a demo with sample data. Nothing is sent anywhere, and
+              nothing is kept when you close the tab.
+            </p>
+          )}
         </div>
       </div>
     </div>

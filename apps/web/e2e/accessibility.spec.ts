@@ -17,6 +17,8 @@ test.describe("accessibility basics", () => {
   for (const [name, path] of screens) {
     test(`${name} has no detectable violations`, async ({ page }) => {
       await page.goto(path);
+      // The screen is drawn, not merely loading, before it is measured.
+      await expect(page.getByRole("navigation").first()).toBeVisible();
       await page.waitForTimeout(200);
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
@@ -39,6 +41,9 @@ test.describe("accessibility basics", () => {
 
   test("shows a visible focus ring on a keyboard tab", async ({ page }) => {
     await page.goto("/maintain/lexicon");
+    await expect(
+      page.getByRole("searchbox", { name: "Search your Lexicon" }),
+    ).toBeVisible();
     await page.keyboard.press("Tab");
     const shadow = await page.evaluate(
       () => getComputedStyle(document.activeElement as HTMLElement).boxShadow,
@@ -60,10 +65,10 @@ test.describe("accessibility basics", () => {
 
     for (let step = 0; step < 12; step += 1) {
       await page.keyboard.press("Tab");
-      const inside = await page.evaluate(() => {
-        const dialog = document.querySelector('[role="dialog"]');
-        return dialog?.contains(document.activeElement) ?? false;
-      });
+      // Closed sheets stay mounted, inert; only the open one may hold focus.
+      const inside = await sheet.evaluate((dialog) =>
+        dialog.contains(document.activeElement),
+      );
       expect(inside).toBe(true);
     }
 
@@ -76,6 +81,9 @@ test.describe("accessibility basics", () => {
     page,
   }) => {
     await page.goto("/maintain/lexicon");
+    await expect(
+      page.getByRole("searchbox", { name: "Search your Lexicon" }),
+    ).toBeVisible();
     const names: string[] = [];
     for (let step = 0; step < 30; step += 1) {
       await page.keyboard.press("Tab");

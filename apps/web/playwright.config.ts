@@ -1,7 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Smoke coverage runs against the production build through `vite preview`, so
-// the service worker, the manifest and the real bundle are what is exercised.
+// Smoke coverage of the screens runs against a demo build through `vite
+// preview`, so the service worker, the manifest and a real bundle are
+// exercised with deterministic sample data and no backend. The demo build is
+// its own output (`demo-dist/`), never the app's; the connected app is
+// covered end to end by `playwright.stack.config.ts`.
 const PORT = 4173;
 const baseURL = `http://127.0.0.1:${PORT}`;
 
@@ -32,7 +35,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
+    command: `npm run build:demo && npx vite preview --outDir demo-dist --port ${PORT} --strictPort`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

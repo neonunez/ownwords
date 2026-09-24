@@ -108,7 +108,7 @@ test.describe("the core flows", () => {
     await expect(
       page.getByRole("button", { name: "Play the recording" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Finish step" }).click();
+    await page.getByRole("button", { name: "Finish lesson" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Course" }),
     ).toBeVisible();
