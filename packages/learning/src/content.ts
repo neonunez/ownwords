@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lexiconImportProblem } from "./lexicon-export";
 
 const id = z
   .string()
@@ -268,6 +269,7 @@ export function validateContentPack(input: unknown): ContentPack {
   const lessonIds: string[] = [];
   const stepIds: string[] = [];
   const introducedBy = new Map<string, string>();
+  const linkedItems = new Set<string>();
   let order = 0;
 
   for (const unit of [...pack.units].sort((a, b) => a.position - b.position)) {
@@ -304,6 +306,7 @@ export function validateContentPack(input: unknown): ContentPack {
           issues,
         );
         for (const link of step.items) {
+          linkedItems.add(link.itemId);
           if (!items.has(link.itemId)) {
             issues.push(
               `step '${step.id}' references missing item '${link.itemId}'`,
@@ -330,6 +333,32 @@ export function validateContentPack(input: unknown): ContentPack {
       item.languageTag.toLowerCase() !== pack.course.languageTag.toLowerCase()
     ) {
       issues.push(`item '${item.id}' language must match the course language`);
+    }
+    const lexiconProblem = lexiconImportProblem({
+      itemId: item.id,
+      kind: item.kind,
+      languageTag: item.languageTag,
+      displayText: item.displayText,
+      gloss: item.gloss,
+      stressText: item.stressText ?? null,
+      grammaticalMetadata: item.grammaticalMetadata,
+      license: item.license,
+      provenance: item.provenance,
+      audio: item.audio ?? null,
+    });
+    if (lexiconProblem) {
+      issues.push(
+        `item '${item.id}' cannot be exported to the Lexicon: ${lexiconProblem}`,
+      );
+    }
+  }
+  // Only an introducing lesson exports an item, so an item a lesson uses but
+  // none introduces would never reach the learner's Lexicon.
+  for (const itemId of linkedItems) {
+    if (!introducedBy.has(itemId)) {
+      issues.push(
+        `item '${itemId}' is used by a lesson but no lesson introduces it`,
+      );
     }
   }
 

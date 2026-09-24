@@ -1,5 +1,6 @@
 export { createLexiconRoutes } from "./routes.js";
 export { createCourseLexiconImporter } from "./service.js";
+export { exportLexiconOwnerData, type LexiconOwnerExport } from "./export.js";
 export {
   DisabledTranslationProvider,
   ProviderDisabledError,

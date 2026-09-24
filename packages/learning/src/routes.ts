@@ -1,8 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { CreateLearningRoutesOptions, LearningEnv } from "./contracts";
+import type {
+  CreateLearningRoutesOptions,
+  LearningEnv,
+  LexiconCourseImportService,
+} from "./contracts";
 import { all, first, parseJsonObject } from "./db";
 import { errorResponse, LearningError } from "./errors";
+import { lexiconCourseImport } from "./lexicon-export";
 
 const routeId = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const category = z.enum([
@@ -250,7 +255,7 @@ interface SyncRow {
 async function flushLexiconSync(
   db: D1Database,
   userId: string,
-  importer: CreateLearningRoutesOptions["lexiconImporter"],
+  importer: LexiconCourseImportService,
   timestamp: string,
   courseId: string,
   version: number,
@@ -276,38 +281,21 @@ async function flushLexiconSync(
   );
 
   for (const row of pending) {
-    const license = parseJsonObject(row.license_json);
-    const provenance = parseJsonObject(row.provenance_json);
-    const scriptData: Record<string, unknown> = {
-      ...parseJsonObject(row.grammatical_metadata_json),
-      ...(row.stress_text ? { stressText: row.stress_text } : {}),
-      ...(row.audio_json ? { audio: parseJsonObject(row.audio_json) } : {}),
-    };
     try {
-      await importer.importCourseEntry({
-        ownerId: userId,
-        courseId: row.course_id,
-        courseVersion: String(row.course_version),
-        itemId: row.item_id,
-        kind: row.kind,
-        provenance: { content: provenance, license },
-        senses: [
-          {
-            gloss: row.gloss,
-            equivalents: [
-              {
-                languageTag: row.language_tag,
-                text: row.display_text,
-                fit: "exact",
-                status: "confirmed",
-                source: "course",
-                provenance: { content: provenance, license },
-                scriptData,
-              },
-            ],
-          },
-        ],
-      });
+      await importer.importCourseEntry(
+        lexiconCourseImport(userId, row.course_id, row.course_version, {
+          itemId: row.item_id,
+          kind: row.kind,
+          languageTag: row.language_tag,
+          displayText: row.display_text,
+          gloss: row.gloss,
+          stressText: row.stress_text,
+          grammaticalMetadata: parseJsonObject(row.grammatical_metadata_json),
+          license: parseJsonObject(row.license_json),
+          provenance: parseJsonObject(row.provenance_json),
+          audio: row.audio_json ? parseJsonObject(row.audio_json) : null,
+        }),
+      );
       const result = await db
         .prepare(
           `UPDATE learning_lexicon_sync
@@ -359,6 +347,11 @@ export function createLearningRoutes(
     throw new Error("Learning routes require a Lexicon importer");
   }
   const clock = options.clock ?? (() => new Date());
+  const lexiconImporter = options.lexiconImporter;
+  const importerFor = (bindings: LearningEnv["Bindings"]) =>
+    typeof lexiconImporter === "function"
+      ? lexiconImporter(bindings)
+      : lexiconImporter;
   const app = new Hono<LearningEnv>();
 
   app.use("*", async (c, next) => {
@@ -909,7 +902,7 @@ export function createLearningRoutes(
       const pendingItems = await flushLexiconSync(
         c.env.DB,
         userId,
-        options.lexiconImporter,
+        importerFor(c.env),
         timestamp,
         courseId,
         version,

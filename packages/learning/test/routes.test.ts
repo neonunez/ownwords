@@ -461,6 +461,20 @@ describe("authenticated learning routes", () => {
     );
     expect(practice.status).toBe(404);
   });
+
+  it("resolves a per-request importer against the request's own bindings", async () => {
+    const bindings: unknown[] = [];
+    app = createRoot({
+      lexiconImporter: (env) => {
+        bindings.push(env.DB);
+        return importer;
+      },
+    });
+    const response = await completeHello();
+    expect(response.status).toBe(200);
+    expect(bindings).toEqual([test.db]);
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("course version pinning", () => {

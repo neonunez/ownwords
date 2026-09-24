@@ -23,6 +23,9 @@ export default defineConfig({
   ],
   test: {
     include: ["test/**/*.test.ts"],
+    // Each file boots its own Workers runtime; allow for cold starts on busy machines.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
     setupFiles: ["./test/setup.ts"],
   },
 });

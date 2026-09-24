@@ -94,7 +94,7 @@ function serializeProfile(profile: ProfileRow, languages: LanguageRow[]) {
   };
 }
 
-async function readProfile(db: D1Database, userId: string) {
+export async function readProfile(db: D1Database, userId: string) {
   const profile = await db
     .prepare(
       `SELECT explanation_language AS explanationLanguage,

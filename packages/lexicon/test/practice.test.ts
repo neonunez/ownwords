@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { createCourseLexiconImporter } from "../src/service.js";
 import {
   appFor,
   createVerifiedEntry,
@@ -37,6 +38,90 @@ async function due(
 }
 
 describe("practice eligibility and shared scheduler", () => {
+  it("limits the course-origin queue to course imports without hiding them from Maintain", async () => {
+    const ctx = await context();
+    await createVerifiedEntry(ctx);
+    const importer = createCourseLexiconImporter({
+      db: ctx.db,
+      clock: ctx.clock,
+      idGenerator: ctx.ids,
+    });
+    const course = await importer.importCourseEntry({
+      ownerId: "user-a",
+      courseId: "russian-zero",
+      courseVersion: "1",
+      itemId: "poka",
+      kind: "word",
+      provenance: { fixture: true },
+      senses: [
+        {
+          gloss: "synthetic farewell",
+          equivalents: [
+            {
+              languageTag: "ru",
+              text: "пока́",
+              fit: "exact",
+              status: "confirmed",
+            },
+          ],
+        },
+      ],
+    });
+    // Another owner's course import never leaks into this owner's queue.
+    await importer.importCourseEntry({
+      ownerId: "user-b",
+      courseId: "russian-zero",
+      courseVersion: "1",
+      itemId: "privet",
+      kind: "word",
+      provenance: { fixture: true },
+      senses: [
+        {
+          gloss: "synthetic greeting",
+          equivalents: [
+            {
+              languageTag: "ru",
+              text: "приве́т",
+              fit: "exact",
+              status: "confirmed",
+            },
+          ],
+        },
+      ],
+    });
+    const app = appFor(ctx, "user-a");
+    const path =
+      "/api/v1/lexicon/practice/due?language=ru&direction=produce&format=flashcard&sessionId=session-a";
+    const all = (await (
+      await jsonRequest(app, path, {}, ctx.db)
+    ).json()) as any;
+    assert.deepEqual(all.data.map((item: any) => item.target.text).sort(), [
+      "пока́",
+      "приве́т",
+    ]);
+    const courseOnly = await jsonRequest(
+      app,
+      `${path}&origin=course`,
+      {},
+      ctx.db,
+    );
+    assert.equal(courseOnly.status, 200);
+    const body = (await courseOnly.json()) as any;
+    assert.deepEqual(
+      body.data.map((item: any) => item.target.text),
+      ["пока́"],
+    );
+    assert.ok(course.created);
+
+    const invalid = await jsonRequest(
+      app,
+      `${path}&origin=personal`,
+      {},
+      ctx.db,
+    );
+    assert.equal(invalid.status, 400);
+  });
+
   it("never schedules false friends or unverified Russian suggestions", async () => {
     const ctx = await context();
     const app = appFor(ctx, "user-a");
