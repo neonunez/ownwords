@@ -755,6 +755,62 @@ describe("practice and progress", () => {
     ]);
     expect(summary.estimate).toBe("About a minute.");
   });
+
+  it("reports a direction as due even when another fills the 20-card queue", async () => {
+    const api = fakeApi({
+      ...signedIn,
+      "GET /api/v1/lexicon/progress": (request: Request) =>
+        Response.json({
+          data: ["recognize", "produce"].map((direction) => ({
+            languageTag: new URL(request.url).searchParams.get("language"),
+            direction,
+            retention: 0.5,
+            nextDueAt: null,
+          })),
+        }),
+      "GET /api/v1/lexicon/practice/due": (request: Request) => {
+        const query = new URL(request.url).searchParams;
+        const lane = `${query.get("language")}:${query.get("direction")}`;
+        if (lane === "es:recognize") {
+          return Response.json({
+            data: Array.from({ length: 20 }, (_, index) =>
+              dueRow(
+                `es${index}`,
+                "es",
+                "recognize",
+                "2026-01-01T00:00:00.000Z",
+              ),
+            ),
+            nextDueAt: null,
+          });
+        }
+        if (lane === "ru:produce") {
+          return Response.json({
+            data: [
+              dueRow("r1", "ru", "produce", "2026-06-01T00:00:00.000Z"),
+              dueRow("r2", "ru", "produce", "2026-06-02T00:00:00.000Z"),
+              dueRow("r3", "ru", "produce", "2026-06-03T00:00:00.000Z"),
+            ],
+            nextDueAt: null,
+          });
+        }
+        return Response.json({ data: [], nextDueAt: null });
+      },
+    });
+    const client = createHttpClient({ fetch: api.fetch });
+    await client.getSession();
+    const summary = await client.getProgress();
+    expect(
+      summary.perLanguage.map(
+        (row) => `${row.language}:${row.direction}:${row.dueNow}`,
+      ),
+    ).toEqual([
+      "es:recognise:true",
+      "es:produce:false",
+      "ru:recognise:false",
+      "ru:produce:true",
+    ]);
+  });
 });
 
 describe("the course", () => {

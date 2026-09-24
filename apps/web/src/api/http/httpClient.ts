@@ -314,7 +314,9 @@ export function createHttpClient(
     );
   };
 
-  const dueQueue = async (scope: PracticeScope): Promise<DueQueue> => {
+  const dueQueue = async (
+    scope: PracticeScope,
+  ): Promise<{ queue: DueQueue; dueLanes: Set<string> }> => {
     const lanes = await practiceLanes(scope.mode, scope.format);
     const answers = await Promise.all(
       lanes.map(async (lane) => {
@@ -352,12 +354,22 @@ export function createHttpClient(
         language: lane.language,
         direction: directionFromWire(lane.direction),
       }));
+    const dueLanes = new Set(
+      answers
+        .filter(({ queue }) => queue.cards.length > 0)
+        .map(
+          ({ lane }) => `${lane.language}:${directionFromWire(lane.direction)}`,
+        ),
+    );
     return {
-      cards,
-      estimate: estimateFor(cards.length),
-      comingUp,
-      // The scheduler does not yet offer cards before they are due.
-      aheadAvailable: false,
+      queue: {
+        cards,
+        estimate: estimateFor(cards.length),
+        comingUp,
+        // The scheduler does not yet offer cards before they are due.
+        aheadAvailable: false,
+      },
+      dueLanes,
     };
   };
 
@@ -795,7 +807,7 @@ export function createHttpClient(
       if (scope.ahead) {
         return { cards: [], estimate: "", comingUp: [], aheadAvailable: false };
       }
-      return dueQueue(scope);
+      return (await dueQueue(scope)).queue;
     },
 
     async submitReview(submission) {
@@ -814,7 +826,7 @@ export function createHttpClient(
       const practised = languages.filter(
         (language) => language.level !== "native",
       );
-      const [rows, queue] = await Promise.all([
+      const [rows, { queue, dueLanes }] = await Promise.all([
         Promise.all(
           practised.map(async (language) => {
             const answer = object(
@@ -848,12 +860,9 @@ export function createHttpClient(
         // id reads it without touching any sitting in progress.
         dueQueue({ mode: "maintain", format: "flashcard", sessionId: newId() }),
       ]);
-      const asked = new Set(
-        queue.cards.map((card) => `${card.language}:${card.direction}`),
-      );
       const perLanguage: LanguageProgress[] = rows.flat().map((row) => ({
         ...row,
-        dueNow: asked.has(`${row.language}:${row.direction}`),
+        dueNow: dueLanes.has(`${row.language}:${row.direction}`),
       }));
       return {
         perLanguage,
