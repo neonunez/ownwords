@@ -47,17 +47,6 @@ const publishSchema = z
         contentHash: z.string().regex(/^[a-f0-9]{64}$/),
       })
       .strict(),
-    /**
-     * The operator's own statement of the pack's editorial status, kept in the
-     * response so a publication record carries it. Nothing here decides whether
-     * a course is fit to use; the note is the operator's claim, not a review.
-     */
-    editorial: z
-      .object({
-        teacherReviewed: z.boolean(),
-        note: z.string().trim().min(10).max(500),
-      })
-      .strict(),
     /** Preflight unless the operator explicitly asks for the write. */
     dryRun: z.boolean().default(true),
   })
@@ -129,16 +118,6 @@ export function createContentPublicationAdminRoutes(): Hono<AppEnv> {
     await next();
   });
 
-  /** Read-only: what a course already holds, for a publication preflight. */
-  routes.get("/versions", async (c) => {
-    const courseId = c.req.query("courseId");
-    if (!courseId || courseId.length > 100) {
-      return errorResponse(400, "invalid_request", "A course id is required");
-    }
-    const versions = await readCourseVersionStates(c.env.DB, courseId);
-    return c.json({ data: { courseId, versions } });
-  });
-
   routes.use(
     "*",
     bodyLimit({
@@ -160,7 +139,7 @@ export function createContentPublicationAdminRoutes(): Hono<AppEnv> {
       return errorResponse(
         400,
         "invalid_request",
-        "A course pack with its expected course, version, content hash and editorial statement is required",
+        "A course pack with its expected course, version and content hash is required",
       );
     }
 
@@ -177,7 +156,7 @@ export function createContentPublicationAdminRoutes(): Hono<AppEnv> {
       return errorResponse(400, "invalid_content", detail);
     }
 
-    const { expect, editorial, dryRun } = parsed.data;
+    const { expect, dryRun } = parsed.data;
     if (
       pack.course.id !== expect.courseId ||
       pack.version !== expect.version ||
@@ -226,9 +205,7 @@ export function createContentPublicationAdminRoutes(): Hono<AppEnv> {
 
     const summary = summarizePack(pack, hash);
     if (dryRun) {
-      return c.json({
-        data: { dryRun: true, action, editorial, summary, versions },
-      });
+      return c.json({ data: { dryRun: true, action, summary, versions } });
     }
 
     try {
@@ -256,7 +233,6 @@ export function createContentPublicationAdminRoutes(): Hono<AppEnv> {
       data: {
         dryRun: false,
         action,
-        editorial,
         summary,
         status: published?.status ?? "published",
         publishedAt: published?.publishedAt ?? null,

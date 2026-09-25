@@ -18,6 +18,7 @@ import {
   PublicationRefusal,
   readPublicationTarget,
   readPublishToken,
+  verifyDeployedDatabaseBinding,
 } from "./remote-publication.mjs";
 import {
   apiDirectory,
@@ -265,15 +266,11 @@ test("a preflight plans only reads, and only a confirmed run plans the write", (
       version: 1,
       contentHash: HASH,
     },
-    editorial: { teacherReviewed: true, note: "Reviewed by the owner." },
   };
   const preflight = planPublicationRequests({ ...shared, confirm: false });
   assert.deepEqual(
     preflight.map((request) => [request.method, request.mutates]),
-    [
-      ["GET", false],
-      ["POST", false],
-    ],
+    [["POST", false]],
   );
   assert.ok(
     preflight.every((request) => request.body?.dryRun !== false),
@@ -286,8 +283,10 @@ test("a preflight plans only reads, and only a confirmed run plans the write", (
     preflight.every((request) => request.url.startsWith(PRODUCTION_ORIGIN)),
   );
   assert.ok(
-    preflight.some((request) => request.path.includes("versions?courseId=")),
-    "the preflight reads what the database already holds",
+    preflight.every(
+      (request) => request.path === "/api/v1/admin/content/publish",
+    ),
+    "the dry run is the only request: it also reports the versions already held",
   );
 
   const confirmed = planPublicationRequests({ ...shared, confirm: true });
@@ -296,7 +295,11 @@ test("a preflight plans only reads, and only a confirmed run plans the write", (
   assert.equal(write.mutates, true);
   assert.equal(write.body.dryRun, false);
   assert.deepEqual(write.body.expect, shared.expect);
-  assert.deepEqual(write.body.editorial, shared.editorial);
+  assert.deepEqual(
+    Object.keys(write.body).sort(),
+    ["dryRun", "expect", "pack"],
+    "the publication request carries nothing but the pack, its expectation and the write flag",
+  );
   assert.ok(
     confirmed.slice(0, -1).every((request) => request.body?.dryRun !== false),
     "the confirmed run still preflights before it writes",
@@ -314,9 +317,6 @@ test("the command refuses a local config without sending anything", async () => 
       "1",
       "--expect-hash",
       HASH,
-      "--note",
-      "Owner-confirmed teacher review; recorded audio arrives separately.",
-      "--teacher-reviewed",
       pack,
     ],
     { CONTENT_PUBLISH_TOKEN: TOKEN },
@@ -336,9 +336,6 @@ test("the command refuses the tracked template and its placeholder D1 ID", async
     "1",
     "--expect-hash",
     HASH,
-    "--note",
-    "Owner-confirmed teacher review; recorded audio arrives separately.",
-    "--teacher-reviewed",
     pack,
   ]);
   assert.equal(result.code, 1);
@@ -357,9 +354,6 @@ test("the command refuses a pack whose content is not the reviewed hash", async 
       "1",
       "--expect-hash",
       "f".repeat(64),
-      "--note",
-      "Owner-confirmed teacher review; recorded audio arrives separately.",
-      "--teacher-reviewed",
       pack,
     ],
     { CONTENT_PUBLISH_TOKEN: TOKEN },
@@ -369,7 +363,7 @@ test("the command refuses a pack whose content is not the reviewed hash", async 
   assert.equal(result.stdout, "");
 });
 
-test("the command refuses a missing token, and states the review status explicitly", async () => {
+test("the command refuses a missing token", async () => {
   const configPath = await writeConfig(productionConfig());
   const withoutToken = await publisherResult([
     "--config",
@@ -380,30 +374,100 @@ test("the command refuses a missing token, and states the review status explicit
     "1",
     "--expect-hash",
     HASH,
-    "--note",
-    "Owner-confirmed teacher review; recorded audio arrives separately.",
-    "--teacher-reviewed",
     pack,
   ]);
   assert.equal(withoutToken.code, 1);
   assert.match(withoutToken.stderr, /refused \(missing_token\)/);
+  assert.equal(withoutToken.stdout, "");
+});
 
-  const withoutStatement = await publisherResult(
-    [
-      "--config",
-      configPath,
-      "--expect-course",
-      "russian-foundations",
-      "--expect-version",
-      "1",
-      "--expect-hash",
-      HASH,
-      "--note",
-      "Owner-confirmed teacher review; recorded audio arrives separately.",
-      pack,
-    ],
-    { CONTENT_PUBLISH_TOKEN: TOKEN },
+const DEPLOYED_ID = "1f2e3d4c-5b6a-7988-9a0b-1c2d3e4f5061";
+const OTHER_ID = "9a8b7c6d-5e4f-3021-a1b2-c3d4e5f60718";
+
+/** A stand-in for read-only Wrangler, driven by the answers a test wants. */
+function wranglerStub({ versionBindings, databaseUuid, fail }) {
+  const calls = [];
+  const exec = async (args) => {
+    calls.push(args.join(" "));
+    if (fail) throw new Error("not authenticated");
+    if (args[0] === "deployments")
+      return JSON.stringify([{ versions: ["v-1"] }]);
+    if (args[0] === "versions")
+      return JSON.stringify({ bindings: versionBindings });
+    if (args[0] === "d1") return JSON.stringify({ uuid: databaseUuid });
+    throw new Error(`unexpected wrangler call: ${args.join(" ")}`);
+  };
+  return { exec, calls };
+}
+
+test("the deployed Worker's own D1 binding is proved before any request exists", async () => {
+  const target = {
+    configPath: "/tmp/ownwords-production/wrangler.production.jsonc",
+    origin: PRODUCTION_ORIGIN,
+    workerName: "ownwords-api",
+    databaseName: PRODUCTION_DATABASE_NAME,
+    databaseId: DEPLOYED_ID,
+  };
+  const binding = { name: "DB", type: "d1", id: DEPLOYED_ID };
+
+  const verified = wranglerStub({
+    versionBindings: [binding],
+    databaseUuid: DEPLOYED_ID,
+  });
+  await assert.doesNotReject(() =>
+    verifyDeployedDatabaseBinding({ target, exec: verified.exec }),
   );
-  assert.equal(withoutStatement.code, 1);
-  assert.match(withoutStatement.stderr, /refused \(usage\)/);
+  assert.deepEqual(
+    verified.calls.map((call) => call.split(" ")[0] + " " + call.split(" ")[1]),
+    ["deployments list", "versions view", "d1 info"],
+  );
+  assert.ok(
+    verified.calls.every(
+      (call) => call.includes("--config") && call.includes("--json"),
+    ),
+    "every lookup is read-only, config-scoped JSON",
+  );
+
+  // A Worker deployed from another config would otherwise publish anyway.
+  for (const [versionBindings, databaseUuid, reason] of [
+    [
+      [{ name: "DB", type: "d1", id: OTHER_ID }],
+      OTHER_ID,
+      "deployed_binding_mismatch",
+    ],
+    [
+      [{ name: "DB", type: "d1", id: OTHER_ID }],
+      DEPLOYED_ID,
+      "deployed_binding_mismatch",
+    ],
+    [
+      [{ name: "OTHER", type: "d1", id: DEPLOYED_ID }],
+      DEPLOYED_ID,
+      "unverified_binding",
+    ],
+    [[binding], OTHER_ID, "deployed_binding_mismatch"],
+  ]) {
+    const stub = wranglerStub({ versionBindings, databaseUuid });
+    await assert.rejects(
+      () => verifyDeployedDatabaseBinding({ target, exec: stub.exec }),
+      (error) => {
+        assert.ok(error instanceof PublicationRefusal);
+        assert.equal(error.reason, reason);
+        return true;
+      },
+    );
+  }
+
+  // An unreachable or unauthenticated Cloudflare fails closed, never open.
+  const failing = wranglerStub({
+    versionBindings: [binding],
+    databaseUuid: DEPLOYED_ID,
+    fail: true,
+  });
+  await assert.rejects(
+    () => verifyDeployedDatabaseBinding({ target, exec: failing.exec }),
+    (error) =>
+      error instanceof PublicationRefusal &&
+      error.reason === "unverified_binding",
+  );
 });

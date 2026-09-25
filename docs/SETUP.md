@@ -154,13 +154,13 @@ Course content reaches the production database only through the deployed API's o
 `ingestCourseVersion` and `publishCourseVersion` against the production D1 binding, so a remote publication is the
 same validated importer the local publisher uses, in one atomic batch, and a published version is immutable.
 
-- `GET /api/v1/admin/content/versions?courseId=<id>` lists the versions a course already holds: version, status,
-  content hash and publication time. It writes nothing.
-- `POST /api/v1/admin/content/publish` takes the course pack, the `expect` block naming the exact course, version and
-  64-character content hash, an `editorial` statement, and `dryRun`. `dryRun` defaults to `true`, which validates the
-  pack, compares it with `expect`, and answers with the action it would take (`publish`, `resume-draft` or
-  `already-published`) without writing, or with the same `409` the write would return for a conflicting draft or an
-  out-of-sequence version. `dryRun: false` performs that one publication.
+One route, `POST /api/v1/admin/content/publish`, takes the course pack, the `expect` block naming the exact course,
+version and 64-character content hash, and `dryRun`. `dryRun` defaults to `true`, which validates the pack, compares
+it with `expect`, and answers with the versions the course already holds (version, status, content hash, publication
+time) and the action it would take — `publish`, `resume-draft` or `already-published` — without writing, or with the
+same `409` the write would return for a conflicting draft or an out-of-sequence version. `dryRun: false` performs that
+one publication. There is no separate read endpoint: the dry run is the read, so this is the only authenticated
+publication surface the API exposes.
 
 Authority is the `CONTENT_PUBLISH_TOKEN` Worker secret, a separate 64-hex value from `INVITATION_ADMIN_TOKEN`. It is
 absent by default, and an absent, malformed or non-matching value disables publication entirely; no session, role or
@@ -176,6 +176,14 @@ whose `ENVIRONMENT` is not `production`, a Worker other than `ownwords-api`, an 
 placeholder or the all-zero local ID are all refused before any request is sent. It also refuses a pack whose computed
 hash is not the `--expect-hash` it was given.
 
+Those are local facts about a config file, so the run does not trust them alone. Before it builds any request it asks
+Cloudflare, read-only, what the currently deployed `ownwords-api` version is actually bound to
+(`wrangler deployments list`, `wrangler versions view`, `wrangler d1 info`) and refuses unless the deployed `DB`
+binding and the remote `ownwords-production` database are both the `database_id` this config intends. A Worker
+deployed from a different or stale config, an undeployed Worker, and an unauthenticated or unreachable Cloudflare all
+refuse the run rather than publishing. This needs a Cloudflare login in the operator's terminal; it needs no write
+permission.
+
 From the repository root, in an owner-controlled terminal, with the production config already copied, the real D1 ID
 in it, the migrations applied and the Worker deployed (npm runs the workspace script from `apps/api`, so `--config`
 and the pack path are relative to it):
@@ -190,14 +198,13 @@ npm run content:publish:remote --workspace @ownwords/api -- \
   --expect-course russian-foundations \
   --expect-version 1 \
   --expect-hash 6fc73576449e888aa99d519790bf112fca98b35254da649db5a228a42fe6a08b \
-  --teacher-reviewed \
-  --note "Teacher-reviewed sequence and wording; recorded audio is still being acquired separately." \
   ../../packages/learning/content/russian-foundations-v1.json
 ```
 
 Re-run that identical command with `--confirm` appended to publish it. The run prints the target Worker, origin,
-database name and ID, the course, version, content hash, content counts, how many items carry audio, and the editorial
-statement before it sends anything.
+database name and ID, the deployed version that binding was proved on, the course, version, content hash, content
+counts and how many items carry audio before it sends anything. A course's editorial status is recorded in
+`packages/learning/content/README.md`, not at publication time.
 
 **The write is irreversible for that course version.** A published version cannot be edited, replaced or deleted: a
 mistake, or a later audio change, is corrected by publishing the next sequential version, which learners who already

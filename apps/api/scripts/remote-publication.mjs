@@ -1,12 +1,11 @@
-// The guards and the request plan for the remote course publisher, kept
-// separate from the process that runs them so both can be tested without a
-// network, a credential or a Cloudflare account.
+// The guards, the deployed-binding proof and the request plan for the remote
+// course publisher, kept separate from the process that runs them so both can
+// be tested without a network, a credential or a Cloudflare account.
 //
-// Nothing here talks to Cloudflare. The publisher reaches the production
-// database only through the deployed API's guarded operator route, so this
-// module's whole job is to refuse anything that is not the exact intended
-// production target, and to plan read-only requests unless the operator
-// confirms the write.
+// The only calls this module makes to Cloudflare are read-only lookups of what
+// the deployed Worker is actually bound to, so the intended database identity
+// is proved against the live deployment rather than the operator's config file.
+// The publication itself goes through the deployed API's guarded operator route.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -52,7 +51,6 @@ export class PublicationRefusal extends Error {
  * @property {string} token
  * @property {unknown} pack
  * @property {PublicationExpectation} expect
- * @property {{ teacherReviewed: boolean, note: string }} editorial
  * @property {boolean} confirm
  */
 
@@ -209,13 +207,100 @@ export function readPublishToken(env) {
   return token;
 }
 
-/** @param {PublicationPlan} plan */
+/**
+ * Reads Cloudflare's own record of what the deployed Worker is bound to, so the
+ * publication target is proved against the live deployment rather than against
+ * the operator's config file. Every command here is read-only; anything the
+ * pipeline cannot read, or any mismatch, refuses the run.
+ *
+ * `exec` is injected so the check is testable without Cloudflare credentials.
+ *
+ * @param {{ target: PublicationTarget, exec: (args: string[]) => Promise<string> }} check
+ * @returns {Promise<{ versionId: string, databaseId: string }>}
+ */
+export async function verifyDeployedDatabaseBinding({ target, exec }) {
+  const config = ["--config", target.configPath];
+  const json = async (args, what) => {
+    let output;
+    try {
+      output = await exec([...args, ...config, "--json"]);
+    } catch (error) {
+      throw new PublicationRefusal(
+        "unverified_binding",
+        `could not read ${what} from Cloudflare: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    }
+    try {
+      return JSON.parse(output);
+    } catch {
+      throw new PublicationRefusal(
+        "unverified_binding",
+        `could not read ${what} from Cloudflare: the response was not JSON`,
+      );
+    }
+  };
+
+  const deployments = await json(
+    ["deployments", "list", "--name", target.workerName],
+    "the deployed versions of " + target.workerName,
+  );
+  const current =
+    (Array.isArray(deployments) ? deployments[0] : undefined) ?? {};
+  const versionId = Array.isArray(current.versions)
+    ? current.versions[0]
+    : current.version_id;
+  if (typeof versionId !== "string" || versionId.length === 0) {
+    throw new PublicationRefusal(
+      "unverified_binding",
+      `${target.workerName} has no deployed version to check; deploy the Worker before publishing`,
+    );
+  }
+
+  const version = await json(
+    ["versions", "view", versionId, "--name", target.workerName],
+    `version ${versionId} of ${target.workerName}`,
+  );
+  const bindings = Array.isArray(version?.bindings)
+    ? version.bindings
+    : (version?.metadata?.bindings ?? []);
+  const binding = bindings.find((entry) => entry?.name === PRODUCTION_BINDING);
+  const deployedId = binding?.id ?? binding?.database_id;
+  if (typeof deployedId !== "string" || deployedId.length === 0) {
+    throw new PublicationRefusal(
+      "unverified_binding",
+      `deployed version ${versionId} of ${target.workerName} has no ${PRODUCTION_BINDING} D1 binding to verify`,
+    );
+  }
+  if (deployedId !== target.databaseId) {
+    throw new PublicationRefusal(
+      "deployed_binding_mismatch",
+      `deployed version ${versionId} of ${target.workerName} is bound to D1 ${deployedId}, not the intended ${target.databaseId}; redeploy the Worker from this config or publish nothing`,
+    );
+  }
+
+  const database = await json(
+    ["d1", "info", target.databaseName],
+    `${target.databaseName} from Cloudflare`,
+  );
+  const remoteId = database?.uuid ?? database?.database_id;
+  if (remoteId !== target.databaseId) {
+    throw new PublicationRefusal(
+      "deployed_binding_mismatch",
+      `${target.databaseName} is ${String(remoteId)} in this account, not the configured ${target.databaseId}`,
+    );
+  }
+
+  return { versionId, databaseId: target.databaseId };
+}
+
+/**
+ * @param {PublicationPlan} plan
+ */
 export function planPublicationRequests({
   target,
   token,
   pack,
   expect,
-  editorial,
   confirm,
 }) {
   const headers = {
@@ -223,16 +308,10 @@ export function planPublicationRequests({
     "Content-Type": "application/json",
     Origin: target.origin,
   };
-  const body = { pack, expect, editorial, dryRun: !confirm };
-  // The read-only plan always runs; the write is a second, separate request
-  // that only exists once the operator has confirmed this exact run.
+  const body = { pack, expect, dryRun: !confirm };
+  // The read-only preflight always runs; the write is a second, separate
+  // request that only exists once the operator has confirmed this exact run.
   const requests = [
-    {
-      step: "read existing versions",
-      mutates: false,
-      method: "GET",
-      path: `/api/v1/admin/content/versions?courseId=${encodeURIComponent(expect.courseId)}`,
-    },
     {
       step: confirm
         ? "preflight the confirmed publication"

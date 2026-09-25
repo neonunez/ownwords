@@ -12,7 +12,6 @@ import { TRUSTED_ORIGIN } from "./helpers.js";
 const app = createApp();
 const TOKEN = "ef".repeat(32);
 const PUBLISH_URL = "http://service.test/api/v1/admin/content/publish";
-const VERSIONS_URL = "http://service.test/api/v1/admin/content/versions";
 
 const JSON_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
@@ -36,15 +35,7 @@ function publicationBody(
   expected: { courseId: string; version: number; contentHash: string },
   overrides: Record<string, unknown> = {},
 ) {
-  return {
-    pack: input,
-    expect: expected,
-    editorial: {
-      teacherReviewed: true,
-      note: "Reviewed by a qualified teacher before this publication.",
-    },
-    ...overrides,
-  };
+  return { pack: input, expect: expected, ...overrides };
 }
 
 describe("course publication authority", () => {
@@ -77,12 +68,6 @@ describe("course publication authority", () => {
       await expect(publishAttempt.json()).resolves.toMatchObject({
         error: { code: "admin_forbidden" },
       });
-      const listing = await app.request(
-        `${VERSIONS_URL}?courseId=synthetic-russian`,
-        { method: "GET", headers },
-        env,
-      );
-      expect(listing.status).toBe(403);
     }
 
     // The other administrative credential is not publication authority, and a
@@ -198,14 +183,12 @@ describe("publication preflight", () => {
       data: {
         dryRun: boolean;
         action: string;
-        editorial: { teacherReviewed: boolean; note: string };
         summary: Record<string, unknown>;
         versions: unknown[];
       };
     }>();
     expect(body.data.dryRun).toBe(true);
     expect(body.data.action).toBe("publish");
-    expect(body.data.editorial.teacherReviewed).toBe(true);
     expect(body.data.summary).toMatchObject({
       courseId: pack.course.id,
       version: pack.version,
@@ -439,36 +422,40 @@ describe("confirmed publication", () => {
   });
 });
 
-describe("publication requires the operator's own editorial statement", () => {
-  it("requires the operator's own editorial statement and records the one it sends", async () => {
+describe("the publication surface stays small and read-only where it is read-only", () => {
+  it("publishes the next version and reports the state the preflight showed", async () => {
     const { input, pack, contentHash: hash } = await reviewedPack(3);
     const expected = {
       courseId: pack.course.id,
       version: pack.version,
       contentHash: hash,
     };
-    const withoutEditorial = await app.request(
+
+    const preflight = await app.request(
       PUBLISH_URL,
       {
         method: "POST",
         headers: operatorHeaders(),
-        body: JSON.stringify({
-          pack: input,
-          expect: expected,
-          dryRun: false,
-        }),
+        body: JSON.stringify(publicationBody(input, expected)),
       },
       env,
     );
-    expect(withoutEditorial.status).toBe(400);
-    await expect(withoutEditorial.json()).resolves.toMatchObject({
-      error: { code: "invalid_request" },
-    });
+    expect(preflight.status).toBe(200);
+    const planned = await preflight.json<{
+      data: {
+        dryRun: boolean;
+        action: string;
+        versions: { version: number; status: string; contentHash: string }[];
+      };
+    }>();
+    // The dry run carries the whole read the operator needs: the versions the
+    // course already holds, in order.
+    expect(planned.data.dryRun).toBe(true);
+    expect(planned.data.action).toBe("publish");
+    expect(planned.data.versions.map((entry) => entry.version)).toEqual([1, 2]);
     expect(
-      (await readCourseVersionStates(env.DB, pack.course.id)).find(
-        (entry) => entry.version === 3,
-      ),
-    ).toBeUndefined();
+      planned.data.versions.every((entry) => entry.status === "published"),
+    ).toBe(true);
 
     const response = await app.request(
       PUBLISH_URL,
@@ -476,25 +463,14 @@ describe("publication requires the operator's own editorial statement", () => {
         method: "POST",
         headers: operatorHeaders(),
         body: JSON.stringify(
-          publicationBody(input, expected, {
-            editorial: {
-              teacherReviewed: false,
-              note: "Recorded audio is still missing; reviewed content only.",
-            },
-            dryRun: false,
-          }),
+          publicationBody(input, expected, { dryRun: false }),
         ),
       },
       env,
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      data: {
-        editorial: {
-          teacherReviewed: false,
-          note: "Recorded audio is still missing; reviewed content only.",
-        },
-      },
+      data: { dryRun: false, action: "publish", status: "published" },
     });
     await expect(
       env.DB.prepare(
@@ -504,51 +480,39 @@ describe("publication requires the operator's own editorial statement", () => {
         .first<{ status: string }>(),
     ).resolves.toMatchObject({ status: "published" });
   });
-});
 
-describe("the version listing is read-only and origin-checked", () => {
-  it("lists what the database holds without writing", async () => {
-    const { pack } = await reviewedPack(1);
-    const response = await app.request(
-      `${VERSIONS_URL}?courseId=${pack.course.id}`,
+  it("refuses an unknown field and answers no other method on this path", async () => {
+    const { input, pack, contentHash: hash } = await reviewedPack(4);
+    const expected = {
+      courseId: pack.course.id,
+      version: pack.version,
+      contentHash: hash,
+    };
+    const unknownField = await app.request(
+      PUBLISH_URL,
+      {
+        method: "POST",
+        headers: operatorHeaders(),
+        body: JSON.stringify({
+          ...publicationBody(input, expected),
+          note: "an unexpected field is still refused",
+        }),
+      },
+      env,
+    );
+    expect(unknownField.status).toBe(400);
+    await expect(unknownField.json()).resolves.toMatchObject({
+      error: { code: "invalid_request" },
+    });
+
+    // There is no separate read endpoint: the dry run is the read.
+    const removed = await app.request(
+      "http://service.test/api/v1/admin/content/versions?courseId=" +
+        pack.course.id,
       { method: "GET", headers: { Authorization: `Bearer ${TOKEN}` } },
       env,
     );
-    expect(response.status).toBe(200);
-    const body = await response.json<{
-      data: {
-        courseId: string;
-        versions: { version: number; status: string }[];
-      };
-    }>();
-    expect(body.data.courseId).toBe(pack.course.id);
-    // The three versions published above are listed in order, and nothing else.
-    expect(body.data.versions).toEqual([
-      {
-        version: 1,
-        status: "published",
-        contentHash: expect.any(String),
-        publishedAt: expect.any(String),
-      },
-      {
-        version: 2,
-        status: "published",
-        contentHash: expect.any(String),
-        publishedAt: expect.any(String),
-      },
-      {
-        version: 3,
-        status: "published",
-        contentHash: expect.any(String),
-        publishedAt: expect.any(String),
-      },
-    ]);
-    const missing = await app.request(
-      VERSIONS_URL,
-      { method: "GET", headers: { Authorization: `Bearer ${TOKEN}` } },
-      env,
-    );
-    expect(missing.status).toBe(400);
+    expect(removed.status).toBe(404);
     expect(TRUSTED_ORIGIN).toMatch(/^http:\/\//);
   });
 });

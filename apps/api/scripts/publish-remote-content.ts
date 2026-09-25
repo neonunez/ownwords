@@ -1,7 +1,12 @@
 /**
  * Publishes one reviewed course pack to the production D1, through the
- * deployed API's guarded operator route. It never talks to Cloudflare, never
- * writes SQL, and never publishes unless this run is explicitly confirmed.
+ * deployed API's guarded operator route. It never writes SQL, and never
+ * publishes unless this run is explicitly confirmed.
+ *
+ * The only Cloudflare calls are read-only: the run first asks Cloudflare which
+ * D1 the currently deployed Worker is actually bound to and refuses unless that
+ * is the database this config intends. The publication itself is an HTTP request
+ * to the deployed API, guarded there by its own secret.
  *
  * Preflight (read-only, the default):
  *
@@ -10,16 +15,16 @@
  *     --config wrangler.production.jsonc \
  *     --expect-course russian-foundations --expect-version 1 \
  *     --expect-hash <sha256 of the pack> \
- *     --teacher-reviewed \
- *     --note "<editorial status of this pack>" \
  *     ../../packages/learning/content/russian-foundations-v1.json
  *
  * Add `--confirm` to the same command to perform the publication. That write is
  * irreversible for that course version: a published version is immutable and is
  * corrected by publishing a higher version.
  */
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { contentHash, validateContentPack } from "@ownwords/learning/content";
 import {
   assertExpectation,
@@ -27,20 +32,30 @@ import {
   PublicationRefusal,
   readPublicationTarget,
   readPublishToken,
+  verifyDeployedDatabaseBinding,
 } from "./remote-publication.mjs";
+
+const execFileAsync = promisify(execFile);
+
+/** Read-only Wrangler lookups, run from the repository root. */
+const wrangler = async (args: string[]): Promise<string> => {
+  const { stdout } = await execFileAsync(
+    "npx",
+    ["--no-install", "wrangler", ...args],
+    { cwd: path.resolve(import.meta.dirname, "..", "..", "..") },
+  );
+  return stdout;
+};
 
 const USAGE =
   "Usage: publish-remote-content.ts --config <production.jsonc> --expect-course <id> " +
-  "--expect-version <n> --expect-hash <sha256> --note <editorial status> " +
-  "(--teacher-reviewed | --no-teacher-reviewed) <pack.json> [--confirm]";
+  "--expect-version <n> --expect-hash <sha256> <pack.json> [--confirm]";
 
 interface Options {
   config: string;
   expectCourse: string;
   expectVersion: number;
   expectHash: string;
-  note: string;
-  teacherReviewed: boolean;
   pack: string;
   confirm: boolean;
 }
@@ -91,16 +106,6 @@ function parseArguments(argv: string[]): Options {
         index += 1;
         break;
       }
-      case "--note":
-        options.note = takeValue(argv, index, argument);
-        index += 1;
-        break;
-      case "--teacher-reviewed":
-        options.teacherReviewed = true;
-        break;
-      case "--no-teacher-reviewed":
-        options.teacherReviewed = false;
-        break;
       case "--confirm":
         options.confirm = true;
         break;
@@ -119,25 +124,15 @@ function parseArguments(argv: string[]): Options {
     !options.expectCourse ||
     !options.expectVersion ||
     !options.expectHash ||
-    !options.note ||
-    typeof options.teacherReviewed !== "boolean" ||
     positional.length !== 1
   ) {
     throw new PublicationRefusal("usage", USAGE);
-  }
-  if (options.note.trim().length < 10) {
-    throw new PublicationRefusal(
-      "usage",
-      "--note must state this pack's editorial status in a sentence, for example whether a qualified teacher has reviewed it and that it has no audio yet.",
-    );
   }
   return {
     config: options.config,
     expectCourse: options.expectCourse,
     expectVersion: options.expectVersion,
     expectHash: options.expectHash,
-    note: options.note,
-    teacherReviewed: options.teacherReviewed,
     pack: positional[0],
     confirm: options.confirm ?? false,
   };
@@ -165,18 +160,18 @@ async function main(): Promise<void> {
     expect,
   );
 
-  // The operator states the pack's editorial status; the route records the
-  // statement, and the hash keeps the statement attached to the exact content.
-  const editorial = {
-    teacherReviewed: options.teacherReviewed,
-    note: options.note.trim(),
-  };
+  // Prove the live deployment is bound to the intended database before any
+  // publication request exists. Read-only, and it refuses on any mismatch.
+  const deployed = await verifyDeployedDatabaseBinding({
+    target,
+    exec: wrangler,
+  });
+
   const requests = planPublicationRequests({
     target,
     token,
     pack: input,
     expect,
-    editorial,
     confirm: options.confirm,
   });
 
@@ -190,11 +185,11 @@ async function main(): Promise<void> {
     `worker      ${target.workerName}`,
     `origin      ${target.origin}`,
     `database    ${target.databaseName} (${target.databaseId})`,
+    `deployed    version ${deployed.versionId} of ${target.workerName} is bound to that database`,
     `course      ${pack.course.id} v${pack.version} "${pack.course.title}"`,
     `content     sha256:${hash}`,
     `contents    ${pack.units.length} units, ${lessons} lessons, ${pack.items.length} items, ${pack.references.length} references`,
     `audio       ${withAudio} of ${pack.items.length} items carry audio`,
-    `editorial   ${editorial.note}`,
     `mode        ${options.confirm ? "CONFIRMED write after a preflight" : "preflight only; no write"}`,
   ];
   process.stdout.write(`${lines.join("\n")}\n`);
