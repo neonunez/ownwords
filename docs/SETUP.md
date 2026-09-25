@@ -33,8 +33,9 @@ npm run dev --workspace @ownwords/api
 ```
 
 `content:publish:local` validates a course pack and publishes it only into the local D1 state that `wrangler dev`
-uses; it has no remote mode. The API scripts build `@ownwords/lexicon` first because that package is consumed from its
-compiled output.
+uses; it has no remote mode. Publishing to production is a separate, explicitly confirmed operator run described
+under "Publishing course content to production". The API scripts build `@ownwords/lexicon` first because that
+package is consumed from its compiled output.
 
 ### The app against the local API
 
@@ -99,6 +100,8 @@ configuration, not a deployment.
    npx wrangler secret put GOOGLE_CLIENT_ID --config apps/api/wrangler.production.jsonc
    npx wrangler secret put GOOGLE_CLIENT_SECRET --config apps/api/wrangler.production.jsonc
    npx wrangler secret put INVITATION_ADMIN_TOKEN --config apps/api/wrangler.production.jsonc
+   # Only if course content will be published; see the next section.
+   npx wrangler secret put CONTENT_PUBLISH_TOKEN --config apps/api/wrangler.production.jsonc
    ```
 
 3. **Apply the composed migrations**, reviewing the directory and the plan first:
@@ -132,10 +135,10 @@ configuration, not a deployment.
    `/` and the app route answer `200 text/html`; the manifest answers JSON; `/api/*` answers from the Worker, and
    `/api/nope` is the API's JSON 404 rather than the app shell.
 
-**Nothing is published to make authentication work.** The database holds the invited account's own data and no course
-content: the Russian Foundations pack is teacher-reviewed and ships without recordings
-(`packages/learning/content/README.md`), and `content:publish:local` remains local-only, so a first live sign-in has
-nothing published behind it.
+**Nothing is published to make authentication work.** Deploying and inviting the first account do not publish
+course content: the database holds the invited account's own data, and the Russian Foundations pack (teacher-reviewed
+and shipped without recordings; `packages/learning/content/README.md`) is only ever loaded by the explicit operator run
+below.
 
 **Rollback.** A Worker rollback redeploys the previous version; `npx wrangler deployments list --config
 apps/api/wrangler.production.jsonc` names the versions and `npx wrangler rollback --config
@@ -143,6 +146,76 @@ apps/api/wrangler.production.jsonc` returns to the one before. It does not rever
 an export. A published course version is immutable — correct content by publishing a new version. An unaccepted
 invitation is revoked by ID. Detaching the Custom Domain, or deleting the Worker, is the owner's own cloud action;
 nothing in this repository does it.
+
+## Publishing course content to production
+
+Course content reaches the production database only through the deployed API's operator route, never through
+`wrangler d1 execute` and never through hand-written course SQL. The route calls the Learning package's own
+`ingestCourseVersion` and `publishCourseVersion` against the production D1 binding, so a remote publication is the
+same validated importer the local publisher uses, in one atomic batch, and a published version is immutable.
+
+One route, `POST /api/v1/admin/content/publish`, takes the course pack, the `expect` block naming the exact course,
+version and 64-character content hash, and `dryRun`. `dryRun` defaults to `true`, which validates the pack, compares
+it with `expect`, and answers with the versions the course already holds (version, status, content hash, publication
+time) and the action it would take — `publish`, `resume-draft` or `already-published` — without writing, or with the
+same `409` the write would return for a conflicting draft or an out-of-sequence version. `dryRun: false` performs that
+one publication. There is no separate read endpoint: the dry run is the read, so this is the only authenticated
+publication surface the API exposes.
+
+Authority is the `CONTENT_PUBLISH_TOKEN` Worker secret, a separate 64-hex value from `INVITATION_ADMIN_TOKEN`. It is
+absent by default, and an absent, malformed or non-matching value disables publication entirely; no session, role or
+other administrative credential opens this route. Provision it with `wrangler secret put CONTENT_PUBLISH_TOKEN
+--config apps/api/wrangler.production.jsonc`, generate it with `openssl rand -hex 32`, and keep it out of the PWA,
+browser storage, URLs, shell history, logs and exported API collections. Replacing the secret revokes publication
+authority.
+
+**This publication has not been run.** `npm run content:publish:remote` refuses to target anything but the copied
+production config: the tracked `apps/api/wrangler.jsonc`, the tracked `wrangler.production.jsonc.example`, a config
+whose `ENVIRONMENT` is not `production`, a Worker other than `ownwords-api`, an origin other than
+`https://ownwords.neonunez.com`, a database other than `ownwords-production`, and a `database_id` that is still the
+placeholder or the all-zero local ID are all refused before any request is sent. It also refuses a pack whose computed
+hash is not the `--expect-hash` it was given.
+
+Those are local facts about a config file, so the run does not trust them alone. Before it builds any request it asks
+Cloudflare, read-only, what every version in the live `ownwords-api` deployment is actually bound to
+(`wrangler deployments list`, `wrangler versions view`, `wrangler d1 info`) and refuses unless each deployed `DB`
+binding is the `database_id` this config intends and that id is the remote database named `ownwords-production`. A Worker
+deployed from a different or stale config, an undeployed Worker, and an unauthenticated or unreachable Cloudflare all
+refuse the run rather than publishing. This needs a Cloudflare login in the operator's terminal; it needs no write
+permission.
+
+From the repository root, in an owner-controlled terminal, with the production config already copied, the real D1 ID
+in it, the migrations applied and the Worker deployed (npm runs the workspace script from `apps/api`, so `--config`
+and the pack path are relative to it):
+
+```sh
+npm run content:validate --workspace @ownwords/learning -- content/russian-foundations-v1.json
+# Preflight: reads the existing versions and prints the exact plan. Sends no write.
+# Paste the stored CONTENT_PUBLISH_TOKEN; it is not echoed or kept in shell history.
+read -rs CONTENT_PUBLISH_TOKEN && export CONTENT_PUBLISH_TOKEN
+npm run content:publish:remote --workspace @ownwords/api -- \
+  --config wrangler.production.jsonc \
+  --expect-course russian-foundations \
+  --expect-version 1 \
+  --expect-hash 684033be47b582f4d4fc87b95c0dd7c62f9a1015a45523af52cdb817c59ad708 \
+  ../../packages/learning/content/russian-foundations-v1.json
+```
+
+Re-run that identical command with `--confirm` appended to publish it. The run prints the target Worker, origin,
+database name and ID, the deployed versions that binding was proved on, the course, version, content hash, content
+counts and how many items carry audio before it sends anything. A course's editorial status is recorded in
+`packages/learning/content/README.md`, not at publication time.
+
+**The write is irreversible for that course version.** A published version cannot be edited, replaced or deleted: a
+mistake, or a later audio change, is corrected by publishing the next sequential version, which learners who already
+started v1 stay on. A Worker rollback does not reverse it either. Nothing else publishes content: `wrangler d1 execute`
+with course SQL is not an operator path, and the local publisher stays local.
+
+The Russian Foundations v1 pack has been reviewed by a qualified Russian-language teacher (owner-confirmed; the
+reviewer's identity and date are deliberately not recorded in this repository) and currently carries **no recorded
+audio**: `audio` is omitted rather than invented, because no complete quality- and rights-cleared recording set
+exists, and its acquisition is separately authorized work. Nothing in this repository claims the course is ready for
+family use beyond that.
 
 ## Invitation administration
 
@@ -209,12 +282,23 @@ senses, equivalents, cloze items, reviews, practice queues, progress, and export
 sessions; spoofed owner fields; version pinning without migration; unsupported version transitions and invalid
 prerequisites; export retry after a simulated Lexicon failure; the course-only practice scope; invalid payloads; and
 administrator invitation issuance through a complete Google sign-in, driven by a stubbed Google token endpoint and
-placeholder client values. [`backup-restore.test.mjs`](../apps/api/scripts/backup-restore.test.mjs) runs two real
+placeholder client values. [`contentPublication.test.ts`](../apps/api/test/contentPublication.test.ts) drives the
+operator publication route against an isolated local D1: a closed route without its secret or with the other
+administrative credential, refusals for a pack that is not the named course/version/hash, a preflight that writes
+nothing, an atomic publish of exactly that version, an idempotent repeat, an out-of-order version, a resumed
+identical draft, and a refusal to replace different published content.
+[`backup-restore.test.mjs`](../apps/api/scripts/backup-restore.test.mjs) runs two real
 `wrangler dev` servers to rehearse `wrangler d1 export` and restore into a separate local database.
 [`production-hosting-routes.test.mjs`](../apps/api/scripts/production-hosting-routes.test.mjs) dry-runs the
 production deploy and serves the production template under a real `wrangler dev` with the real app build: the shell
 and its client-side routes, the manifest, the service worker and an icon from the assets, and `/api`, `/api/nope`,
 `/api/auth/get-session` and a cross-origin write answered by the Worker as JSON, never by the shell's fallback.
+[`publish-remote-content.test.mjs`](../apps/api/scripts/publish-remote-content.test.mjs) runs the remote publisher
+itself: the accepted production target, every refused configuration (local, template, non-production, wrong worker,
+wrong origin, wrong database, placeholder and all-zero IDs, unreadable), a refused pack, a refused missing token, the
+deployed-binding proof against stubbed Wrangler JSON (every live version, including a split gradual deployment, must be
+bound to the intended ID named `ownwords-production`; a mismatch or an unreachable Cloudflare refuses), and the request
+plan, which contains reads only until the run is confirmed.
 
 ### Still unverified until the owner provides credentials
 
@@ -230,9 +314,9 @@ These need the live resources listed at the top of this file; no test here stand
 3. **Cloudflare:** create the production D1 database, apply the composed migrations remotely, dry-run and deploy the
    Worker and its assets, attach the Custom Domain, then run one remote `wrangler d1 export` and restore it into a
    separate test database. The configuration for this is in the repository and locally tested; the steps are not run.
-4. **Course content:** publish the reviewed production course pack to the remote database. There is no remote
-   publishing command yet; `content:publish:local` deliberately refuses anything but local state. Publishing is not
-   needed to test Google sign-in or a passkey, and is left out of that test on purpose.
+4. **Course content:** publish the reviewed production course pack to the remote database. `content:publish:remote`
+   exists and is exercised locally against an isolated local D1, but nothing has been published: the production
+   publication is the owner's own confirmed run of the command in "Publishing course content to production" below.
 5. **The app on the deployed origin:** the hosting configuration is in the repository and checked locally, but the
    installed app, the standalone launch, safe areas, the offline shell and the "new version" prompt are still only
    Chromium on a desktop, shaped like a phone. Check them on the iPhone, after a real deployment.

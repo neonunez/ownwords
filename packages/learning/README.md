@@ -46,8 +46,12 @@ there is no reset route. Users who have not started a course see the latest publ
 
 ## Content lifecycle
 
-The operator-only exports in `@ownwords/learning/operator` are `ingestCourseVersion`, `publishCourseVersion`, and
-`discardDraftCourseVersion`. They are not HTTP routes. Imports validate the whole pack before one D1 batch, require
+The operator-only exports in `@ownwords/learning/operator` are `ingestCourseVersion`, `publishCourseVersion`,
+`discardDraftCourseVersion`, and the read-only `readCourseVersionStates`. They are not learner routes. The API's
+guarded operator route (`/api/v1/admin/content`, `apps/api/src/contentPublication.ts`) wraps `ingestCourseVersion`,
+`publishCourseVersion` and `readCourseVersionStates` against its own D1 binding so production publication reuses this
+importer, and the local publisher (`apps/api/scripts/local-content.ts`) wraps the first two against local state; `docs/SETUP.md` holds the operator
+command and its guards. Imports validate the whole pack before one D1 batch, require
 sequential versions, reject unsafe/non-HTTPS URLs and broken links, and carry per-item license/provenance plus
 optional recorded-audio metadata. Published rows are immutable through database triggers as well as application
 checks. Stable item identity is `(courseId, version, itemId)`, and each item may be introduced by only one lesson in a

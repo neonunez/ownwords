@@ -11,6 +11,7 @@ import { bodyLimit } from "hono/body-limit";
 import { createAccountRoutes } from "./account.js";
 import { createAuth } from "./auth.js";
 import { ConfigurationError } from "./config.js";
+import { createContentPublicationAdminRoutes } from "./contentPublication.js";
 import { errorResponse } from "./errors.js";
 import {
   createInvitationAdminRoutes,
@@ -42,6 +43,9 @@ export function createApp(dependencies: AppDependencies = {}): Hono<AppEnv> {
 
   app.route("/api/v1/invitations", createInvitationRoutes(now));
   app.route("/api/v1/admin/invitations", createInvitationAdminRoutes(now));
+  // Operator-only course publication: guarded by its own secret, never by a
+  // session, and always a preflight unless the request opts into the write.
+  app.route("/api/v1/admin/content", createContentPublicationAdminRoutes());
 
   app.all("/api/auth/*", (c) => createAuth(c.env, now).handler(c.req.raw));
 
