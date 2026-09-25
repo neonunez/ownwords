@@ -108,8 +108,10 @@ describe("the side panel", () => {
       within(panel).getByRole("button", { name: /Maintain/ }),
     ).toHaveAttribute("aria-current", "true");
     expect(within(panel).getByText("Русский")).toBeInTheDocument();
+    // The course ships no recordings, so there is no audio preference to set.
+    expect(within(panel).queryByText(/audio/i)).not.toBeInTheDocument();
     expect(
-      within(panel).getByRole("switch", { name: "Audio in the course" }),
+      within(panel).getByRole("switch", { name: "Suggest translations" }),
     ).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>

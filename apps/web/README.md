@@ -124,10 +124,10 @@ Connected to the API, end to end:
   language by hand, retry after a failure, editing the note and kind, deleting
   with a confirmation), Practice and Flashcards on the real scheduler.
 - **Learn** — Course (resume card, units, can-do milestones), the lesson (its
-  steps as the course content writes them, recorded audio where an item has
-  one, carrying on from the step reached, finishing into the Lexicon),
-  Learn practice on what the course taught, Alphabet and Reference as the
-  course publishes them.
+  steps as the course content writes them, read aloud and chosen from, with
+  no playback control, carrying on from the step reached, finishing into the
+  Lexicon), Learn practice on what the course taught, Alphabet and Reference
+  as the course publishes them.
 - **Everywhere** — the side panel, light and dark, the installable manifest
   and icons, an offline shell, and a written failure with "Try again" on every
   screen when the backend cannot be reached.
@@ -145,8 +145,10 @@ pretending:
 - **Practising ahead** — the scheduler has no such scope, so it is not offered.
 - **Reminders** — shown as "After install"; nothing stores or sends them.
 - **Account deletion** — deliberately deferred; see `docs/SETUP.md`.
-- **Course content** — only the first, unreviewed Russian Foundations pack
-  exists, with no recordings; see `packages/learning/content/README.md`.
+- **Course content** — the Russian Foundations pack, reviewed by a qualified
+  Russian-language teacher and shipped without recordings: the app offers no
+  playback, no listening step and no audio preference. See
+  `packages/learning/content/README.md`.
 
 ## Accessibility
 

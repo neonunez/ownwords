@@ -3,7 +3,7 @@
     "id": "russian-foundations",
     "languageTag": "ru",
     "title": "Russian Foundations",
-    "description": "An original, unreviewed beginner sequence for A0 script and sound followed by early A1 greetings and introductions. It is a practical first course, not a complete syllabus or an exam course. A qualified Russian-language teacher should review it before authoritative publication."
+    "description": "An original beginner sequence for A0 script and stress, followed by early A1 greetings and introductions, reviewed by a qualified Russian-language teacher. It is a practical first course, not a complete syllabus or an exam course."
   },
   "version": 1,
   "units": [
@@ -38,8 +38,8 @@
               "position": 2,
               "kind": "hear",
               "payload": {
-                "title": "Hear the word",
-                "instruction": "Look at each word, then say it once without the device speech engine. The mark shows the stressed vowel.",
+                "title": "Read the word",
+                "instruction": "Look at each word, then say it once aloud. The mark shows the stressed vowel.",
                 "lines": [
                   "A vowel is not automatically stressed. Learn the marked word, not an imagined English sound."
                 ]
@@ -621,9 +621,9 @@
               "kind": "hear",
               "payload": {
                 "title": "Politeness in small chunks",
-                "instruction": "Read each phrase as something you could use with a speaker or classmate.",
+                "instruction": "Read each phrase as something you could use with someone you meet or with a classmate.",
                 "lines": [
-                  "Повтори́те, пожа́луйста asks for a repetition. Говори́те ме́дленнее asks for a slower pace. Together they are a practical listening routine."
+                  "Повтори́те, пожа́луйста asks for a repetition. Говори́те ме́дленнее asks for a slower pace. Together they are a practical way to keep a conversation moving."
                 ]
               },
               "items": [

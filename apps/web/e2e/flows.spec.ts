@@ -86,14 +86,14 @@ test.describe("the core flows", () => {
     await expect(page.getByText("2 of 3 due")).toBeVisible();
   });
 
-  test("walks a lesson from hearing it to the perception drill", async ({
+  test("walks a lesson from reading it to the contrast drill", async ({
     page,
   }) => {
     await page.goto("/learn/course");
     await page.getByRole("button", { name: /Continue · Unit 3/ }).click();
 
     await expect(
-      page.getByRole("heading", { name: /Hear it first/ }),
+      page.getByRole("heading", { name: /Read it first/ }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Next" }).click();
     await expect(page.getByText(/Stress falls on one syllable/)).toBeVisible();
@@ -106,12 +106,29 @@ test.describe("the core flows", () => {
 
     await page.getByRole("button", { name: "Next" }).click();
     await expect(
-      page.getByRole("button", { name: "Play the recording" }),
+      page.getByText(/choose the one stressed on the first syllable/i),
     ).toBeVisible();
     await page.getByRole("button", { name: "Finish lesson" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Course" }),
     ).toBeVisible();
+  });
+
+  test("offers no audio control and no listening claim in a lesson", async ({
+    page,
+  }) => {
+    await page.goto("/learn/course");
+    await page.getByRole("button", { name: /Continue · Unit 3/ }).click();
+    await expect(
+      page.getByRole("heading", { name: /Read it first/ }),
+    ).toBeVisible();
+
+    const noAudio = /play|audio|record|listen|speech/i;
+    for (const step of [1, 2, 3, 4]) {
+      if (step > 1) await page.getByRole("button", { name: "Next" }).click();
+      await expect(page.getByRole("button", { name: noAudio })).toHaveCount(0);
+      await expect(page.getByText(noAudio)).toHaveCount(0);
+    }
   });
 
   test("filters the alphabet to the letters that look Latin but are not", async ({

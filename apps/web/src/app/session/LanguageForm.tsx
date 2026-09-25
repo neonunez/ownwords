@@ -38,6 +38,8 @@ const DEFAULTS: Onboarding = {
   languages: [],
   preferences: {
     explanationsIn: "en",
+    // The backend still carries the preference; the course ships no
+    // recordings, so the form never asks and never changes it.
     audioInCourse: true,
     suggestTranslations: true,
   },
@@ -45,8 +47,9 @@ const DEFAULTS: Onboarding = {
 
 /**
  * What the first run asks, and only that: the languages and their levels,
- * then three preferences. It never asks for a daily time budget or for
- * notification permission.
+ * then the two preferences the course can honour — the language of
+ * explanations, and whether translations are suggested. It never asks for a
+ * daily time budget or for notification permission.
  */
 export function LanguageForm({
   initial = DEFAULTS,
@@ -58,7 +61,6 @@ export function LanguageForm({
   /** Rejects with a written error, which the form shows. */
   onSubmit: (next: Onboarding) => Promise<void>;
 }) {
-  const audioId = useId();
   const suggestId = useId();
   const [spoken, setSpoken] = useState<Record<string, LanguageLevel>>(() =>
     Object.fromEntries(
@@ -206,17 +208,6 @@ export function LanguageForm({
               value={preferences.explanationsIn}
               onChange={(explanationsIn) =>
                 setPreferences((current) => ({ ...current, explanationsIn }))
-              }
-            />
-          </div>
-          <div style={row}>
-            <span id={audioId}>Audio in the course</span>
-            <Switch
-              checked={preferences.audioInCourse}
-              labelledBy={audioId}
-              label="Audio in the course"
-              onChange={(audioInCourse) =>
-                setPreferences((current) => ({ ...current, audioInCourse }))
               }
             />
           </div>

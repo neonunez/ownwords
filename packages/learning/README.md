@@ -55,6 +55,10 @@ version, because that lesson owns the item's Lexicon export and its retries. Cou
 per version, so a new version may correct them; the course language tag is stable and a pack that changes it is
 rejected with `COURSE_IDENTITY_MISMATCH`.
 
+Recorded-audio metadata is **dormant, not dead**: it is stored, served and licensed as described here, and no app
+reads it, because the authored course ships without recordings. See `content/README.md` for why, and for what a future
+pack of original recordings would need.
+
 Validate a pack locally without credentials or database access:
 
 ```sh
@@ -68,7 +72,8 @@ All routes require the verified `userId` Hono variable and emit errors as `{ "er
 - `GET /courses` and `GET /courses/:courseId/versions/:version`
 - `GET /courses/:courseId/versions/:version/lessons/:lessonId` (includes the lesson's renderable content items,
   recorded-audio metadata, licences, and provenance)
-- `GET /courses/:courseId/versions/:version/licenses` (each distinct item and recording licence once, for Settings)
+- `GET /courses/:courseId/versions/:version/licenses` (each distinct item and recording licence once; nothing in
+  the app calls it while the course has no recordings)
 - `GET /courses/:courseId/resume`
 - `GET /references?courseId=&version=&category=&limit=&cursor=`
 - `PUT /courses/:courseId/versions/:version/lessons/:lessonId/progress`

@@ -212,7 +212,7 @@ describe("authenticated learning routes", () => {
     expect(missing.status).toBe(404);
   });
 
-  it("retrieves renderable lesson items with recorded-audio provenance", async () => {
+  it("serves recorded-audio metadata for an item, which the app does not read", async () => {
     const response = await request(
       "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello",
       {},

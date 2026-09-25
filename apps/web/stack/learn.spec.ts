@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { onboard, signIn } from "./helpers";
+import { api, onboard, signIn } from "./helpers";
 
 // The backend holds the authored Russian Foundations course. These journeys
 // check that a real pack is rendered, completed, and carried into the Lexicon.
@@ -24,7 +24,7 @@ test.describe("Learn, against the real backend", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: "Next" }).click();
     await expect(
-      page.getByRole("heading", { name: /Unit 1 · Hear the word/ }),
+      page.getByRole("heading", { name: /Unit 1 · Read the word/ }),
     ).toBeVisible();
     // The item as the course writes it, with its stress mark and its meaning.
     await expect(page.getByText("ма́ма")).toBeVisible();
@@ -92,6 +92,60 @@ test.describe("Learn, against the real backend", () => {
     await expect(grammar).toContainText("Unit 1");
     await grammar.click();
     await expect(page.getByText("Names without ‘am’")).toBeVisible();
+  });
+
+  test("shows no audio affordance anywhere in the connected course", async ({
+    page,
+    context,
+    request,
+  }) => {
+    await onboard(request, "owner");
+    await signIn(context, "owner");
+
+    // The real published pack, served by the API, in the connected app.
+    const noAudio = /play|audio|record|listen|speech/i;
+    await page.goto("/learn/course");
+    await expect(page.getByRole("button", { name: noAudio })).toHaveCount(0);
+    await expect(page.getByText(noAudio)).toHaveCount(0);
+
+    // No toggle in the side panel either. The panel opens from a main
+    // screen, so it is checked on the course, not inside the lesson.
+    await page.getByRole("button", { name: "Open the side panel" }).click();
+    const panel = page.getByRole("dialog", { name: "Ownwórds" });
+    await expect(panel.getByText(noAudio)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+
+    await page.getByRole("button", { name: /Continue · Unit 1/ }).click();
+    await expect(
+      page.getByRole("heading", { name: /Unit 1 · Five familiar letters/ }),
+    ).toBeVisible();
+    for (const step of [1, 2, 3, 4]) {
+      if (step > 1) await page.getByRole("button", { name: "Next" }).click();
+      await expect(page.getByRole("button", { name: noAudio })).toHaveCount(0);
+      await expect(page.getByText(noAudio)).toHaveCount(0);
+    }
+
+    // The backend still serves recorded-audio metadata and a licence
+    // roll-up; the published pack simply has none, and the app asks for
+    // neither.
+    const served = (await api(
+      request,
+      "owner",
+      "GET",
+      "/api/v1/learning/courses/russian-foundations/versions/1/lessons/a0-familiar",
+    )) as {
+      lesson: { steps: { kind: string }[]; contentItems: { audio: unknown }[] };
+    };
+    expect(
+      served.lesson.contentItems.every((item) => item.audio === null),
+    ).toBe(true);
+    expect(served.lesson.steps.map((step) => step.kind)).toEqual([
+      "alphabet",
+      "hear",
+      "rule",
+      "perception",
+    ]);
   });
 
   test("says so plainly when the person is not learning a language", async ({

@@ -886,7 +886,7 @@ describe("the course", () => {
           id: "l2-a",
           position: 1,
           kind: "hear",
-          payload: { instruction: "Listen first." },
+          payload: { instruction: "Read it aloud." },
           items: [{ itemId: "poka", role: "introduced", position: 1 }],
         },
         {
@@ -984,7 +984,7 @@ describe("the course", () => {
     expect(await client.getAlphabet()).toEqual([]);
   });
 
-  it("reads a lesson's authored steps and items, stress marks and recordings included", async () => {
+  it("reads a lesson's authored steps and items, and leaves audio out of the app", async () => {
     const api = fakeApi(routes);
     const client = createHttpClient({ fetch: api.fetch });
     await client.getSession();
@@ -999,19 +999,21 @@ describe("the course", () => {
     });
     expect(read.steps[0]).toEqual({
       id: "l2-a",
-      kind: "hear",
-      title: "Hear it first",
-      prompt: "Listen first.",
+      // The stored kind is the legacy name "hear"; the app calls it "read".
+      kind: "read",
+      title: "Read it first",
+      prompt: "Read it aloud.",
       items: [
         {
           id: "poka",
           text: "пока́",
           meaning: "bye",
           grammar: "f.",
-          audioUrl: "https://audio.example/poka.ogg",
         },
       ],
     });
+    // The backend still returns recorded-audio metadata; the app keeps none.
+    expect(JSON.stringify(read)).not.toMatch(/audio|poka\.ogg/);
     expect(read.steps[1]).toMatchObject({
       kind: "use",
       title: "Say goodbye",

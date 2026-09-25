@@ -70,11 +70,13 @@ describe("controls are real controls", () => {
     render(
       <Switch
         checked={false}
-        label="Audio in the course"
+        label="Suggest translations"
         onChange={onChange}
       />,
     );
-    const control = screen.getByRole("switch", { name: "Audio in the course" });
+    const control = screen.getByRole("switch", {
+      name: "Suggest translations",
+    });
     expect(control).toHaveAttribute("aria-checked", "false");
     await userEvent.click(control);
     expect(onChange).toHaveBeenCalledWith(true);

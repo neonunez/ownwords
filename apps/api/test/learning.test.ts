@@ -20,7 +20,7 @@ import { COURSE_ID, coursePack } from "./fixtures/course.js";
 import { TRUSTED_ORIGIN } from "./helpers.js";
 
 const course = `/api/v1/learning/courses/${COURSE_ID}`;
-const GREET_STEPS = ["greet-hear", "greet-use"] as const;
+const GREET_STEPS = ["greet-read", "greet-use"] as const;
 const PART_STEPS = ["part-rule", "part-use"] as const;
 
 async function lexiconTexts(user: TestUser): Promise<string[]> {
@@ -53,7 +53,7 @@ describe("first-start enrollment and version pinning", () => {
       `${course}/versions/1/lessons/greet/progress`,
       200,
       {
-        body: { stepId: "greet-hear" },
+        body: { stepId: "greet-read" },
       },
     );
 
@@ -91,7 +91,7 @@ describe("first-start enrollment and version pinning", () => {
     expect(resume.resume).toMatchObject({
       version: 1,
       lessonId: "greet",
-      stepId: "greet-hear",
+      stepId: "greet-read",
     });
 
     for (const [method, path, body] of [
@@ -100,7 +100,7 @@ describe("first-start enrollment and version pinning", () => {
       [
         "PUT",
         `${course}/versions/2/lessons/greet/progress`,
-        { stepId: "greet-hear" },
+        { stepId: "greet-read" },
       ],
       ["POST", `${course}/versions/2/lessons/greet/complete`, undefined],
       [
@@ -130,7 +130,7 @@ describe("first-start enrollment and version pinning", () => {
       `${course}/versions/2/lessons/greet/progress`,
       200,
       {
-        body: { stepId: "greet-hear" },
+        body: { stepId: "greet-read" },
       },
     );
     const lateV1 = await call(late, "GET", `${course}/versions/1`);
@@ -217,7 +217,7 @@ describe("content licences for Settings", () => {
       `${course}/versions/2/lessons/greet/progress`,
       200,
       {
-        body: { stepId: "greet-hear" },
+        body: { stepId: "greet-read" },
       },
     );
     const otherVersion = await call(
@@ -464,7 +464,7 @@ describe("learning security failures", () => {
       [
         "PUT",
         progress,
-        { stepId: "greet-hear", extra: true },
+        { stepId: "greet-read", extra: true },
         400,
         "INVALID_PROGRESS",
       ],

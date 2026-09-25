@@ -97,7 +97,9 @@ half of it. Beyond that:
   - a step's `payload`: `title`, `instruction` or `prompt`, `lines`,
     `options`, `answer`, `responses` (keyed by option);
   - an item: `stressText` (shown in place of `displayText`), `gloss`,
-    `grammaticalMetadata.label`, or `gender` and `aspect`, and `audio.url`;
+    `grammaticalMetadata.label`, or `gender` and `aspect`. The backend may
+    also return `audio`, which the app deliberately ignores: it has no
+    playback control and no audio preference;
   - an alphabet reference's `body`: `upper` or `letter`, `lower`, `sound`,
     `trap` or `looksLike`, `sameAsLatin`;
   - any other reference's `body`: `lines`, or else `summary`, `text` or
@@ -106,14 +108,17 @@ half of it. Beyond that:
 ## Course content pack
 
 The first real content is `packages/learning/content/russian-foundations-v1.json`.
-It is a bounded, authored A0 script-and-sound and early-A1 greeting sequence,
+It is a bounded, authored A0 script-and-stress and early-A1 greeting sequence,
 not a synthetic fixture or a complete syllabus. The local stack publishes that
 pack through `apps/api/scripts/local-content.ts` (the supported
 `ingestCourseVersion` / `publishCourseVersion` path) and exercises rendering,
-lesson completion, Lexicon export, and the alphabet/reference. The pack is
-explicitly unreviewed and carries per-item provenance/licensing in
-`packages/learning/content/README.md`; it has no audio until separately
-recorded and rights-checked.
+lesson completion, Lexicon export, and the alphabet/reference. The pack was
+reviewed by a qualified Russian-language teacher and carries per-item
+provenance/licensing in `packages/learning/content/README.md`. It ships
+without recordings, so the app shows no playback, no listening step and no
+audio preference, and the backend's recorded-audio metadata (`audio_json`, the
+`/licenses` roll-up, the `russian_course_audio` profile preference) stays
+stored and dormant for a future pack of original recordings.
 
 ## What the HTTP client carries
 

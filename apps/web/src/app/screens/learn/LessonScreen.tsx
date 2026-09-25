@@ -6,7 +6,6 @@ import { Failed, Loading } from "../ScreenState";
 import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
 import { useToast } from "../../shell/ToastProvider";
-import { useSession } from "../../session/SessionGate";
 import { OwnwordsError } from "../../../api/client";
 import type { Lesson, LessonItem, LessonStep } from "../../../api/types";
 
@@ -20,10 +19,13 @@ function openingIndex(lesson: Lesson): number {
 }
 
 /**
- * Hear it first, then a rule of four lines, then use it, then a perception
+ * Read it first, then a rule of four lines, then use it, then a perception
  * drill. Reaching a step is recorded as the person moves on, in order, so the
  * course picks up where they left it; finishing records the lesson and puts
  * the words it introduced into the Lexicon.
+ *
+ * Every step is reading, meaning and choice. The course ships no recordings,
+ * so there is no playback control anywhere in it.
  */
 export function LessonScreen() {
   const { lessonId = "" } = useParams();
@@ -68,7 +70,6 @@ function LessonSteps({
 }) {
   const client = useClient();
   const navigate = useNavigate();
-  const session = useSession();
   const { showToast } = useToast();
   const [index, setIndex] = useState(() => openingIndex(lesson));
   // The furthest step the backend has recorded; a finished lesson records nothing more.
@@ -85,7 +86,6 @@ function LessonSteps({
   const step = lesson.steps[index];
   if (!step) return null;
   const last = index === lesson.steps.length - 1;
-  const audio = session?.onboarding.preferences.audioInCourse ?? true;
 
   /** Records every step up to `target` that is not recorded yet, in order. */
   const recordThrough = async (target: number) => {
@@ -123,18 +123,6 @@ function LessonSteps({
       );
     }
     setBusy(false);
-  };
-
-  const play = (item: LessonItem | undefined) => {
-    if (!item?.audioUrl) {
-      showToast(
-        "There is no recording for this one yet. The device speech engine is never used.",
-      );
-      return;
-    }
-    new Audio(item.audioUrl).play().catch(() => {
-      showToast("That recording could not be played. Check the connection.");
-    });
   };
 
   return (
@@ -184,9 +172,7 @@ function LessonSteps({
           step={step}
           language={lesson.language}
           choice={choice}
-          audio={audio}
           onChoose={setChoice}
-          onPlay={play}
         />
 
         <Spacer />
@@ -207,13 +193,9 @@ function LessonSteps({
 function ItemList({
   items,
   language,
-  audio,
-  onPlay,
 }: {
   items: readonly LessonItem[];
   language: string;
-  audio: boolean;
-  onPlay: (item: LessonItem) => void;
 }) {
   return (
     <Card padding={0}>
@@ -222,7 +204,7 @@ function ItemList({
           key={item.id}
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) auto",
+            gridTemplateColumns: "minmax(0, 1fr)",
             gap: 12,
             alignItems: "center",
             padding: "14px 16px",
@@ -263,14 +245,6 @@ function ItemList({
               {item.meaning}
             </div>
           </div>
-          {audio && (
-            <IconButton
-              name="volume-2"
-              label={`Play ${item.meaning}`}
-              variant="tonal"
-              onClick={() => onPlay(item)}
-            />
-          )}
         </div>
       ))}
     </Card>
@@ -312,34 +286,23 @@ function StepBody({
   step,
   language,
   choice,
-  audio,
   onChoose,
-  onPlay,
 }: {
   step: LessonStep;
   language: string;
   choice: string | null;
-  audio: boolean;
   onChoose: (next: string) => void;
-  onPlay: (item: LessonItem | undefined) => void;
 }) {
   const items = step.items ?? [];
   const instruction = step.prompt && (
     <p style={{ margin: "0 4px", font: "var(--type-body)" }}>{step.prompt}</p>
   );
 
-  if (step.kind === "hear" || step.kind === "alphabet") {
+  if (step.kind === "read" || step.kind === "alphabet") {
     return (
       <>
         {instruction}
-        {items.length > 0 && (
-          <ItemList
-            items={items}
-            language={language}
-            audio={audio}
-            onPlay={onPlay}
-          />
-        )}
+        {items.length > 0 && <ItemList items={items} language={language} />}
         {step.lines && <Lines lines={step.lines} />}
       </>
     );
@@ -349,14 +312,7 @@ function StepBody({
     return (
       <>
         {step.lines ? <Lines lines={step.lines} /> : instruction}
-        {items.length > 0 && (
-          <ItemList
-            items={items}
-            language={language}
-            audio={audio}
-            onPlay={onPlay}
-          />
-        )}
+        {items.length > 0 && <ItemList items={items} language={language} />}
       </>
     );
   }
@@ -370,14 +326,7 @@ function StepBody({
       return (
         <>
           {instruction}
-          {items.length > 0 && (
-            <ItemList
-              items={items}
-              language={language}
-              audio={audio}
-              onPlay={onPlay}
-            />
-          )}
+          {items.length > 0 && <ItemList items={items} language={language} />}
         </>
       );
     }
@@ -455,16 +404,6 @@ function StepBody({
       >
         {step.prompt ?? step.title}
       </p>
-      {audio && (
-        <IconButton
-          name="volume-2"
-          label="Play the recording"
-          variant="filled"
-          size={64}
-          style={{ margin: "0 auto" }}
-          onClick={() => onPlay(items.find((item) => item.audioUrl))}
-        />
-      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {options.map((option) => (
           <Button

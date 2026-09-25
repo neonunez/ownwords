@@ -1,6 +1,8 @@
 /**
  * Synthetic test-author course packs. Nothing here is curriculum, scraped, or
- * copied from a licensed course; recordings are metadata-only fake URLs.
+ * copied from a licensed course; recorded-audio metadata is a fake URL the
+ * backend stores and serves so the API's dormant audio slot stays covered.
+ * The web app reads none of it.
  */
 export const COURSE_ID = "synthetic-russian";
 
@@ -8,7 +10,7 @@ const license = {
   spdxId: "CC0-1.0",
   sourceName: "Ownwords synthetic test fixture",
 };
-/** Recordings carry their own licence, which Settings must credit. */
+/** An item recording carries its own licence, which the licences route credits. */
 const audioLicense = {
   spdxId: "CC-BY-4.0",
   sourceName: "Synthetic recordings",
@@ -77,10 +79,10 @@ export function coursePack(version: number, title = "Synthetic Russian") {
             prerequisites: [],
             steps: [
               {
-                id: "greet-hear",
+                id: "greet-read",
                 position: 1,
                 kind: "hear",
-                payload: { instruction: "Synthetic listening step." },
+                payload: { instruction: "Synthetic read-aloud step." },
                 items: [
                   { itemId: "zdravstvuj", role: "introduced", position: 1 },
                   { itemId: "spasibo", role: "introduced", position: 2 },
