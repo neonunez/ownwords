@@ -119,6 +119,9 @@ test.describe("the core flows", () => {
   }) => {
     await page.goto("/learn/course");
     await page.getByRole("button", { name: /Continue · Unit 3/ }).click();
+    await expect(
+      page.getByRole("heading", { name: /Read it first/ }),
+    ).toBeVisible();
 
     const noAudio = /play|audio|record|listen|speech/i;
     for (const step of [1, 2, 3, 4]) {

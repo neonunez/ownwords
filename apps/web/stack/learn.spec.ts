@@ -117,6 +117,9 @@ test.describe("Learn, against the real backend", () => {
     await expect(panel).toHaveCount(0);
 
     await page.getByRole("button", { name: /Continue · Unit 1/ }).click();
+    await expect(
+      page.getByRole("heading", { name: /Unit 1 · Five familiar letters/ }),
+    ).toBeVisible();
     for (const step of [1, 2, 3, 4]) {
       if (step > 1) await page.getByRole("button", { name: "Next" }).click();
       await expect(page.getByRole("button", { name: noAudio })).toHaveCount(0);
