@@ -203,8 +203,25 @@ export function createContentPublicationAdminRoutes(): Hono<AppEnv> {
       }
       // Republishing identical content is a no-op, so an interrupted run is safe to repeat.
       action = "already-published";
+    } else if (current) {
+      if (current.contentHash !== hash) {
+        return errorResponse(
+          409,
+          "draft_version_exists",
+          "This course version already has a draft with different content; discard it explicitly or use the next version",
+        );
+      }
+      action = "resume-draft";
     } else {
-      action = current ? "resume-draft" : "publish";
+      const latest = Math.max(0, ...versions.map((entry) => entry.version));
+      if (pack.version !== latest + 1) {
+        return errorResponse(
+          409,
+          "unsupported_version_transition",
+          `Expected version ${latest + 1}; versions must be created sequentially`,
+        );
+      }
+      action = "publish";
     }
 
     const summary = summarizePack(pack, hash);

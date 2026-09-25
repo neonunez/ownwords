@@ -5,8 +5,9 @@
  *
  * Preflight (read-only, the default):
  *
- *   CONTENT_PUBLISH_TOKEN=... npm run content:publish:remote --workspace @ownwords/api -- \
- *     --config apps/api/wrangler.production.jsonc \
+ *   read -rs CONTENT_PUBLISH_TOKEN && export CONTENT_PUBLISH_TOKEN
+ *   npm run content:publish:remote --workspace @ownwords/api -- \
+ *     --config wrangler.production.jsonc \
  *     --expect-course russian-foundations --expect-version 1 \
  *     --expect-hash <sha256 of the pack> \
  *     --note "<editorial status of this pack>" \

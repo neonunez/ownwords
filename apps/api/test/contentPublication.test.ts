@@ -286,8 +286,20 @@ describe("confirmed publication", () => {
       1,
     );
 
-    // A version that is not the next one is refused before any write.
+    // A version that is not the next one is refused before any write, and the
+    // preflight reports that refusal rather than a plan the write would reject.
     const { input: skipped, contentHash: skippedHash } = await reviewedPack(3);
+    const outOfOrderPlan = await publish(
+      publicationBody(skipped, {
+        ...expected,
+        version: 3,
+        contentHash: skippedHash,
+      }),
+    );
+    expect(outOfOrderPlan.status).toBe(409);
+    await expect(outOfOrderPlan.json()).resolves.toMatchObject({
+      error: { code: "unsupported_version_transition" },
+    });
     const outOfOrder = await publish(
       publicationBody(
         skipped,
@@ -327,6 +339,30 @@ describe("confirmed publication", () => {
       status: "draft",
       contentHash: hash,
       publishedAt: null,
+    });
+
+    const otherDraft = structuredClone(input) as {
+      course: { description: string };
+    };
+    otherDraft.course.description = "A different draft for the same version.";
+    const otherDraftHash = await contentHash(validateContentPack(otherDraft));
+    const conflictingPlan = await app.request(
+      PUBLISH_URL,
+      {
+        method: "POST",
+        headers: operatorHeaders(),
+        body: JSON.stringify(
+          publicationBody(otherDraft, {
+            ...expected,
+            contentHash: otherDraftHash,
+          }),
+        ),
+      },
+      env,
+    );
+    expect(conflictingPlan.status).toBe(409);
+    await expect(conflictingPlan.json()).resolves.toMatchObject({
+      error: { code: "draft_version_exists" },
     });
 
     const plan = await app.request(

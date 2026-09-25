@@ -159,7 +159,8 @@ same validated importer the local publisher uses, in one atomic batch, and a pub
 - `POST /api/v1/admin/content/publish` takes the course pack, the `expect` block naming the exact course, version and
   64-character content hash, an `editorial` statement, and `dryRun`. `dryRun` defaults to `true`, which validates the
   pack, compares it with `expect`, and answers with the action it would take (`publish`, `resume-draft` or
-  `already-published`) without writing. `dryRun: false` performs that one publication.
+  `already-published`) without writing, or with the same `409` the write would return for a conflicting draft or an
+  out-of-sequence version. `dryRun: false` performs that one publication.
 
 Authority is the `CONTENT_PUBLISH_TOKEN` Worker secret, a separate 64-hex value from `INVITATION_ADMIN_TOKEN`. It is
 absent by default, and an absent, malformed or non-matching value disables publication entirely; no session, role or
@@ -176,14 +177,16 @@ placeholder or the all-zero local ID are all refused before any request is sent.
 hash is not the `--expect-hash` it was given.
 
 From the repository root, in an owner-controlled terminal, with the production config already copied, the real D1 ID
-in it, the migrations applied and the Worker deployed:
+in it, the migrations applied and the Worker deployed (npm runs the workspace script from `apps/api`, so `--config`
+and the pack path are relative to it):
 
 ```sh
 npm run content:validate --workspace @ownwords/learning -- content/russian-foundations-v1.json
 # Preflight: reads the existing versions and prints the exact plan. Sends no write.
-CONTENT_PUBLISH_TOKEN="$(openssl rand -hex 32)" # or read the stored value without echoing it
+# Paste the stored CONTENT_PUBLISH_TOKEN; it is not echoed or kept in shell history.
+read -rs CONTENT_PUBLISH_TOKEN && export CONTENT_PUBLISH_TOKEN
 npm run content:publish:remote --workspace @ownwords/api -- \
-  --config apps/api/wrangler.production.jsonc \
+  --config wrangler.production.jsonc \
   --expect-course russian-foundations \
   --expect-version 1 \
   --expect-hash 6fc73576449e888aa99d519790bf112fca98b35254da649db5a228a42fe6a08b \
