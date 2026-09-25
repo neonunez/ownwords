@@ -29,7 +29,7 @@ function pack(): ContentPack {
 }
 
 describe("authored course pack", () => {
-  it("is valid, explicitly unreviewed, and has no fabricated audio", async () => {
+  it("is valid, teacher-reviewed, and has no fabricated audio", async () => {
     const input = JSON.parse(
       await readFile(
         new URL("../content/russian-foundations-v1.json", import.meta.url),
@@ -43,7 +43,17 @@ describe("authored course pack", () => {
       languageTag: "ru",
     });
     expect(authored.version).toBe(1);
-    expect(authored.course.description).toMatch(/unreviewed/i);
+    expect(authored.course.description).toMatch(/reviewed by a qualified/i);
+    // The description is stored on the published version row and is frozen at
+    // first publication, so it must not claim a review that has not happened
+    // or a recording the app cannot play.
+    expect(authored.course.description).not.toMatch(/unreviewed/i);
+    expect(authored.course.description).toMatch(/without recordings/i);
+    // No step may promise a recording the app cannot play.
+    const payloads = JSON.stringify(authored.units);
+    expect(payloads).not.toMatch(
+      /listen|listening|record|recorded|play(ing|back)?\b|audio|spoken/i,
+    );
     expect(authored.units.map((unit) => unit.id)).toEqual([
       "a0-script",
       "a1-greetings",

@@ -52,7 +52,6 @@ export function SidePanel({
 }: SidePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const audioId = useId();
   const suggestId = useId();
   const { appearance, setAppearance } = useTheme();
   const client = useClient();
@@ -370,17 +369,6 @@ export function SidePanel({
                 >
                   {preferences?.explanationsIn === "es" ? "Español" : "English"}
                 </span>
-              </div>
-              <div style={row(true)}>
-                <Icon name="volume-2" size={18} color="var(--fg-3)" />
-                <span id={audioId}>Audio in the course</span>
-                <Switch
-                  checked={preferences?.audioInCourse ?? true}
-                  labelledBy={audioId}
-                  label="Audio in the course"
-                  disabled={!preferences}
-                  onChange={(next) => update({ audioInCourse: next })}
-                />
               </div>
               <div style={row(true)}>
                 <Icon name="sparkles" size={18} color="var(--fg-3)" />

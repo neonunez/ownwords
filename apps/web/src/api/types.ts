@@ -263,7 +263,7 @@ export interface CourseResume {
   /** The lesson to open. */
   lessonId: string;
   title: string;
-  /** The step the person stopped on, written: "Hear it first". */
+  /** The step the person stopped on, written: "Read it first". */
   step: string;
   /** 0–1 through the unit. */
   progress: number;
@@ -288,7 +288,7 @@ export interface Course {
 }
 
 export type LessonStepKind =
-  "hear" | "rule" | "use" | "perception" | "alphabet";
+  "read" | "rule" | "use" | "perception" | "alphabet";
 
 export interface LessonItem {
   id: string;
@@ -297,8 +297,6 @@ export interface LessonItem {
   meaning: string;
   /** "m.", "f.", "impf." — whatever the language needs. */
   grammar: string;
-  /** Recorded human audio; `null` until a recording exists for the item. */
-  audioUrl: string | null;
 }
 
 export interface LessonStep {
@@ -379,6 +377,10 @@ export type ExplanationLanguage = "en" | "es";
 export interface Preferences {
   /** The language explanations are written in. */
   explanationsIn: ExplanationLanguage;
+  /**
+   * Kept because the backend returns it. The app ships no recordings and
+   * offers no audio control, so it is never shown and never set to false.
+   */
   audioInCourse: boolean;
   suggestTranslations: boolean;
   /** Reminders are asked for after install, never before. */

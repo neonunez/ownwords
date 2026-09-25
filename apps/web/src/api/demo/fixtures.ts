@@ -443,7 +443,7 @@ export const demoCourse: Course = {
     unitNumber: 3,
     lessonId: "u3",
     title: "В кафе́",
-    step: "Hear it first",
+    step: "Read it first",
     progress: 0.4,
     canDo: "Order a coffee and say thank you",
   },
@@ -515,29 +515,26 @@ export const demoLesson: Lesson = {
   steps: [
     {
       id: "u3s1",
-      kind: "hear",
-      title: "Hear it first",
+      kind: "read",
+      title: "Read it first",
       items: [
         {
           id: "i1",
           text: "ко́фе",
           meaning: "coffee",
           grammar: "m.",
-          audioUrl: null,
         },
         {
           id: "i2",
           text: "пожа́луйста",
           meaning: "please",
           grammar: "",
-          audioUrl: null,
         },
         {
           id: "i3",
           text: "спаси́бо",
           meaning: "thank you",
           grammar: "",
-          audioUrl: null,
         },
       ],
     },
@@ -569,8 +566,9 @@ export const demoLesson: Lesson = {
     {
       id: "u3s4",
       kind: "perception",
-      title: "Perception drill",
-      prompt: "Which one did you hear?",
+      title: "Notice the difference",
+      prompt:
+        "Say both words, then choose the one stressed on the first syllable.",
       options: ["ко́фе", "кафе́"],
       answer: "ко́фе",
       responses: {
@@ -687,7 +685,7 @@ export const demoReferenceTopics: ReferenceTopic[] = [
   {
     id: "intonation",
     title: "Intonation",
-    icon: "audio-lines",
+    icon: "message-circle",
     summary: "Questions asked without a question word",
     introducedIn: "Unit 2",
     locked: false,

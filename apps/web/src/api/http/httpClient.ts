@@ -1007,7 +1007,9 @@ const topics = [
   {
     id: "intonation",
     title: "Intonation",
-    icon: "audio-lines",
+    // A text topic about how a question is written, so it takes a text icon:
+    // the app ships no recordings and no waveform.
+    icon: "type",
     categories: ["intonation"],
   },
   { id: "numbers", title: "Numbers", icon: "hash", categories: ["numbers"] },

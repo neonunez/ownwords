@@ -93,6 +93,14 @@ const provenanceSchema = z
   })
   .strict();
 
+/**
+ * Optional recorded-audio metadata. Nothing in the app reads it: Ownwords
+ * ships a course the learner reads and says aloud, because no commercially
+ * clear, complete recording set exists for its phrases (see
+ * `content/README.md`). The slot stays so a future pack of original
+ * recordings can be stored without a schema or migration change; the web app
+ * has no playback control and no audio preference.
+ */
 const audioSchema = z
   .object({
     kind: z.literal("recorded"),
@@ -131,6 +139,8 @@ const stepSchema = z
   .object({
     id,
     position: z.number().int().positive(),
+    // "hear" is a legacy name for the read-aloud step: the learner looks at
+    // the words and says them. The value is persisted, so it keeps its name.
     kind: z.enum(["hear", "rule", "use", "perception", "alphabet"]),
     payload: jsonObject,
     items: z.array(stepItemSchema).max(100).default([]),

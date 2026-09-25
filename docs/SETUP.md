@@ -133,8 +133,9 @@ configuration, not a deployment.
    `/api/nope` is the API's JSON 404 rather than the app shell.
 
 **Nothing is published to make authentication work.** The database holds the invited account's own data and no course
-content: the Russian Foundations pack is unreviewed and has no audio (`packages/learning/content/README.md`), and
-`content:publish:local` remains local-only, so a first live sign-in has nothing published behind it.
+content: the Russian Foundations pack is teacher-reviewed and ships without recordings
+(`packages/learning/content/README.md`), and `content:publish:local` remains local-only, so a first live sign-in has
+nothing published behind it.
 
 **Rollback.** A Worker rollback redeploys the previous version; `npx wrangler deployments list --config
 apps/api/wrangler.production.jsonc` names the versions and `npx wrangler rollback --config
@@ -174,7 +175,16 @@ Core pins Hono `4.13.8`, Better Auth `1.7.5`, and `@better-auth/passkey` `1.7.5`
   limits the queue to course-imported entries. Maintain omits it and practises the whole collection, including personal
   vocabulary in the learned language. Learning itself serves only core curriculum.
 - `GET /api/v1/learning/courses/:courseId/versions/:version/licenses` lists each distinct item and recording licence
-  once, for attribution in Settings rather than beside content.
+  once. It is dormant: the authored pack has no recordings and the app calls no attribution surface, because the
+  course ships without audio.
+
+**Recorded audio is dormant, not removed.** The `learning_items.audio_json` column, the `russian_course_audio` profile
+preference and the licenses route are all stored and served, and no app screen reads any of them: the course is
+honestly audio-free, with no playback control, no listening step and no audio toggle. Audio was investigated and
+deferred because no commercially clear, complete recording set exists for the course's phrases; the evidence and the
+future route (one native-speaker voice, a written release) are in
+`packages/learning/content/README.md`. Do not delete the column, the preference or the route to "tidy up", and do not
+wire them into the app without that pack.
 
 Migration composition accepts core `0001–0099`, Lexicon `0100–0199`, and Learning `0200–0299` in deterministic
 filename order and rejects duplicate numeric IDs even with different filenames.
@@ -188,7 +198,8 @@ origin's callback, answered by a stand-in so nothing reaches Google; the first r
 and signing in with it alone, on a Chromium virtual authenticator against the real passkey endpoints; capturing an
 entry whose suggestions fail because the provider is off, typing equivalents by hand, search without stress marks,
 flashcard practice and the retention it records; finishing a Russian Foundations lesson, carrying on from the step reached,
-the Lexicon import and Learn practice; the alphabet and reference; cross-account denial; export; a session ending
+the Lexicon import and Learn practice; the absence of every audio affordance and listening claim in that published
+course and in the side panel; the alphabet and reference; cross-account denial; export; a session ending
 mid-use; sign-out that revokes the session; and a cut network with recovery.
 
 `npm run check` runs every package's tests plus the integrated suites in [`apps/api/test`](../apps/api/test), which

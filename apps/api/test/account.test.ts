@@ -64,7 +64,7 @@ beforeAll(async () => {
     },
   });
   const done = await finishLesson(alice, COURSE_ID, 1, "greet", [
-    "greet-hear",
+    "greet-read",
     "greet-use",
   ]);
   expect(done.status).toBe(200);

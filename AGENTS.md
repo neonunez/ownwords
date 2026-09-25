@@ -12,6 +12,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Every screen reads through `apps/web/src/api/client.ts` and nothing else. `src/api/http/` answers it for the app (API on the app's own origin under `/api`); `src/api/demo/` only for unit tests and Vite `demo`-mode builds (`demo-dist/`), never as a fallback.
 - Browser tests run only from `apps/web`: `npm run test:e2e` (screens, demo build) and `npm run test:stack` (connected app against real `wrangler dev` + fresh local D1 with synthetic sessions, via `stack/serve.mjs`; also `npm run stack` for manual use).
 - Production same-origin hosting is `apps/api/wrangler.production.jsonc.example` (app build as Worker assets, `/api` ahead of the SPA fallback, `workers_dev: false`, no route): the deploy, Custom Domain and rollback steps are in `docs/SETUP.md`, and `npm run check:hosting --workspace @ownwords/api` proves the shape locally. No cloud step in it has been executed.
+- The app is deliberately audio-free: no playback, no `hear`/`listen` step, no audio preference, no "no recording" message. The backend's `audio_json`, `/licenses` roll-up and `russian_course_audio` preference are dormant by decision, not oversight — evidence and the future route are in `packages/learning/content/README.md`; do not wire them into a screen or delete them without a pack of original recordings. The stored step kind `hear` is a legacy name the app maps to `read`.
 
 ## Maintaining this file
 

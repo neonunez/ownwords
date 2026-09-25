@@ -40,6 +40,11 @@ export const onboardingSchema = z
     preferences: z
       .object({
         explanationLanguage: z.enum(["en", "es"]),
+        /**
+         * Accepted and stored, but the app ships no recordings and never
+         * offers a control for it. It stays on the wire so the stored profile
+         * and its public API are unchanged.
+         */
         russianCourseAudio: z.boolean(),
         translationSuggestions: z.boolean(),
       })

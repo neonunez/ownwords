@@ -151,6 +151,10 @@ interface WireContentItem {
   gloss: string;
   stressText: string | null;
   grammaticalMetadata: Json | null;
+  /**
+   * Recorded-audio metadata the backend can return for an item. The app has
+   * no playback control, so it is deliberately not read into a lesson.
+   */
   audio: Json | null;
 }
 
@@ -255,16 +259,25 @@ export function readCompletion(value: unknown): "synced" | "pending" {
 
 /** What each kind of step is called when its content gives it no title. */
 const stepTitles: Record<LessonStepKind, string> = {
-  hear: "Hear it first",
+  read: "Read it first",
   rule: "A rule of four lines",
   use: "Use it",
-  perception: "Perception drill",
+  perception: "Notice the difference",
   alphabet: "The letters",
 };
 
 const stepKinds = Object.keys(stepTitles) as LessonStepKind[];
 
+/**
+ * The course stores its read-aloud step as `hear`, a legacy name from when
+ * playback was planned. It is a reading step, and the app calls it that.
+ */
+const storedStepKinds: Record<string, LessonStepKind> = {
+  hear: "read",
+};
+
 function stepKind(kind: string): LessonStepKind {
+  if (storedStepKinds[kind]) return storedStepKinds[kind];
   return stepKinds.includes(kind as LessonStepKind)
     ? (kind as LessonStepKind)
     : "rule";
@@ -357,7 +370,7 @@ export function toCourse(
         unitNumber: unit.position,
         lessonId: lesson.id,
         title: lesson.title,
-        step: step ? stepTitle(step) : stepTitles.hear,
+        step: step ? stepTitle(step) : stepTitles.read,
         progress: unit.lessons.length ? finished / unit.lessons.length : 0,
         canDo: unit.canDo,
       };
@@ -388,13 +401,11 @@ function grammarNote(metadata: Json | null): string {
 }
 
 function toItem(item: WireContentItem): LessonItem {
-  const audio = item.audio?.url;
   return {
     id: item.id,
     text: item.stressText ?? item.displayText,
     meaning: item.gloss,
     grammar: grammarNote(item.grammaticalMetadata),
-    audioUrl: typeof audio === "string" ? audio : null,
   };
 }
 
