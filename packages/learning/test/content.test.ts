@@ -46,9 +46,9 @@ describe("authored course pack", () => {
     expect(authored.course.description).toMatch(/reviewed by a qualified/i);
     // The description is stored on the published version row and is frozen at
     // first publication, so it must not claim a review that has not happened
-    // or a recording the app cannot play.
+    // or mention recordings at all.
     expect(authored.course.description).not.toMatch(/unreviewed/i);
-    expect(authored.course.description).toMatch(/without recordings/i);
+    expect(authored.course.description).not.toMatch(/record|audio|listen/i);
     // No step may promise a recording the app cannot play.
     const payloads = JSON.stringify(authored.units);
     expect(payloads).not.toMatch(

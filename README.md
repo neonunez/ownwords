@@ -146,9 +146,9 @@ nothing in the data model has to change to receive them.
 
 1. **Speak**: record → compare with the native model → self-rate; then "say it again, faster". The free tab seat is reserved for it.
 2. Course audio, when one native-speaker session and a written release make it honest: recordings for the course's own words and phrases, then the dialogues they need.
-2. The second half of A1, then A2.
-3. The learned language graduates into maintenance alongside the others.
-4. A second learning language reusing the same course + reference shape.
+3. The second half of A1, then A2.
+4. The learned language graduates into maintenance alongside the others.
+5. A second learning language reusing the same course + reference shape.
 
 ## Pace
 
