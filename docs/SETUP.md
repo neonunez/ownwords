@@ -202,7 +202,7 @@ npm run content:publish:remote --workspace @ownwords/api -- \
 ```
 
 Re-run that identical command with `--confirm` appended to publish it. The run prints the target Worker, origin,
-database name and ID, the deployed version that binding was proved on, the course, version, content hash, content
+database name and ID, the deployed versions that binding was proved on, the course, version, content hash, content
 counts and how many items carry audio before it sends anything. A course's editorial status is recorded in
 `packages/learning/content/README.md`, not at publication time.
 
