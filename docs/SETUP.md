@@ -295,8 +295,10 @@ and its client-side routes, the manifest, the service worker and an icon from th
 `/api/auth/get-session` and a cross-origin write answered by the Worker as JSON, never by the shell's fallback.
 [`publish-remote-content.test.mjs`](../apps/api/scripts/publish-remote-content.test.mjs) runs the remote publisher
 itself: the accepted production target, every refused configuration (local, template, non-production, wrong worker,
-wrong origin, wrong database, placeholder and all-zero IDs, unreadable), a refused pack, a refused missing token, and
-the request plan, which contains reads only until the run is confirmed.
+wrong origin, wrong database, placeholder and all-zero IDs, unreadable), a refused pack, a refused missing token, the
+deployed-binding proof against stubbed Wrangler JSON (every live version, including a split gradual deployment, must be
+bound to the intended ID named `ownwords-production`; a mismatch or an unreachable Cloudflare refuses), and the request
+plan, which contains reads only until the run is confirmed.
 
 ### Still unverified until the owner provides credentials
 
