@@ -4,10 +4,20 @@ Everything except live provider verification runs locally without external crede
 
 ## What the owner must provide later
 
-1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. Add zone-scoped `Workers Routes Write` only when the deployment will create or change a custom domain or route. These are deploy-time credentials only; local work and CI do not need them.
-2. **Google OAuth:** create a **Web application** OAuth client. Register the PWA origin as an authorized JavaScript origin and exactly `https://<production-host>/api/auth/callback/google` as an authorized redirect URI. Add `http://localhost:5173` and `http://localhost:5173/api/auth/callback/google` only when someone intentionally tests Google locally through the app's dev server (`npm run dev:app` below). Store the client ID and client secret as Worker secrets/configuration, never in Git.
+1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. The deploy itself attaches no hostname, so it needs no `Workers Routes Write`; add zone-scoped `Workers Routes Write` only if the owner delegates the Custom Domain attachment to an operator. These are deploy-time credentials only; local work and CI do not need them.
+2. **Google OAuth:** a **Web application** OAuth client exists in the `ownwords` Google Cloud project (External,
+   Testing), authorised for the JavaScript origin `https://ownwords.neonunez.com` and exactly
+   `https://ownwords.neonunez.com/api/auth/callback/google` as its redirect URI; the owner holds its secret. Add
+   `http://localhost:5173` and `http://localhost:5173/api/auth/callback/google` only when someone intentionally tests
+   Google locally through the app's dev server (`npm run dev:app` below). Store the client ID and client secret as
+   Worker secrets, never in Git. A client in Testing status only serves accounts the owner has added as test users.
 3. **Authentication secret:** generate locally with `openssl rand -base64 32`. Put it in `apps/api/.dev.vars` for local work and later run `wrangler secret put BETTER_AUTH_SECRET` for the deployed Worker. Do not reuse the example value.
-4. **Passkey domain:** choose the final HTTPS browser/auth origin and RP ID. Prefer serving `/api/auth` on the PWA origin so the WebAuthn ceremony is same-origin. For `https://app.example.com`, the narrow RP ID is `app.example.com`; a parent such as `example.com` deliberately shares credentials with eligible subdomains. Local development uses origin `http://localhost:8787` and RP ID `localhost`. Real iPhone/PWA validation remains a post-deployment device check.
+4. **Passkey domain:** chosen and written into the production template: the app, the API and the passkey ceremony
+   share the HTTPS origin `https://ownwords.neonunez.com`, with the narrow RP ID `ownwords.neonunez.com`. Serving
+   `/api/auth` on the app's own origin is what keeps the WebAuthn ceremony same-origin; a parent RP ID such as
+   `neonunez.com` would deliberately share credentials with eligible subdomains and is not used. Local development
+   uses origin `http://localhost:8787` and RP ID `localhost`. Real iPhone/PWA validation remains a post-deployment
+   device check.
 5. **OpenCode:** provider-policy approval is still pending. No translation key or account is requested, and this backend does not call the provider.
 
 ## Local development
@@ -50,27 +60,88 @@ browser, where `<signature>` is the base64 HMAC-SHA256 of the token keyed with `
 
 `npm run db:compose --workspace @ownwords/api` gathers migrations by filename from core (`0001–0099`), Lexicon (`0100–0199`), and Learning (`0200–0299`) into an ignored Wrangler directory. Duplicate or out-of-contract names fail before D1 is touched. The same composed directory is used by local migration commands and deployment tooling.
 
-The checked-in Wrangler configuration is local-only and contains a non-deployable placeholder D1 ID. No repository workflow deploys. Before a first deployment, create the production database with the approved Eastern North America hint, copy the production template, and replace its hostnames and returned D1 ID:
+## Production hosting
 
-```sh
-npx wrangler d1 create ownwords-production --location=enam
-cp apps/api/wrangler.production.jsonc.example apps/api/wrangler.production.jsonc
-```
+One Cloudflare Worker serves the app and the API from one origin, so the session cookie is first-party and the
+passkey ceremony runs on the app's own origin. `apps/api/wrangler.production.jsonc.example` is that configuration:
+the built app as the Worker's assets, `single-page-application` fallback for client-side routes, `run_worker_first`
+for `/api`, `/api/*` and `/health` so the app shell can never answer an API request, and `workers_dev: false` with
+no `routes` so a deploy publishes no hostname of its own. The tracked file is a template: its D1 ID is a placeholder,
+and no secret is ever in it. `npm run check:hosting --workspace @ownwords/api` builds the app, dry-runs that deploy
+and serves it under a real `wrangler dev`, checking the shell, the manifest, the service worker, and that `/api/*`
+answers with JSON — including its own 404 — on local state and with no credential.
 
-The copied file is ignored. Confirm `ENVIRONMENT=production`, the public `BETTER_AUTH_URL`, exact comma-separated `TRUSTED_ORIGINS`, `PASSKEY_RP_ID`, and `PASSKEY_RP_ORIGIN`. Set secrets interactively; never put them in the config or command line:
+The checked-in `apps/api/wrangler.jsonc` stays local-only, with a non-deployable placeholder D1 ID. No repository
+workflow deploys.
 
-```sh
-npx wrangler secret put BETTER_AUTH_SECRET --config apps/api/wrangler.production.jsonc
-npx wrangler secret put GOOGLE_CLIENT_ID --config apps/api/wrangler.production.jsonc
-npx wrangler secret put GOOGLE_CLIENT_SECRET --config apps/api/wrangler.production.jsonc
-```
+### Deployment (not executed here; every step is the owner's to approve)
 
-Compose and review every core/domain migration, apply them explicitly with `wrangler d1 migrations apply ownwords-production --remote --config apps/api/wrangler.production.jsonc`, and only then run `wrangler deploy --config apps/api/wrangler.production.jsonc`.
+Each numbered step is a separate permission boundary. None of them has been run: this repository contains the
+configuration, not a deployment.
 
-The app (`npm run build --workspace @ownwords/web`, output `apps/web/dist/`) must be served from the same HTTPS origin
-as `BETTER_AUTH_URL` and `PASSKEY_RP_ORIGIN`, with `/api/*` on that host routed to the Worker; it calls no other
-host. How the static files are hosted on that origin is part of the deployment decision and is not configured in
-this repository. Never deploy `apps/web/demo-dist/`: it is the sample-data demo.
+1. **Create the production database and copy the template.** D1 creation is billable.
+
+   ```sh
+   npx wrangler d1 create ownwords-production --location=enam
+   cp apps/api/wrangler.production.jsonc.example apps/api/wrangler.production.jsonc
+   ```
+
+   The copy is ignored by Git. Put the returned D1 ID in its `database_id`, and leave everything else as the template
+   has it: `ENVIRONMENT=production`, and `BETTER_AUTH_URL`, `TRUSTED_ORIGINS`, `PASSKEY_RP_ID` and `PASSKEY_RP_ORIGIN`
+   all naming `https://ownwords.neonunez.com` / `ownwords.neonunez.com`. No wildcard, apex, `www`, HTTP or extra
+   origin is needed.
+
+2. **Set the secrets interactively**, in an owner-controlled terminal. They are Worker secrets, never config values
+   or command-line arguments, and never pasted anywhere:
+
+   ```sh
+   npx wrangler secret put BETTER_AUTH_SECRET --config apps/api/wrangler.production.jsonc
+   npx wrangler secret put GOOGLE_CLIENT_ID --config apps/api/wrangler.production.jsonc
+   npx wrangler secret put GOOGLE_CLIENT_SECRET --config apps/api/wrangler.production.jsonc
+   npx wrangler secret put INVITATION_ADMIN_TOKEN --config apps/api/wrangler.production.jsonc
+   ```
+
+3. **Apply the composed migrations**, reviewing the directory and the plan first:
+
+   ```sh
+   npm run db:compose --workspace @ownwords/api
+   npx wrangler d1 migrations apply ownwords-production --remote --config apps/api/wrangler.production.jsonc
+   ```
+
+4. **Build the app, dry-run, then deploy.** Deployment can incur Worker and asset charges. The app's build is the
+   asset; `apps/web/demo-dist/` must never be uploaded.
+
+   ```sh
+   npm run build --workspace @ownwords/web
+   npx wrangler deploy --dry-run --config apps/api/wrangler.production.jsonc
+   npx wrangler deploy --config apps/api/wrangler.production.jsonc
+   ```
+
+5. **Attach the Custom Domain separately**, in the Cloudflare dashboard or an equally explicit operator action. The
+   template has no route, so step 4 leaves `ownwords.neonunez.com` unresolvable on purpose: DNS and the certificate
+   are the owner's decision, never a hidden effect of deploying. Then read the deployment back with a plain client:
+
+   ```sh
+   curl -fsS -D - -o /dev/null https://ownwords.neonunez.com/
+   curl -fsS -D - -o /dev/null https://ownwords.neonunez.com/maintain/lexicon
+   curl -fsS -D - -o /dev/null https://ownwords.neonunez.com/manifest.webmanifest
+   curl -fsS -D - -o /dev/null https://ownwords.neonunez.com/api/auth/get-session
+   curl -fsS -D - -o /dev/null https://ownwords.neonunez.com/api/nope
+   ```
+
+   `/` and the app route answer `200 text/html`; the manifest answers JSON; `/api/*` answers from the Worker, and
+   `/api/nope` is the API's JSON 404 rather than the app shell.
+
+**Nothing is published to make authentication work.** The database holds the invited account's own data and no course
+content: the Russian Foundations pack is unreviewed and has no audio (`packages/learning/content/README.md`), and
+`content:publish:local` remains local-only, so a first live sign-in has nothing published behind it.
+
+**Rollback.** A Worker rollback redeploys the previous version; `npx wrangler deployments list --config
+apps/api/wrangler.production.jsonc` names the versions and `npx wrangler rollback --config
+apps/api/wrangler.production.jsonc` returns to the one before. It does not reverse D1 writes, so keep Time Travel or
+an export. A published course version is immutable — correct content by publishing a new version. An unaccepted
+invitation is revoked by ID. Detaching the Custom Domain, or deleting the Worker, is the owner's own cloud action;
+nothing in this repository does it.
 
 ## Invitation administration
 
@@ -129,6 +200,10 @@ prerequisites; export retry after a simulated Lexicon failure; the course-only p
 administrator invitation issuance through a complete Google sign-in, driven by a stubbed Google token endpoint and
 placeholder client values. [`backup-restore.test.mjs`](../apps/api/scripts/backup-restore.test.mjs) runs two real
 `wrangler dev` servers to rehearse `wrangler d1 export` and restore into a separate local database.
+[`production-hosting-routes.test.mjs`](../apps/api/scripts/production-hosting-routes.test.mjs) dry-runs the
+production deploy and serves the production template under a real `wrangler dev` with the real app build: the shell
+and its client-side routes, the manifest, the service worker and an icon from the assets, and `/api`, `/api/nope`,
+`/api/auth/get-session` and a cross-origin write answered by the Worker as JSON, never by the shell's fallback.
 
 ### Still unverified until the owner provides credentials
 
@@ -142,12 +217,14 @@ These need the live resources listed at the top of this file; no test here stand
    the same ceremony is checked only on a Chromium virtual authenticator, which says nothing about Safari, iCloud
    Keychain or the installed app.
 3. **Cloudflare:** create the production D1 database, apply the composed migrations remotely, dry-run and deploy the
-   Worker, then run one remote `wrangler d1 export` and restore it into a separate test database.
+   Worker and its assets, attach the Custom Domain, then run one remote `wrangler d1 export` and restore it into a
+   separate test database. The configuration for this is in the repository and locally tested; the steps are not run.
 4. **Course content:** publish the reviewed production course pack to the remote database. There is no remote
-   publishing command yet; `content:publish:local` deliberately refuses anything but local state.
-5. **The app on the deployed origin:** serve `apps/web/dist` on the auth origin with `/api/*` routed to the Worker,
-   add it to an iPhone Home Screen, and check the standalone launch, safe areas, the offline shell and the "new
-   version" prompt there. Every browser check so far is Chromium on a desktop, shaped like a phone.
+   publishing command yet; `content:publish:local` deliberately refuses anything but local state. Publishing is not
+   needed to test Google sign-in or a passkey, and is left out of that test on purpose.
+5. **The app on the deployed origin:** the hosting configuration is in the repository and checked locally, but the
+   installed app, the standalone launch, safe areas, the offline shell and the "new version" prompt are still only
+   Chromium on a desktop, shaped like a phone. Check them on the iPhone, after a real deployment.
 
 ## Backup and restore
 

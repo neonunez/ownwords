@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
+    "check:hosting": "node --test scripts/production-hosting-config.test.mjs scripts/production-hosting-routes.test.mjs",
     "content:publish:local": "tsx scripts/local-content.ts",
     "db:compose": "node scripts/compose-migrations.mjs",
     "db:migrate:local": "npm run db:compose && wrangler d1 migrations apply ownwords-local --local",
@@ -16,7 +17,7 @@
     "predev:app": "npm run deps:build",
     "pretest": "npm run deps:build && npm run db:compose",
     "pretypecheck": "npm run deps:build",
-    "test": "node --test scripts/compose-migrations.test.mjs scripts/backup-restore.test.mjs && vitest run",
+    "test": "node --test scripts/compose-migrations.test.mjs scripts/production-hosting-config.test.mjs scripts/production-hosting-routes.test.mjs scripts/backup-restore.test.mjs && vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -11,6 +11,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - The visual and behavioural source for the front end is the supplied Ownwords Design System package, read together with the product README. Deviations from it are recorded in `apps/web/README.md` and, for the colour tokens, at the top of `apps/web/src/styles/tokens/colors.css`.
 - Every screen reads through `apps/web/src/api/client.ts` and nothing else. `src/api/http/` answers it for the app (API on the app's own origin under `/api`); `src/api/demo/` only for unit tests and Vite `demo`-mode builds (`demo-dist/`), never as a fallback.
 - Browser tests run only from `apps/web`: `npm run test:e2e` (screens, demo build) and `npm run test:stack` (connected app against real `wrangler dev` + fresh local D1 with synthetic sessions, via `stack/serve.mjs`; also `npm run stack` for manual use).
+- Production same-origin hosting is `apps/api/wrangler.production.jsonc.example` (app build as Worker assets, `/api` ahead of the SPA fallback, `workers_dev: false`, no route): the deploy, Custom Domain and rollback steps are in `docs/SETUP.md`, and `npm run check:hosting --workspace @ownwords/api` proves the shape locally. No cloud step in it has been executed.
 
 ## Maintaining this file
 

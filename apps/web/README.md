@@ -48,6 +48,12 @@ yourself; `docs/SETUP.md` has both.
 | `npm run test:stack` | Browser journeys of the connected app against the real API and a fresh local D1 (Playwright). |
 | `npm run test:all` | Everything above, in order. |
 
+In production one Cloudflare Worker serves this `dist/` and the API on the same
+origin, so the session cookie is first-party and the passkey ceremony runs on
+the app's own host. That configuration is
+`apps/api/wrangler.production.jsonc.example`; the deploy, Custom Domain and
+rollback steps are in `docs/SETUP.md`.
+
 The root `npm run check` and `npm run build`, which CI runs, cover this
 package's type-check, unit tests and build; lint and the browser tests run
 only from here.

@@ -31,7 +31,10 @@ The app calls the API on its own origin, under `/api/auth` (Better Auth) and
 `/api/v1` (everything else). `src/api/http/request.ts` is the only file that
 spells those prefixes. Serving both from one origin keeps the session cookie
 first-party and runs the passkey ceremony on the relying party's own origin, so
-a deployment must route `/api/*` on the app's host to the Worker. Locally,
+a deployment must route `/api/*` on the app's host to the Worker. In production
+that is one Worker serving this package's `dist/` as its static assets; see
+`apps/api/wrangler.production.jsonc.example` and the hosting steps in
+`docs/SETUP.md`. Locally,
 `vite` and `vite preview` forward `/api` to `wrangler dev`
 (`OWNWORDS_API_URL`, default `http://127.0.0.1:8787`). The service worker never
 answers `/api/`.
