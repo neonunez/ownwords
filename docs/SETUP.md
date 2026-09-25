@@ -177,9 +177,9 @@ placeholder or the all-zero local ID are all refused before any request is sent.
 hash is not the `--expect-hash` it was given.
 
 Those are local facts about a config file, so the run does not trust them alone. Before it builds any request it asks
-Cloudflare, read-only, what the currently deployed `ownwords-api` version is actually bound to
-(`wrangler deployments list`, `wrangler versions view`, `wrangler d1 info`) and refuses unless the deployed `DB`
-binding and the remote `ownwords-production` database are both the `database_id` this config intends. A Worker
+Cloudflare, read-only, what every version in the live `ownwords-api` deployment is actually bound to
+(`wrangler deployments list`, `wrangler versions view`, `wrangler d1 info`) and refuses unless each deployed `DB`
+binding is the `database_id` this config intends and that id is the remote database named `ownwords-production`. A Worker
 deployed from a different or stale config, an undeployed Worker, and an unauthenticated or unreachable Cloudflare all
 refuse the run rather than publishing. This needs a Cloudflare login in the operator's terminal; it needs no write
 permission.

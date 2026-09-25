@@ -216,7 +216,7 @@ export function readPublishToken(env) {
  * `exec` is injected so the check is testable without Cloudflare credentials.
  *
  * @param {{ target: PublicationTarget, exec: (args: string[]) => Promise<string> }} check
- * @returns {Promise<{ versionId: string, databaseId: string }>}
+ * @returns {Promise<{ versionIds: string[], databaseId: string }>}
  */
 export async function verifyDeployedDatabaseBinding({ target, exec }) {
   const config = ["--config", target.configPath];
@@ -244,53 +244,63 @@ export async function verifyDeployedDatabaseBinding({ target, exec }) {
     ["deployments", "list", "--name", target.workerName],
     "the deployed versions of " + target.workerName,
   );
-  const current =
-    (Array.isArray(deployments) ? deployments[0] : undefined) ?? {};
-  const versionId = Array.isArray(current.versions)
-    ? current.versions[0]
-    : current.version_id;
-  if (typeof versionId !== "string" || versionId.length === 0) {
+  // Wrangler lists deployments oldest first; the last one is live, and a
+  // gradual deployment splits its traffic across every version it names.
+  const current = Array.isArray(deployments) ? deployments.at(-1) : undefined;
+  const versionIds = Array.isArray(current?.versions)
+    ? current.versions.map((entry) => entry?.version_id)
+    : [];
+  if (
+    versionIds.length === 0 ||
+    versionIds.some((id) => typeof id !== "string" || id.length === 0)
+  ) {
     throw new PublicationRefusal(
       "unverified_binding",
       `${target.workerName} has no deployed version to check; deploy the Worker before publishing`,
     );
   }
 
-  const version = await json(
-    ["versions", "view", versionId, "--name", target.workerName],
-    `version ${versionId} of ${target.workerName}`,
-  );
-  const bindings = Array.isArray(version?.bindings)
-    ? version.bindings
-    : (version?.metadata?.bindings ?? []);
-  const binding = bindings.find((entry) => entry?.name === PRODUCTION_BINDING);
-  const deployedId = binding?.id ?? binding?.database_id;
-  if (typeof deployedId !== "string" || deployedId.length === 0) {
-    throw new PublicationRefusal(
-      "unverified_binding",
-      `deployed version ${versionId} of ${target.workerName} has no ${PRODUCTION_BINDING} D1 binding to verify`,
+  for (const versionId of versionIds) {
+    const version = await json(
+      ["versions", "view", versionId, "--name", target.workerName],
+      `version ${versionId} of ${target.workerName}`,
     );
-  }
-  if (deployedId !== target.databaseId) {
-    throw new PublicationRefusal(
-      "deployed_binding_mismatch",
-      `deployed version ${versionId} of ${target.workerName} is bound to D1 ${deployedId}, not the intended ${target.databaseId}; redeploy the Worker from this config or publish nothing`,
-    );
+    const bindings = version?.resources?.bindings;
+    const binding = Array.isArray(bindings)
+      ? bindings.find(
+          (entry) => entry?.type === "d1" && entry?.name === PRODUCTION_BINDING,
+        )
+      : undefined;
+    const deployedId = binding?.id;
+    if (typeof deployedId !== "string" || deployedId.length === 0) {
+      throw new PublicationRefusal(
+        "unverified_binding",
+        `deployed version ${versionId} of ${target.workerName} has no ${PRODUCTION_BINDING} D1 binding to verify`,
+      );
+    }
+    if (deployedId !== target.databaseId) {
+      throw new PublicationRefusal(
+        "deployed_binding_mismatch",
+        `deployed version ${versionId} of ${target.workerName} is bound to D1 ${deployedId}, not the intended ${target.databaseId}; redeploy the Worker from this config or publish nothing`,
+      );
+    }
   }
 
   const database = await json(
     ["d1", "info", target.databaseName],
     `${target.databaseName} from Cloudflare`,
   );
-  const remoteId = database?.uuid ?? database?.database_id;
-  if (remoteId !== target.databaseId) {
+  if (
+    database?.uuid !== target.databaseId ||
+    database?.name !== target.databaseName
+  ) {
     throw new PublicationRefusal(
       "deployed_binding_mismatch",
-      `${target.databaseName} is ${String(remoteId)} in this account, not the configured ${target.databaseId}`,
+      `D1 ${target.databaseId} is ${String(database?.name)} (${String(database?.uuid)}) in this account, not ${target.databaseName}`,
     );
   }
 
-  return { versionId, databaseId: target.databaseId };
+  return { versionIds, databaseId: target.databaseId };
 }
 
 /**

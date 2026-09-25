@@ -384,17 +384,39 @@ test("the command refuses a missing token", async () => {
 const DEPLOYED_ID = "1f2e3d4c-5b6a-7988-9a0b-1c2d3e4f5061";
 const OTHER_ID = "9a8b7c6d-5e4f-3021-a1b2-c3d4e5f60718";
 
-/** A stand-in for read-only Wrangler, driven by the answers a test wants. */
-function wranglerStub({ versionBindings, databaseUuid, fail }) {
+/**
+ * A stand-in for read-only Wrangler, answering in the JSON shapes Wrangler 4
+ * prints: deployments oldest first with `{ version_id, percentage }` traffic,
+ * raw API versions with `resources.bindings`, and the D1 API record.
+ */
+function wranglerStub({
+  versionBindings,
+  database,
+  live = [{ version_id: "v-live", percentage: 100 }],
+  fail,
+}) {
   const calls = [];
   const exec = async (args) => {
     calls.push(args.join(" "));
     if (fail) throw new Error("not authenticated");
     if (args[0] === "deployments")
-      return JSON.stringify([{ versions: ["v-1"] }]);
-    if (args[0] === "versions")
-      return JSON.stringify({ bindings: versionBindings });
-    if (args[0] === "d1") return JSON.stringify({ uuid: databaseUuid });
+      return JSON.stringify([
+        {
+          created_on: "2026-01-01T00:00:00Z",
+          versions: [{ version_id: "v-old", percentage: 100 }],
+        },
+        { created_on: "2026-02-01T00:00:00Z", versions: live },
+      ]);
+    if (args[0] === "versions") {
+      const bindings =
+        args[2] === "v-old"
+          ? [{ name: "DB", type: "d1", id: OTHER_ID }]
+          : typeof versionBindings === "function"
+            ? versionBindings(args[2])
+            : versionBindings;
+      return JSON.stringify({ id: args[2], resources: { bindings } });
+    }
+    if (args[0] === "d1") return JSON.stringify(database);
     throw new Error(`unexpected wrangler call: ${args.join(" ")}`);
   };
   return { exec, calls };
@@ -409,17 +431,30 @@ test("the deployed Worker's own D1 binding is proved before any request exists",
     databaseId: DEPLOYED_ID,
   };
   const binding = { name: "DB", type: "d1", id: DEPLOYED_ID };
+  const production = { uuid: DEPLOYED_ID, name: PRODUCTION_DATABASE_NAME };
+  const gradual = [
+    { version_id: "v-a", percentage: 90 },
+    { version_id: "v-b", percentage: 10 },
+  ];
 
   const verified = wranglerStub({
     versionBindings: [binding],
-    databaseUuid: DEPLOYED_ID,
+    database: production,
+    live: gradual,
   });
-  await assert.doesNotReject(() =>
-    verifyDeployedDatabaseBinding({ target, exec: verified.exec }),
+  assert.deepEqual(
+    await verifyDeployedDatabaseBinding({ target, exec: verified.exec }),
+    { versionIds: ["v-a", "v-b"], databaseId: DEPLOYED_ID },
   );
   assert.deepEqual(
-    verified.calls.map((call) => call.split(" ")[0] + " " + call.split(" ")[1]),
-    ["deployments list", "versions view", "d1 info"],
+    verified.calls.map((call) => call.split(" ").slice(0, 3).join(" ")),
+    [
+      "deployments list --name",
+      "versions view v-a",
+      "versions view v-b",
+      "d1 info " + PRODUCTION_DATABASE_NAME,
+    ],
+    "only the live deployment's versions are read, never the oldest",
   );
   assert.ok(
     verified.calls.every(
@@ -429,25 +464,39 @@ test("the deployed Worker's own D1 binding is proved before any request exists",
   );
 
   // A Worker deployed from another config would otherwise publish anyway.
-  for (const [versionBindings, databaseUuid, reason] of [
+  for (const [versionBindings, database, reason, live] of [
     [
       [{ name: "DB", type: "d1", id: OTHER_ID }],
-      OTHER_ID,
+      { uuid: OTHER_ID, name: PRODUCTION_DATABASE_NAME },
       "deployed_binding_mismatch",
     ],
     [
       [{ name: "DB", type: "d1", id: OTHER_ID }],
-      DEPLOYED_ID,
+      production,
       "deployed_binding_mismatch",
+    ],
+    [
+      (versionId) =>
+        versionId === "v-b"
+          ? [{ name: "DB", type: "d1", id: OTHER_ID }]
+          : [binding],
+      production,
+      "deployed_binding_mismatch",
+      gradual,
     ],
     [
       [{ name: "OTHER", type: "d1", id: DEPLOYED_ID }],
-      DEPLOYED_ID,
+      production,
       "unverified_binding",
     ],
-    [[binding], OTHER_ID, "deployed_binding_mismatch"],
+    [[binding], production, "unverified_binding", []],
+    [
+      [binding],
+      { uuid: DEPLOYED_ID, name: "ownwords-scratch" },
+      "deployed_binding_mismatch",
+    ],
   ]) {
-    const stub = wranglerStub({ versionBindings, databaseUuid });
+    const stub = wranglerStub({ versionBindings, database, live });
     await assert.rejects(
       () => verifyDeployedDatabaseBinding({ target, exec: stub.exec }),
       (error) => {
@@ -461,7 +510,7 @@ test("the deployed Worker's own D1 binding is proved before any request exists",
   // An unreachable or unauthenticated Cloudflare fails closed, never open.
   const failing = wranglerStub({
     versionBindings: [binding],
-    databaseUuid: DEPLOYED_ID,
+    database: production,
     fail: true,
   });
   await assert.rejects(

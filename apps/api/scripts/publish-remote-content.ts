@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     `worker      ${target.workerName}`,
     `origin      ${target.origin}`,
     `database    ${target.databaseName} (${target.databaseId})`,
-    `deployed    version ${deployed.versionId} of ${target.workerName} is bound to that database`,
+    `deployed    version ${deployed.versionIds.join(", ")} of ${target.workerName} is bound to that database`,
     `course      ${pack.course.id} v${pack.version} "${pack.course.title}"`,
     `content     sha256:${hash}`,
     `contents    ${pack.units.length} units, ${lessons} lessons, ${pack.items.length} items, ${pack.references.length} references`,
