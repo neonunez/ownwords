@@ -9,6 +9,7 @@ export interface Bindings {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   INVITATION_ADMIN_TOKEN?: string;
+  CONTENT_PUBLISH_TOKEN?: string;
 }
 
 export interface VerifiedSession {

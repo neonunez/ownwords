@@ -1,5 +1,5 @@
 import { contentHash, validateContentPack, type ContentPack } from "./content";
-import { first } from "./db";
+import { all, first } from "./db";
 
 export class ContentTransitionError extends Error {
   constructor(
@@ -323,6 +323,31 @@ export async function discardDraftCourseVersion(
       "Only an existing draft version may be discarded",
     );
   }
+}
+
+export interface CourseVersionState {
+  version: number;
+  status: "draft" | "published";
+  contentHash: string;
+  publishedAt: string | null;
+}
+
+/**
+ * Read-only operator view of one course's versions. Publication tooling uses it
+ * to show what a database already holds before any write, so the preflight
+ * needs no course SQL of its own.
+ */
+export async function readCourseVersionStates(
+  db: D1Database,
+  courseId: string,
+): Promise<CourseVersionState[]> {
+  return all<CourseVersionState>(
+    db
+      .prepare(
+        "SELECT version, status, content_hash AS contentHash, published_at AS publishedAt FROM learning_course_versions WHERE course_id = ? ORDER BY version",
+      )
+      .bind(courseId),
+  );
 }
 
 export type { ContentPack };

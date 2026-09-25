@@ -6,7 +6,7 @@
 
 - The Russian examples, English explanations, exercises, and selection notes were authored for Ownwords. They were not copied from official curricula, textbooks, production source text, or unknown-license examples.
 - Every content item carries `CC-BY-4.0` metadata and an Ownwords provenance record. The pack has no audio: `audio` is omitted rather than inventing a recording or URL, and no step is written to promise one.
-- The sequence, stress marks, examples, exercise answers, and learner-facing wording were **reviewed by a qualified Russian-language teacher**. Review does not make this a certified exam course.
+- The sequence, stress marks, examples, exercise answers, and learner-facing wording were **reviewed by a qualified Russian-language teacher** (the owner has confirmed it; the reviewer's identity and date are deliberately not recorded in this repository). Review does not make this a certified exam course.
 - The pack uses only the existing versioned `ingestCourseVersion` / `publishCourseVersion` operator path. Do not write course rows directly to D1.
 
 ## Why there is no audio, and what is deliberately dormant
@@ -36,3 +36,7 @@ npm run content:publish:local --workspace @ownwords/api -- ../../packages/learni
 ```
 
 The local publisher uses the supported operator import and D1 is local only. The connected stack test seeds this same pack through that path.
+
+Publishing v1 to the production database is a separate, explicitly confirmed operator run against the deployed API
+(`docs/SETUP.md`, "Publishing course content to production"). It names the reviewed course, version and content hash
+before it writes, and the write is irreversible for that version.
