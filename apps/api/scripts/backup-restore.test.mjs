@@ -4,13 +4,13 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { makeSignature } from "better-auth/crypto";
+import { freePort } from "./test-helpers.mjs";
 
 const run = promisify(execFile);
 const apiDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -61,17 +61,6 @@ async function wrangler(args) {
     maxBuffer: 16 * 1024 * 1024,
   });
   return stdout;
-}
-
-async function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      server.close(() => resolve(port));
-    });
-    server.on("error", reject);
-  });
 }
 
 async function startWorker(database) {

@@ -1,15 +1,38 @@
 {
+  // The production template. Copy it to `wrangler.production.jsonc` (ignored by
+  // Git) and put the D1 ID `wrangler d1 create` returns in `database_id`; never
+  // put a secret here. `npm run check:hosting` proves this shape, and
+  // `docs/SETUP.md` is the operator's deploy, Custom Domain and rollback steps.
+  //
+  // One Worker serves the built app and the API from one origin, so the session
+  // cookie is first-party and the passkey ceremony runs on the app's own origin.
+  //
+  // `workers_dev: false` with no `routes` means this deploy publishes no
+  // hostname at all: attaching ownwords.neonunez.com is a Custom Domain step the
+  // owner takes separately, never a side effect of deploying.
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "ownwords-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-15",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "assets": {
+    // The app's own production build, `npm run build --workspace @ownwords/web`.
+    // Never `../web/demo-dist`: that is the sample-data demo.
+    "directory": "../web/dist",
+    // A client-side route such as /maintain/lexicon has no file behind it, so an
+    // unmatched navigation is answered with the app shell. `/api` and `/health`
+    // run the Worker first, so the shell's fallback can never answer for the
+    // API: those paths keep their JSON, including its own 404.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api", "/api/*", "/health"]
+  },
   "vars": {
     "ENVIRONMENT": "production",
-    "BETTER_AUTH_URL": "https://app.example.com",
-    "TRUSTED_ORIGINS": "https://app.example.com",
-    "PASSKEY_RP_ID": "app.example.com",
-    "PASSKEY_RP_ORIGIN": "https://app.example.com"
+    "BETTER_AUTH_URL": "https://ownwords.neonunez.com",
+    "TRUSTED_ORIGINS": "https://ownwords.neonunez.com",
+    "PASSKEY_RP_ID": "ownwords.neonunez.com",
+    "PASSKEY_RP_ORIGIN": "https://ownwords.neonunez.com"
   },
   "d1_databases": [
     {
