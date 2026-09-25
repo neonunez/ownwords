@@ -5,9 +5,11 @@
 // deploys or reaches Cloudflare; the routes themselves are proved in
 // `production-hosting-routes.test.mjs`.
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
+import { promisify } from "node:util";
 import {
   PRODUCTION_HOST,
   PRODUCTION_ORIGIN,
@@ -16,6 +18,8 @@ import {
   readProductionTemplate,
   repositoryRoot,
 } from "./production-hosting.mjs";
+
+const run = promisify(execFile);
 
 const template = await readProductionTemplate();
 
@@ -104,17 +108,16 @@ test("no credential and no real database is tracked", () => {
 });
 
 test("the copied production config and the built app stay untracked", async () => {
-  const ignored = await readFile(
-    path.join(repositoryRoot, ".gitignore"),
-    "utf8",
+  const paths = [
+    "apps/api/wrangler.production.jsonc",
+    "apps/web/dist/index.html",
+  ];
+  const { stdout } = await run(
+    "git",
+    ["check-ignore", "--no-index", ...paths],
+    { cwd: repositoryRoot },
   );
-  const lines = ignored.split("\n").map((line) => line.trim());
-  assert.ok(lines.includes("apps/api/wrangler.production.jsonc"));
-  assert.ok(lines.includes("dist/"), "the built app is not committed");
-  assert.ok(
-    !lines.includes("apps/web/dist"),
-    "the built app is ignored as a directory, not by name",
-  );
+  assert.deepEqual(stdout.trim().split("\n"), paths);
 });
 
 test("the JSONC reader handles the dialect the template is written in", () => {
