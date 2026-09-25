@@ -10,6 +10,7 @@
  *     --config wrangler.production.jsonc \
  *     --expect-course russian-foundations --expect-version 1 \
  *     --expect-hash <sha256 of the pack> \
+ *     --teacher-reviewed \
  *     --note "<editorial status of this pack>" \
  *     ../../packages/learning/content/russian-foundations-v1.json
  *
