@@ -197,7 +197,7 @@ npm run content:publish:remote --workspace @ownwords/api -- \
   --config wrangler.production.jsonc \
   --expect-course russian-foundations \
   --expect-version 1 \
-  --expect-hash 6fc73576449e888aa99d519790bf112fca98b35254da649db5a228a42fe6a08b \
+  --expect-hash 684033be47b582f4d4fc87b95c0dd7c62f9a1015a45523af52cdb817c59ad708 \
   ../../packages/learning/content/russian-foundations-v1.json
 ```
 

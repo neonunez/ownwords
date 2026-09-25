@@ -41,7 +41,7 @@ const pack = path.join(
   "russian-foundations-v1.json",
 );
 /** The reviewed pack's content hash; `npm run content:validate` prints it. */
-const HASH = "6fc73576449e888aa99d519790bf112fca98b35254da649db5a228a42fe6a08b";
+const HASH = "684033be47b582f4d4fc87b95c0dd7c62f9a1015a45523af52cdb817c59ad708";
 const TOKEN = "cd".repeat(32);
 
 const template = JSON.parse(
