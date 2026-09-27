@@ -66,12 +66,19 @@ export function tabsFor(mode: Mode): readonly TabItem[] {
   return mode === "learn" ? learnTabs : maintainTabs;
 }
 
+/** Screens that belong to no tab: reached from the side panel, not a tab. */
+const outsideTabs = ["settings", "languages"];
+
 /**
  * Which tab owns the current location. A screen pushed from a tab keeps that
- * tab lit, because no screen is ever a dead end.
+ * tab lit, because no screen is ever a dead end. Settings keeps the tab bar
+ * but lights none of it, since no tab leads there.
  */
 export function activeTabKey(pathname: string): string {
-  const tabs = tabsFor(modeFromPath(pathname));
+  const mode = modeFromPath(pathname);
+  if (outsideTabs.some((screen) => pathname.startsWith(`/${mode}/${screen}`)))
+    return "";
+  const tabs = tabsFor(mode);
   const match = tabs.find(
     (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
   );

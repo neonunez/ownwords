@@ -1,24 +1,29 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   Button,
   Card,
-  Chip,
+  ChoiceGroup,
+  Icon,
+  IconButton,
   SegmentedControl,
+  Select,
   Switch,
+  type IconName,
 } from "../../design-system";
 import { Note, Section } from "../layout";
-import { ownName } from "../../lib/languages";
+import {
+  LEARNABLE,
+  MAINTAINABLE,
+  MOST_LANGUAGES,
+  byOwnName,
+  englishName,
+  ownName,
+} from "../../lib/languages";
 import type {
   ExplanationLanguage,
   LanguageLevel,
   Onboarding,
 } from "../../api/types";
-
-/** Languages offered to maintain. Any language already on the profile is kept too. */
-const OFFERED = ["en", "es", "fr", "de", "it", "pt", "ru"];
-
-/** The course is Russian; the backend has no other course to learn yet. */
-const LEARNABLE = ["ru"];
 
 /** Maintain is for languages already spoken at an intermediate level or above. */
 const SPOKEN_LEVELS: { value: LanguageLevel; label: string }[] = [
@@ -28,6 +33,18 @@ const SPOKEN_LEVELS: { value: LanguageLevel; label: string }[] = [
   { value: "c1", label: "C1" },
   { value: "c2", label: "C2" },
 ];
+
+/** What each level means, in the words a person would use about themselves. */
+const LEVEL_MEANING: Record<LanguageLevel, string> = {
+  native: "You grew up with it.",
+  c2: "Precise and effortless, even on hard topics.",
+  c1: "Fluent and flexible, at work and in study.",
+  b2: "At ease in most conversations.",
+  b1: "You get by on familiar topics.",
+  a2: "Simple, everyday exchanges.",
+  a1: "Your first words and phrases.",
+  a0: "Starting from zero.",
+};
 
 const EXPLANATIONS: { value: ExplanationLanguage; label: string }[] = [
   { value: "en", label: "English" },
@@ -45,56 +62,115 @@ const DEFAULTS: Onboarding = {
   },
 };
 
+interface Spoken {
+  code: string;
+  /** `null` until the person says how well they speak it. */
+  level: LanguageLevel | null;
+}
+
+/** "Deutsch · German": the name a speaker looks for, then the app's own. */
+function listName(code: string): string {
+  const own = ownName(code);
+  const english = englishName(code);
+  return own.toLocaleLowerCase() === english.toLocaleLowerCase()
+    ? own
+    : `${own} · ${english}`;
+}
+
+/** "English", "English and Español", "English, Español and Deutsch". */
+function joined(names: readonly string[]): string {
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /**
  * What the first run asks, and only that: the languages and their levels,
  * then the two preferences the course can honour — the language of
  * explanations, and whether translations are suggested. It never asks for a
  * daily time budget or for notification permission.
+ *
+ * The two kinds of language are asked for apart, because they do different
+ * things: a language already spoken is kept up, at the level the person says
+ * they have; a language learned starts from zero, in the course.
  */
 export function LanguageForm({
   initial = DEFAULTS,
   submitLabel,
+  askPreferences = true,
   onSubmit,
 }: {
   initial?: Onboarding;
   submitLabel: string;
+  /** The first run asks the preferences too; Settings keeps them apart. */
+  askPreferences?: boolean;
   /** Rejects with a written error, which the form shows. */
   onSubmit: (next: Onboarding) => Promise<void>;
 }) {
   const suggestId = useId();
-  const [spoken, setSpoken] = useState<Record<string, LanguageLevel>>(() =>
-    Object.fromEntries(
-      initial.languages
-        .filter((language) => language.kind === "maintain")
-        .map((language) => [language.code, language.level]),
-    ),
+  const levelIds = useId();
+  const [spoken, setSpoken] = useState<Spoken[]>(() =>
+    initial.languages
+      .filter((language) => language.kind === "maintain")
+      .map((language) => ({ code: language.code, level: language.level })),
   );
   const [learn, setLearn] = useState<string | null>(
     () =>
       initial.languages.find((language) => language.kind === "learn")?.code ??
       null,
   );
+  const [adding, setAdding] = useState("");
   const [preferences, setPreferences] = useState(initial.preferences);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const offered = [
-    ...OFFERED,
-    ...Object.keys(spoken).filter((code) => !OFFERED.includes(code)),
-  ];
-  const learnable = LEARNABLE.filter((code) => !(code in spoken));
-  const ready = Object.keys(spoken).length > 0;
+  // Adding a language moves the keyboard to its level, the next thing to say;
+  // taking one off returns it to the selector, so focus is never lost.
+  const focusNext = useRef<string | null>(null);
+  const firstLevel = useRef(new Map<string, HTMLInputElement>());
+  const addSelect = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    const target = focusNext.current;
+    if (!target) return;
+    focusNext.current = null;
+    if (target === "add") addSelect.current?.focus();
+    else firstLevel.current.get(target)?.focus();
+  });
 
-  const choose = (code: string, level: LanguageLevel) => {
-    setSpoken((current) => {
-      const next = { ...current };
-      // Tapping the chosen level again takes the language off.
-      if (next[code] === level) delete next[code];
-      else next[code] = level;
-      return next;
-    });
-    if (code === learn) setLearn(null);
+  const chosen = new Set(spoken.map((language) => language.code));
+  const count = spoken.length + (learn ? 1 : 0);
+  const full = count >= MOST_LANGUAGES;
+  const addable = byOwnName(MAINTAINABLE.filter((code) => !chosen.has(code)));
+  // The course languages, less any the person already speaks. A language kept
+  // on the profile from before stays choosable, so saving never drops it.
+  const learnable = [
+    ...LEARNABLE,
+    ...(learn && !LEARNABLE.includes(learn) ? [learn] : []),
+  ].filter((code) => !chosen.has(code));
+  const spokenCourses = LEARNABLE.filter((code) => chosen.has(code));
+
+  const unrated = spoken.filter((language) => language.level === null);
+  const ready = spoken.length > 0 && unrated.length === 0;
+
+  const add = () => {
+    if (!adding || full) return;
+    setSpoken((current) => [...current, { code: adding, level: null }]);
+    focusNext.current = adding;
+    setAdding("");
   };
+
+  const remove = (code: string) => {
+    setSpoken((current) =>
+      current.filter((language) => language.code !== code),
+    );
+    focusNext.current = "add";
+  };
+
+  const rate = (code: string, level: LanguageLevel) =>
+    setSpoken((current) =>
+      current.map((language) =>
+        language.code === code ? { ...language, level } : language,
+      ),
+    );
 
   const submit = async () => {
     setSaving(true);
@@ -102,12 +178,18 @@ export function LanguageForm({
     try {
       await onSubmit({
         languages: [
-          ...Object.entries(spoken).map(([code, level]) => ({
-            code,
-            kind: "maintain" as const,
-            level,
-          })),
-          ...(learn && !(learn in spoken)
+          ...spoken.flatMap((language) =>
+            language.level
+              ? [
+                  {
+                    code: language.code,
+                    kind: "maintain" as const,
+                    level: language.level,
+                  },
+                ]
+              : [],
+          ),
+          ...(learn
             ? [{ code: learn, kind: "learn" as const, level: "a0" as const }]
             : []),
         ],
@@ -125,108 +207,261 @@ export function LanguageForm({
 
   return (
     <>
-      <Section title="The languages you speak">
-        <Card padding={0}>
-          {offered.map((code, index) => (
+      <Part
+        icon="repeat"
+        mode="Maintain"
+        title="Languages you already speak"
+        lead="Keep up the words and expressions you actually use, in every language you speak. Say how well you speak each one now; Maintain starts at B1."
+      >
+        {spoken.length > 0 ? (
+          <Card padding={0}>
+            <ul
+              aria-label="Languages you speak"
+              style={{ listStyle: "none", margin: 0, padding: 0 }}
+            >
+              {spoken.map((language, index) => {
+                const name = ownName(language.code);
+                const meaningId = `${levelIds}-${language.code}`;
+                const levels = SPOKEN_LEVELS.some(
+                  (level) => level.value === language.level,
+                )
+                  ? SPOKEN_LEVELS
+                  : // A level stored before, outside the usual range, stays
+                    // on offer so the profile saves unchanged.
+                    [
+                      ...SPOKEN_LEVELS,
+                      ...(language.level
+                        ? [
+                            {
+                              value: language.level,
+                              label: language.level.toUpperCase(),
+                            },
+                          ]
+                        : []),
+                    ];
+                return (
+                  <li
+                    key={language.code}
+                    style={{
+                      display: "grid",
+                      gap: 6,
+                      padding: "10px 8px 12px 16px",
+                      borderBottom:
+                        index < spoken.length - 1
+                          ? "1px solid var(--border-1)"
+                          : 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) auto",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span style={{ minWidth: 0 }}>
+                        <span
+                          lang={language.code}
+                          style={{
+                            font: "var(--type-headword)",
+                            fontSize: "1.125rem",
+                          }}
+                        >
+                          {name}
+                        </span>
+                        {englishName(language.code) !== name && (
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              font: "var(--type-caption)",
+                              color: "var(--fg-3)",
+                            }}
+                          >
+                            {englishName(language.code)}
+                          </span>
+                        )}
+                      </span>
+                      <IconButton
+                        name="x"
+                        label={`Remove ${name}`}
+                        onClick={() => remove(language.code)}
+                      />
+                    </div>
+                    <ChoiceGroup
+                      label={`How well you speak ${name}`}
+                      options={levels}
+                      value={language.level}
+                      onChange={(level) => rate(language.code, level)}
+                      describedBy={meaningId}
+                      firstRef={(node) => {
+                        if (node) firstLevel.current.set(language.code, node);
+                        else firstLevel.current.delete(language.code);
+                      }}
+                    />
+                    <p
+                      id={meaningId}
+                      style={{
+                        margin: 0,
+                        font: "var(--type-caption)",
+                        color:
+                          language.level === null
+                            ? "var(--accent-soft-fg)"
+                            : "var(--fg-2)",
+                      }}
+                    >
+                      {language.level === null
+                        ? "Choose the level you have now."
+                        : LEVEL_MEANING[language.level]}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        ) : (
+          <Card tone="sunken" padding={16}>
+            <p
+              style={{
+                margin: 0,
+                font: "var(--type-body)",
+                color: "var(--fg-2)",
+              }}
+            >
+              No languages yet. Add each one you already speak, starting with
+              your own.
+            </p>
+          </Card>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            alignItems: "end",
+            gap: 8,
+          }}
+        >
+          <Select
+            ref={addSelect}
+            label="Add a language you speak"
+            value={adding}
+            disabled={full}
+            onChange={setAdding}
+          >
+            <option value="">Choose a language</option>
+            {addable.map((code) =>
+              // The language being learned cannot be kept up as well: it is
+              // shown, so its absence is not a mystery, but not offered.
+              code === learn ? (
+                <option key={code} value={code} disabled>
+                  {`${listName(code)} — you are learning it`}
+                </option>
+              ) : (
+                <option key={code} value={code}>
+                  {listName(code)}
+                </option>
+              ),
+            )}
+          </Select>
+          <Button
+            variant="secondary"
+            icon="plus"
+            disabled={!adding || full}
+            onClick={add}
+          >
+            Add
+          </Button>
+        </div>
+        {full && (
+          <Note>
+            A profile holds up to {MOST_LANGUAGES} languages. Remove one to add
+            another.
+          </Note>
+        )}
+      </Part>
+
+      <Part
+        icon="graduation-cap"
+        mode="Learn"
+        title="A new language, from zero"
+        lead="Start at the alphabet, with nothing assumed. Short units each end in something you can say, and what you learn joins your Lexicon."
+      >
+        <Select
+          label="Language to learn"
+          value={learn ?? ""}
+          onChange={(code) => setLearn(code || null)}
+          hint={
+            learnable.length === 0
+              ? `You already speak ${joined(spokenCourses.map(ownName))}, and there is no other course yet.`
+              : learnable.length === 1 && learnable[0]
+                ? `One course so far: ${ownName(learnable[0])}, from the alphabet to the first half of A1.`
+                : undefined
+          }
+        >
+          <option value="">Not now</option>
+          {learnable.map((code) => (
+            <option key={code} value={code}>
+              {listName(code)}
+            </option>
+          ))}
+        </Select>
+        {learn ? (
+          <Card tone="soft" padding={14}>
+            <p style={{ margin: 0, font: "var(--type-body)" }}>
+              <span lang={learn} style={{ font: "var(--type-label)" }}>
+                {ownName(learn)}
+              </span>{" "}
+              starts at A0. The Learn tabs open on its course, with practice,
+              the alphabet and a reference beside it.
+            </p>
+          </Card>
+        ) : (
+          <Note>
+            Leave it at “Not now” to keep up only the languages you speak. You
+            can start the course later, in Settings.
+          </Note>
+        )}
+      </Part>
+
+      {askPreferences && (
+        <Section title="Preferences">
+          <Card padding={0}>
             <div
-              key={code}
-              role="group"
-              aria-label={`${ownName(code)}: how well you speak it`}
               style={{
                 display: "grid",
                 gap: 8,
                 padding: "12px 16px",
-                borderBottom:
-                  index < offered.length - 1 ? "1px solid var(--border-1)" : 0,
+                borderBottom: "1px solid var(--border-1)",
               }}
             >
-              <span
-                lang={code}
-                style={{
-                  font: "var(--type-headword)",
-                  fontSize: "1.0625rem",
-                }}
-              >
-                {ownName(code)}
-              </span>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {SPOKEN_LEVELS.map((level) => (
-                  <Chip
-                    key={level.value}
-                    size="sm"
-                    selected={spoken[code] === level.value}
-                    onClick={() => choose(code, level.value)}
-                  >
-                    {level.label}
-                  </Chip>
-                ))}
-              </div>
+              <span style={{ font: "var(--type-body)" }}>Explanations in</span>
+              <SegmentedControl
+                label="Explanations in"
+                options={EXPLANATIONS}
+                value={preferences.explanationsIn}
+                onChange={(explanationsIn) =>
+                  setPreferences((current) => ({ ...current, explanationsIn }))
+                }
+              />
             </div>
-          ))}
-        </Card>
-        <Note>
-          Pick a level for each language you already speak. Tap it again to take
-          the language off.
-        </Note>
-      </Section>
-
-      {learnable.length > 0 && (
-        <Section title="Learn from zero">
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {learnable.map((code) => (
-              <Chip
-                key={code}
-                lang={code}
-                selected={learn === code}
-                onClick={() => setLearn(learn === code ? null : code)}
-              >
-                {ownName(code)}
-              </Chip>
-            ))}
-          </div>
-          <Note>
-            The course starts at the alphabet. Leave it off to only keep your
-            own words.
-          </Note>
+            <div style={{ ...row, borderBottom: 0 }}>
+              <span id={suggestId}>Suggest translations</span>
+              <Switch
+                checked={preferences.suggestTranslations}
+                labelledBy={suggestId}
+                label="Suggest translations"
+                onChange={(suggestTranslations) =>
+                  setPreferences((current) => ({
+                    ...current,
+                    suggestTranslations,
+                  }))
+                }
+              />
+            </div>
+          </Card>
         </Section>
       )}
-
-      <Section title="Preferences">
-        <Card padding={0}>
-          <div
-            style={{
-              display: "grid",
-              gap: 8,
-              padding: "12px 16px",
-              borderBottom: "1px solid var(--border-1)",
-            }}
-          >
-            <span style={{ font: "var(--type-body)" }}>Explanations in</span>
-            <SegmentedControl
-              label="Explanations in"
-              options={EXPLANATIONS}
-              value={preferences.explanationsIn}
-              onChange={(explanationsIn) =>
-                setPreferences((current) => ({ ...current, explanationsIn }))
-              }
-            />
-          </div>
-          <div style={{ ...row, borderBottom: 0 }}>
-            <span id={suggestId}>Suggest translations</span>
-            <Switch
-              checked={preferences.suggestTranslations}
-              labelledBy={suggestId}
-              label="Suggest translations"
-              onChange={(suggestTranslations) =>
-                setPreferences((current) => ({
-                  ...current,
-                  suggestTranslations,
-                }))
-              }
-            />
-          </div>
-        </Card>
-      </Section>
 
       {error && (
         <p
@@ -253,8 +488,105 @@ export function LanguageForm({
       >
         {submitLabel}
       </Button>
-      {!ready && <Note>Choose at least one language you speak.</Note>}
+      {!ready && (
+        <Note>
+          {spoken.length === 0
+            ? "Add at least one language you speak."
+            : `Choose how well you speak ${joined(
+                unrated.map((language) => ownName(language.code)),
+              )}.`}
+        </Note>
+      )}
     </>
+  );
+}
+
+/**
+ * One of the two kinds of language: its mode, what it does, then its choices.
+ * The heading names the kind, so a screen reader's heading list reads the
+ * form's shape.
+ */
+function Part({
+  icon,
+  mode,
+  title,
+  lead,
+  children,
+}: {
+  icon: IconName;
+  mode: string;
+  title: string;
+  lead: string;
+  children: ReactNode;
+}) {
+  const headingId = useId();
+  return (
+    <section
+      aria-labelledby={headingId}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr)",
+        gap: 12,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "40px minmax(0, 1fr)",
+          gap: 12,
+          alignItems: "start",
+          padding: "0 4px",
+        }}
+      >
+        <span
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "var(--radius-md)",
+            background: "var(--accent-soft)",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <Icon name={icon} size={20} color="var(--accent-soft-fg)" />
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <p
+            style={{
+              margin: 0,
+              font: "var(--type-overline)",
+              letterSpacing: "var(--tracking-wide)",
+              textTransform: "uppercase",
+              color: "var(--accent-soft-fg)",
+            }}
+          >
+            {mode}
+          </p>
+          <h2
+            id={headingId}
+            style={{
+              margin: "2px 0 4px",
+              font: "var(--type-title)",
+              fontSize: "1.25rem",
+            }}
+          >
+            {title}
+          </h2>
+          <p
+            style={{
+              margin: 0,
+              font: "var(--type-body)",
+              fontSize: ".9375rem",
+              color: "var(--fg-2)",
+            }}
+          >
+            {lead}
+          </p>
+        </div>
+      </div>
+      {children}
+    </section>
   );
 }
 

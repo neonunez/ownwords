@@ -275,8 +275,10 @@ filename order and rejects duplicate numeric IDs even with different filenames.
 `npm run test:stack --workspace @ownwords/web` drives the production build of the app in Chromium against the real
 API under `wrangler dev` and a fresh local D1 (`apps/web/stack/serve.mjs`), with synthetic sessions and no
 credentials. Its journeys: the sign-in gate; a wrong and a real invitation; the Google redirect carrying this
-origin's callback, answered by a stand-in so nothing reaches Google; the first run; adding a passkey after sign-in
-and signing in with it alone, on a Chromium virtual authenticator against the real passkey endpoints; capturing an
+origin's callback, answered by a stand-in so nothing reaches Google; the one-screen first run, languages picked from
+the selector with a level each and the course chosen apart, including at a 320px phone width from the keyboard;
+changing languages and a preference in Settings and reading them back after a reload, then the side panel's up-next
+step into the course; adding a passkey from Settings after sign-in and signing in with it alone, on a Chromium virtual authenticator against the real passkey endpoints; capturing an
 entry whose suggestions fail because the provider is off, typing equivalents by hand, search without stress marks,
 flashcard practice and the retention it records; finishing a Russian Foundations lesson, carrying on from the step reached,
 the Lexicon import and Learn practice; the absence of every audio affordance and listening claim in that published

@@ -8,6 +8,8 @@ const screens = [
   "/learn/course",
   "/learn/alphabet",
   "/learn/reference",
+  "/maintain/settings",
+  "/maintain/languages",
 ];
 
 test.describe("how the app sits on a screen", () => {
@@ -61,6 +63,8 @@ test.describe("how the app sits on a screen", () => {
       "/maintain/lexicon",
       "/maintain/practice",
       "/learn/course",
+      "/maintain/settings",
+      "/maintain/languages",
     ]) {
       await page.goto(path);
       // The screen is drawn, not merely loading, before it is measured.
@@ -69,7 +73,7 @@ test.describe("how the app sits on a screen", () => {
       const small = await page.evaluate(() => {
         const nodes = Array.from(
           document.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), a[href], [role="switch"]',
+            'button:not([disabled]), a[href], [role="switch"], input:not([disabled]), select:not([disabled])',
           ),
         );
         return nodes

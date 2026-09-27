@@ -60,10 +60,11 @@ only from here.
 
 `npm run test:e2e` runs against Chromium in two shapes, a phone and a desktop
 window. `npm run test:stack` runs the phone shape against `stack/serve.mjs`:
-signing in with seeded sessions, the first run, invitations, the Google
-redirect (answered by a stand-in, never Google), passkeys on a virtual
-authenticator, the Lexicon, practice, progress, a lesson through to its
-Lexicon sync, account isolation, export, sign-out and a cut network. Both use
+signing in with seeded sessions, the first run (also at a 320px width, from
+the keyboard), invitations, the Google redirect (answered by a stand-in, never
+Google), passkeys on a virtual authenticator, Settings read back after a
+reload, the Lexicon, practice, progress, a lesson through to its Lexicon sync,
+account isolation, export, sign-out and a cut network. Both use
 the browser Playwright has already installed; if it is missing,
 `npx playwright install chromium` fetches it.
 
@@ -110,10 +111,13 @@ of `styles/tokens/colors.css`.
 Connected to the API, end to end:
 
 - **Account** — sign-in with a passkey, or with Google for the first time
-  (access by invitation, redeemed on the sign-in screen); the first run
-  (languages and their levels, then three preferences); changing languages and
-  preferences later; adding a passkey on this device; exporting the account as
-  a file; signing out.
+  (access by invitation, redeemed on the sign-in screen); the first run, on one
+  screen, which asks apart for the languages already spoken (each picked from
+  a selector and given its level) and a language to learn from zero (from the
+  one course there is), then two preferences; Settings, a page of its own
+  reached from the side panel, for changing languages and preferences,
+  appearance, adding a passkey on this device, exporting the account as a file
+  and signing out.
 - **Maintain** — Progress (retention per language and direction, whether
   practice is due, and when it comes next, with no card counts), Lexicon
   (search, filters by language, stage, "unverified" and words vs expressions,
@@ -128,7 +132,8 @@ Connected to the API, end to end:
   no playback control, carrying on from the step reached, finishing into the
   Lexicon), Learn practice on what the course taught, Alphabet and Reference
   as the course publishes them.
-- **Everywhere** — the side panel, light and dark, the installable manifest
+- **Everywhere** — the side panel (the mode, what is up next in either mode,
+  the languages, and the way to Settings), light and dark, the installable manifest
   and icons, an offline shell, and a written failure with "Try again" on every
   screen when the backend cannot be reached.
 
@@ -155,7 +160,7 @@ pretending:
 The product's rules, and how they are kept:
 
 - **44px minimum on every control**, verified by a browser test that measures
-  every visible button, link and switch on three screens.
+  every visible button, link, switch, input and select on five screens.
 - **State is written in words, never colour alone.** `StateLabel` renders
   "false friend", "waiting", "typed by hand"; `MasteryMeter` puts "recognise
   74%, produce not practised yet" in its accessible name.
@@ -175,8 +180,9 @@ The product's rules, and how they are kept:
   with Latin accents; answer checking forgives it but nothing else, because й
   is a letter and not an accented и. Nobody is ever asked to type it.
 
-`npm run test:e2e` runs axe over nine screens plus the side panel, in light
-and dark, and expects no violations.
+`npm run test:e2e` runs axe over eleven screens plus the side panel, in light
+and dark, and expects no violations; `npm run test:stack` does the same for
+the sign-in screen and the first run, empty and filled in.
 
 ## Installing, and the offline shell
 
@@ -224,6 +230,8 @@ Changed on the way in, deliberately:
 | Sheets and the side panel inside the scrolling screen | Raised to the app frame, `inert` while closed | Focus and screen readers must not reach a closed overlay |
 | Press states via inline mouse handlers | CSS classes on `:active` | Touch, keyboard and reduced motion all behave |
 | Kip with three expressions | A fourth, `reading`, above a screen's words once its first read passes 300ms | A still line of text looked stalled; a quick read shows nothing rather than flashing |
+| Settings, export and account actions in the side panel | Settings on a page of its own, one row from the panel; the panel keeps the mode and the languages, and gains **Up next**: the course step to carry on from and Maintain practice when it is due, each one tap away | The panel is for moving around. It is the one place allowed to cross modes, so it is the one place that can say what is waiting on both sides and go straight there |
+| A fixed list of languages, each with level chips | A language selector with a level for each language chosen, and a selector for the course; `Select` and `ChoiceGroup` join the component set | A fixed list read as the only languages supported. The selector offers the Latin- and Cyrillic-script languages the app's typeface draws; the course selector offers Russian alone, the one course there is |
 | `--neutral-500`, `--green-500`, `--amber-500` | Three stops darker in light mode | Small text on its own tint was between 3.2:1 and 4.4:1 |
 
 Not imported: the generated review artefacts that ship alongside the package
@@ -259,6 +267,6 @@ it:
 Everything on screen comes from the Ownwords API through `src/api/http/`.
 `src/api/demo/fixtures.ts` holds the sample collection the design package's
 UI kit used; it is loaded only by the unit tests and by a demo build
-(`npm run dev:demo`, `npm run build:demo`), which says in the side panel that
-it keeps nothing. The demo translator returns canned equivalents after a
+(`npm run dev:demo`, `npm run build:demo`), which says in the side panel and
+in Settings that it keeps nothing. The demo translator returns canned equivalents after a
 short, visible wait, so the waiting state can be seen without a provider.

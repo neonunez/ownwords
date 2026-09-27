@@ -59,6 +59,9 @@ describe("the tab bars", () => {
     expect(activeTabKey("/maintain/lexicon/e1")).toBe("lexicon");
     expect(activeTabKey("/maintain/add")).toBe("lexicon");
     expect(activeTabKey("/learn/course/u3")).toBe("course");
+    // Settings is reached from the side panel, so no tab owns it.
+    expect(activeTabKey("/maintain/settings")).toBe("");
+    expect(activeTabKey("/learn/languages")).toBe("");
     expect(modeFromPath("/learn/alphabet")).toBe("learn");
   });
 });
@@ -98,7 +101,7 @@ describe("navigating", () => {
 });
 
 describe("the side panel", () => {
-  it("holds mode, languages and preferences, and closes on Escape", async () => {
+  it("holds mode, what is up next and the languages, and closes on Escape", async () => {
     renderApp();
     await userEvent.click(
       await screen.findByRole("button", { name: "Open the side panel" }),
@@ -107,16 +110,73 @@ describe("the side panel", () => {
     expect(
       within(panel).getByRole("button", { name: /Maintain/ }),
     ).toHaveAttribute("aria-current", "true");
-    expect(within(panel).getByText("Русский")).toBeInTheDocument();
+    expect(
+      within(
+        within(panel).getByRole("list", { name: "Your languages" }),
+      ).getByText("Русский"),
+    ).toBeInTheDocument();
+    expect(
+      await within(panel).findByRole("button", { name: /Carry on · Unit 3/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: /Practice is due/ }),
+    ).toBeInTheDocument();
     // The course ships no recordings, so there is no audio preference to set.
     expect(within(panel).queryByText(/audio/i)).not.toBeInTheDocument();
-    expect(
-      within(panel).getByRole("switch", { name: "Suggest translations" }),
-    ).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
+  });
+
+  it("leaves settings and account actions to the Settings page", async () => {
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Open the side panel" }),
+    );
+    const panel = await screen.findByRole("dialog", { name: "Ownwórds" });
+    for (const name of [
+      "Change languages",
+      "Export my data",
+      "Add a passkey on this device",
+      "Sign out",
+    ]) {
+      expect(
+        within(panel).queryByRole("button", { name }),
+      ).not.toBeInTheDocument();
+    }
+    expect(within(panel).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("radiogroup")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(panel).getByRole("button", { name: /Settings/ }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Settings", level: 1 }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Maintain" }),
+    ).toBeInTheDocument();
+  });
+
+  it("goes straight to the next course step, across modes", async () => {
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Open the side panel" }),
+    );
+    const panel = await screen.findByRole("dialog", { name: "Ownwórds" });
+    await userEvent.click(
+      await within(panel).findByRole("button", { name: /Carry on · Unit 3/ }),
+    );
+    expect(
+      await screen.findByRole("navigation", { name: "Learn" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /Unit 3/ }),
+    ).toBeInTheDocument();
   });
 
   it("seals off the screen behind it while it is open", async () => {
@@ -134,30 +194,14 @@ describe("the side panel", () => {
       await screen.findByRole("button", { name: "Open the side panel" }),
     );
     const panel = await screen.findByRole("dialog", { name: "Ownwórds" });
-    await userEvent.click(within(panel).getByRole("button", { name: /Learn/ }));
+    await userEvent.click(
+      within(panel).getByRole("button", { name: /^Learn/ }),
+    );
     expect(
       await screen.findByRole("heading", { name: "Course", level: 1 }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("navigation", { name: "Learn" }),
     ).toBeInTheDocument();
-  });
-});
-
-describe("appearance", () => {
-  it("follows the system until a choice is made, then remembers it", async () => {
-    renderApp();
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Open the side panel" }),
-    );
-    const panel = await screen.findByRole("dialog", { name: "Ownwórds" });
-    await userEvent.click(within(panel).getByRole("radio", { name: "Dark" }));
-
-    await waitFor(() =>
-      expect(document.documentElement.getAttribute("data-theme")).toBe("dark"),
-    );
-    expect(localStorage.getItem("ownwords.appearance")).toBe("dark");
   });
 });

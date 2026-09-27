@@ -40,8 +40,11 @@ language eventually joins maintenance.
 
 ## Navigation
 
-Mode, languages, settings, reminders, export and account live in a **side panel** opened from the top-left of any
-main screen, which leaves the tab bar for what a person does daily.
+The **side panel**, opened from the top-left of any main screen, is for moving around: the mode, what is **up next** in
+either mode (the course step to carry on from, and Maintain practice when it is due, each one tap away), the configured
+languages, and a row to **Settings**. Settings is a page of its own for everything that is set rather than done:
+changing languages and levels, preferences, reminders, appearance, export, passkeys and signing out. That leaves the tab
+bar for what a person does daily.
 
 | | Tabs |
 |---|---|
@@ -86,8 +89,10 @@ because for months it is the page opened most.
 
 ## First run asks only what changes the content
 
-Sign-up collects the languages and their levels, then **two preferences**: the language of explanations, and whether
-translations are suggested when an entry is added. It does not ask for a daily time budget —
+Sign-up is one screen. It asks apart for the two kinds of language, and says what each is for: the languages already
+spoken, kept up in Maintain, each chosen from a list and given the level the person has now; and a language to learn
+from zero, chosen from the courses that exist, which today is Russian alone. Then come **two preferences**: the
+language of explanations, and whether translations are suggested when an entry is added. It does not ask for a daily time budget —
 a session is sized by what is due — and it does not ask for notification permission, which belongs after install.
 
 ## Audio

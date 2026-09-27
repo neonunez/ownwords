@@ -20,7 +20,7 @@ screens ──► useClient() ──► OwnwordsClient ──┬─► createHtt
   again. It never falls back to sample data.
 - **A demo build** (`npm run dev:demo`, `npm run build:demo`, Vite's `demo`
   mode) loads `createDemoClient()` from `src/api/demo/`, which answers from
-  in-memory fixtures and keeps nothing. The side panel says so. The production
+  in-memory fixtures and keeps nothing. The side panel and Settings say so. The production
   bundle does not contain the demo code or its fixtures; the demo build goes to
   its own `demo-dist/`.
 - **Tests** pass a client of their own.

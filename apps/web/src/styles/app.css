@@ -200,6 +200,20 @@ body {
   box-shadow: var(--ring);
 }
 
+/* A choice pill's radio input is transparent over the pill, so the pill
+   carries the ring; a select draws its own field and takes the focus border. */
+.ow-choice input:focus-visible + span {
+  box-shadow: var(--ring);
+}
+
+.ow-select {
+  border: 1px solid var(--border-1);
+}
+
+.ow-select:focus-visible {
+  border-color: var(--border-focus);
+}
+
 /* ---- reduced motion ----------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {

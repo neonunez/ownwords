@@ -159,7 +159,7 @@ export function SignInScreen({
           </Button>
           <Note>
             A passkey signs in on a device that already has one. The first time,
-            continue with Google, then add a passkey from the side panel.
+            continue with Google, then add a passkey in Settings.
           </Note>
         </div>
 

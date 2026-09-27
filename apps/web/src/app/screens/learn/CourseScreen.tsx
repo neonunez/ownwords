@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Card, Icon, TopBar } from "../../../design-system";
+import { Button, Card, Icon, TopBar } from "../../../design-system";
 import type { IconName } from "../../../design-system";
 import { Screen, Section } from "../../layout";
 import { Empty, Failed, Loading } from "../ScreenState";
@@ -83,10 +83,20 @@ export function CourseScreen() {
           <Empty
             message={
               learning === false
-                ? "You are not learning a language yet. Choose one under Change languages, in the side panel."
+                ? "You are not learning a language yet. Choose one to learn from zero in Settings, under Languages."
                 : "The course is not published yet. It appears here as soon as it is."
             }
-          />
+          >
+            {learning === false && (
+              <Button
+                variant="secondary"
+                icon="graduation-cap"
+                onClick={() => navigate("/learn/languages")}
+              >
+                Choose a language to learn
+              </Button>
+            )}
+          </Empty>
         </Screen>
       </>
     );

@@ -11,6 +11,8 @@ const screens: [name: string, path: string][] = [
   ["Lesson", "/learn/course/u3"],
   ["Alphabet", "/learn/alphabet"],
   ["Reference", "/learn/reference"],
+  ["Settings", "/maintain/settings"],
+  ["Languages", "/learn/languages"],
 ];
 
 test.describe("accessibility basics", () => {

@@ -11,11 +11,13 @@ import { AlphabetScreen } from "./screens/learn/AlphabetScreen";
 import { ReferenceScreen } from "./screens/learn/ReferenceScreen";
 import { ReferenceTopicScreen } from "./screens/learn/ReferenceTopicScreen";
 import { LanguagesScreen } from "./screens/LanguagesScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 
 /**
  * Every screen sits under the shell, so a pushed screen keeps the tab bar and
  * no screen is ever a dead end. Tabs never cross modes: the two branches share
- * nothing but the shell.
+ * nothing but the shell and Settings, which each branch mounts under its own
+ * address so the tab bar stays the one the person came from.
  */
 export const routeTree = [
   {
@@ -32,6 +34,7 @@ export const routeTree = [
       { path: "maintain/lexicon", element: <LexiconScreen /> },
       { path: "maintain/lexicon/:entryId", element: <EntryScreen /> },
       { path: "maintain/add", element: <AddEntryScreen /> },
+      { path: "maintain/settings", element: <SettingsScreen /> },
       { path: "maintain/languages", element: <LanguagesScreen /> },
       {
         path: "maintain/practice",
@@ -74,6 +77,7 @@ export const routeTree = [
       { path: "learn/alphabet", element: <AlphabetScreen /> },
       { path: "learn/reference", element: <ReferenceScreen /> },
       { path: "learn/reference/:topicId", element: <ReferenceTopicScreen /> },
+      { path: "learn/settings", element: <SettingsScreen /> },
       { path: "learn/languages", element: <LanguagesScreen /> },
 
       { path: "*", element: <Navigate to="/maintain/progress" replace /> },

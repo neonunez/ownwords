@@ -6,7 +6,10 @@ import { useToast } from "../shell/ToastProvider";
 import { useSession } from "../session/SessionGate";
 import { LanguageForm } from "../session/LanguageForm";
 
-/** Changes the languages and preferences the first run set. */
+/**
+ * Changes the languages the first run set, from Settings. The preferences sit
+ * on Settings itself, so this form carries them through unchanged.
+ */
 export function LanguagesScreen() {
   const client = useClient();
   const session = useSession();
@@ -21,6 +24,7 @@ export function LanguagesScreen() {
         <LanguageForm
           {...(session ? { initial: session.onboarding } : {})}
           submitLabel="Save languages"
+          askPreferences={false}
           onSubmit={async (next) => {
             await client.saveOnboarding(next);
             session?.refresh();

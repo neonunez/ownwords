@@ -27,6 +27,10 @@ test("adds a passkey after sign-in, then signs in with it alone", async ({
   await page.goto("/maintain/progress");
   await page.getByRole("button", { name: "Open the side panel" }).click();
   await page
+    .getByRole("dialog", { name: "Ownwórds" })
+    .getByRole("button", { name: /Settings/ })
+    .click();
+  await page
     .getByRole("button", { name: "Add a passkey on this device" })
     .click();
   await expect(
@@ -39,9 +43,10 @@ test("adds a passkey after sign-in, then signs in with it alone", async ({
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+  // Signing out leaves Settings for the mode's home, where the next sign-in opens.
   await expect(
     page.getByRole("heading", { level: 1, name: "Progress" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Open the side panel" }).click();
+  await page.goto("/maintain/settings");
   await expect(page.getByText("keyholder@example.com")).toBeVisible();
 });
