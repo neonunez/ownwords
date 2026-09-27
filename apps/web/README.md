@@ -238,7 +238,11 @@ it:
 
 - Safe-area insets, through `viewport-fit=cover` and `env(safe-area-inset-*)`.
 - Standalone and fullscreen display when installed, handled by
-  `display-mode` media queries.
+  `display-mode` media queries. Installed, the frame is sized by the large
+  viewport (`100lvh`), not the dynamic one: iOS 26 Home Screen launches
+  report `100dvh` short by the status bar until the first scroll, which
+  lifted the tab bar off the bottom edge. A browser tab keeps `100dvh`, so the
+  bar still clears the browser's toolbar.
 - The phone's back gesture, which works because every screen is a history
   entry.
 - `prefers-reduced-motion` and `prefers-color-scheme`.
