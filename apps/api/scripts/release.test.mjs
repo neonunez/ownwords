@@ -705,44 +705,102 @@ test("every value the release needs is checked before anything is mutated", asyn
   }
 });
 
+/**
+ * Every secret the document reads, wherever it reads it. A secret may appear
+ * only as the whole value of a step's env entry, and only one of the two tokens
+ * the release deploys and publishes with; anything else is returned as a
+ * violation, with the path to it.
+ */
+function secretUse(document) {
+  const reads = [];
+  const violations = [];
+  const walk = (value, at) => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, [...at, index]));
+    } else if (value && typeof value === "object") {
+      for (const [key, item] of Object.entries(value)) walk(item, [...at, key]);
+    } else if (typeof value === "string" && /secrets\s*[.[]/.test(value)) {
+      const whole = /^\$\{\{ secrets\.(\w+) \}\}$/.exec(value);
+      const inStepEnv =
+        at.length === 6 &&
+        at[0] === "jobs" &&
+        at[2] === "steps" &&
+        at[4] === "env";
+      if (
+        whole &&
+        inStepEnv &&
+        ["CLOUDFLARE_API_TOKEN", "CONTENT_PUBLISH_TOKEN"].includes(whole[1])
+      ) {
+        reads.push({ secret: whole[1], step: at[3] });
+      } else {
+        violations.push(at.join("."));
+      }
+    }
+  };
+  walk(document, []);
+  return { reads, violations };
+}
+
 test("the publication token reaches only the check and the publication", () => {
-  const carrying = steps
-    .filter((candidate) => candidate.env?.CONTENT_PUBLISH_TOKEN !== undefined)
-    .map((candidate) => candidate.name);
+  const carrying = secretUse(workflow)
+    .reads.filter((read) => read.secret === "CONTENT_PUBLISH_TOKEN")
+    .map((read) => steps[read.step].name);
   assert.deepEqual(carrying, [PRESENCE, PUBLISH]);
-  for (const name of carrying) {
-    assert.equal(
-      step(name).env.CONTENT_PUBLISH_TOKEN,
-      "${{ secrets.CONTENT_PUBLISH_TOKEN }}",
-    );
-  }
-  assert.equal(workflow.env?.CONTENT_PUBLISH_TOKEN, undefined);
-  assert.equal(workflow.jobs.release.env?.CONTENT_PUBLISH_TOKEN, undefined);
 });
 
-test("a credential is never interpolated into a run line", () => {
-  for (const candidate of steps) {
-    if (candidate.run === undefined) continue;
-    assert.equal(
-      /\$\{\{[^}]*secrets\./.test(candidate.run),
-      false,
-      `a secret is inlined in a run line: ${candidate.name ?? candidate.run}`,
-    );
-  }
-  // Least privilege: the workflow reads nothing but the tokens it releases
-  // with, and only through a step's env.
-  const secretsRead = new Set();
-  for (const candidate of steps) {
-    for (const value of Object.values(candidate.env ?? {})) {
-      const reference = /^\$\{\{ secrets\.(\w+) \}\}$/.exec(value);
-      if (reference) secretsRead.add(reference[1]);
-    }
-  }
+test("a credential is read only as a step's env value, and only the two tokens", () => {
+  assert.deepEqual(secretUse(workflow).violations, []);
+  const secretsRead = new Set(
+    secretUse(workflow).reads.map((read) => read.secret),
+  );
   assert.deepEqual([...secretsRead].sort(), [
     "CLOUDFLARE_API_TOKEN",
     "CONTENT_PUBLISH_TOKEN",
   ]);
-  for (const value of Object.values(workflow.jobs.release.env)) {
-    assert.match(value, /^\$\{\{ vars\.\w+ \}\}$/, "job env holds no secret");
+
+  // The check itself refuses every other way a secret could reach a step.
+  const altered = (change) => {
+    const copy = structuredClone(workflow);
+    change(copy, copy.jobs.release.steps);
+    return secretUse(copy).violations;
+  };
+  const placeholder = "${{ secrets.PLACEHOLDER_NAME }}";
+  for (const [label, change] of [
+    [
+      "a secret in with:",
+      (_, s) => (s[0].with = { token: "${{ secrets.GITHUB_TOKEN }}" }),
+    ],
+    [
+      "surrounding text",
+      (_, s) => (s.at(-1).env.FOO = "x-${{ secrets.OTHER }}"),
+    ],
+    ["another secret in env", (_, s) => (s.at(-1).env.FOO = placeholder)],
+    ["a secret in run", (_, s) => (s.at(-1).run += ` ${placeholder}`)],
+    [
+      "a secret in if",
+      (_, s) => (s.at(-1).if = "secrets.CLOUDFLARE_API_TOKEN != ''"),
+    ],
+    [
+      "a secret in job env",
+      (w) => (w.jobs.release.env.T = "${{ secrets.CLOUDFLARE_API_TOKEN }}"),
+    ],
+    [
+      "a secret in workflow env",
+      (w) => (w.env = { T: "${{ secrets.CONTENT_PUBLISH_TOKEN }}" }),
+    ],
+    ["index syntax", (_, s) => (s.at(-1).env.FOO = "${{ secrets['OTHER'] }}")],
+  ]) {
+    assert.notDeepEqual(altered(change), [], `${label} must be refused`);
   }
+  // A token under another env name still counts as reaching that step.
+  const renamed = structuredClone(workflow);
+  renamed.jobs.release.steps[position("npm ci")].env = {
+    TOKEN: "${{ secrets.CONTENT_PUBLISH_TOKEN }}",
+  };
+  assert.equal(
+    secretUse(renamed).reads.filter(
+      (read) => read.secret === "CONTENT_PUBLISH_TOKEN",
+    ).length,
+    3,
+  );
 });
