@@ -257,7 +257,7 @@ test("an identifier ending in begin cannot merge the statements after it", () =>
 test("only a trigger that refuses writes applies on its own", () => {
   assert.equal(
     classifyStatement(
-      "CREATE TRIGGER t BEFORE UPDATE ON a WHEN OLD.x_begin <> NEW.x_begin BEGIN SELECT RAISE(ABORT, 'it''s immutable'); SELECT RAISE(IGNORE); END",
+      "CREATE TRIGGER t BEFORE UPDATE ON a WHEN OLD.x_begin <> NEW.x_begin BEGIN SELECT RAISE(ABORT, 'it''s immutable'); SELECT RAISE(FAIL, 'no'); END",
     ).safe,
     true,
   );
@@ -266,6 +266,8 @@ test("only a trigger that refuses writes applies on its own", () => {
     "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT RAISE(ABORT, 'x'); UPDATE users SET email = ''; END;",
     "CREATE TRIGGER t AFTER INSERT ON a BEGIN INSERT INTO log VALUES (1); END;",
     "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT 1; END;",
+    "CREATE TRIGGER t BEFORE INSERT ON progress BEGIN SELECT RAISE(IGNORE); END;",
+    "CREATE TRIGGER t BEFORE INSERT ON progress BEGIN SELECT RAISE(ABORT, 'x'); SELECT RAISE(IGNORE); END;",
     "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT RAISE(ABORT, 'x'); END; DROP TABLE users;",
     "CREATE TRIGGER t AFTER INSERT ON a BEGIN BEGIN SELECT RAISE(ABORT, 'x'); END; DROP TABLE users; END;",
   ]) {

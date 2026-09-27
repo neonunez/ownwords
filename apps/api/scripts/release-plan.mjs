@@ -146,7 +146,7 @@ const TRIGGER = /^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?TRIGGER\b/i;
 
 /** The only trigger body a release applies on its own: a guard that aborts a write. */
 const GUARD =
-  /^SELECT\s+RAISE\s*\(\s*(?:ABORT|FAIL|ROLLBACK|IGNORE)\s*(?:,\s*'(?:[^']|'')*'\s*)?\)$/i;
+  /^SELECT\s+RAISE\s*\(\s*(?:ABORT|FAIL|ROLLBACK)\s*,\s*'(?:[^']|'')*'\s*\)$/i;
 
 /**
  * A trigger is additive only when its body does nothing but refuse a write. A

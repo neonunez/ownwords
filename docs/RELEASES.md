@@ -159,16 +159,17 @@ earlier version stay on.
 
 An ordinary backward-compatible addition applies itself on merge, with no human step: `CREATE TABLE`, `CREATE INDEX`,
 `CREATE VIEW`, and `ALTER TABLE … ADD COLUMN` that is nullable or has a default. A `CREATE TRIGGER` is an addition
-**only** when its whole body is validation-only — one or more `SELECT RAISE(ABORT|FAIL|ROLLBACK|IGNORE, '…')` guards
-and nothing else. A trigger that deletes, updates or inserts is refused however it is written, because it rewrites data
-on every later write and a Worker rollback does not undo that. The gate reads the composed SQL statement by statement,
+**only** when its whole body is validation-only — one or more `SELECT RAISE(ABORT|FAIL|ROLLBACK, '…')` guards and
+nothing else. A trigger that deletes, updates or inserts is refused however it is written, because it rewrites data on
+every later write and a Worker rollback does not undo that. So is `RAISE(IGNORE)`: it does not refuse a write, it
+silently drops it while the statement still reports success. The gate reads the composed SQL statement by statement,
 so a guard trigger's body is part of its `CREATE TRIGGER` rather than a data change, and a comment, a string literal or
 an identifier cannot smuggle one past it.
 
 Anything that could destroy or reinterpret data the deployed code already serves stops the release and names the file
 and the statement — `DROP`, `DELETE`, `UPDATE`, `INSERT`, `REPLACE`, a trigger whose body does more than
-`SELECT RAISE(...)`, a rename, a dropped column, a `NOT NULL` column with no default, a new foreign key, `VACUUM`, or
-any statement it does not recognise. To authorize one, add it to
+`SELECT RAISE(ABORT|FAIL|ROLLBACK, '…')`, a rename, a dropped column, a `NOT NULL` column with no default, a new foreign
+key, `VACUUM`, or any statement it does not recognise. To authorize one, add it to
 `apps/api/release/database-authorizations.json` in the same reviewed pull request, naming the exact file, its exact
 `sha256`, who authorized it and why:
 
