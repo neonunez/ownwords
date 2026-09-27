@@ -18,6 +18,7 @@ function connectedClient(): OwnwordsClient {
     addPasskey: vi.fn(async () => {}),
     signOut: vi.fn(async () => {}),
     savePreferences: vi.fn(demo.savePreferences),
+    saveOnboarding: vi.fn(demo.saveOnboarding),
   };
 }
 
@@ -180,6 +181,49 @@ describe("Settings", () => {
     expect(
       screen.queryByRole("switch", { name: "Suggest translations" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps a preference changed in Settings when the languages are saved after it", async () => {
+    const client = connectedClient();
+    renderApp(client, ["/maintain/progress", "/maintain/settings"]);
+    const spanish = await screen.findByRole("radio", { name: "Español" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("switch", { name: "Suggest translations" }),
+      ).toBeEnabled(),
+    );
+    await userEvent.click(spanish);
+    await waitFor(() => expect(client.savePreferences).toHaveBeenCalled());
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Change languages" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Save languages" }),
+    );
+    // The languages form does not show the preferences, so it must not
+    // write back the ones it opened with.
+    await waitFor(() =>
+      expect(client.saveOnboarding).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preferences: expect.objectContaining({ explanationsIn: "es" }),
+        }),
+      ),
+    );
+  });
+
+  it("returns to Settings after saving languages opened directly", async () => {
+    const router = renderApp(connectedClient(), ["/learn/languages"]);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Save languages" }),
+    );
+    // With nothing beneath it in the app, going back would leave the app.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/learn/settings"),
+    );
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Settings" }),
+    ).toBeInTheDocument();
   });
 
   it("goes back to the screen beneath, or home when opened directly", async () => {
