@@ -10,7 +10,7 @@ import {
   TopBar,
 } from "../../../design-system";
 import type { StateKind } from "../../../design-system";
-import { Screen } from "../../layout";
+import { Reveal, Screen } from "../../layout";
 import { Empty, Failed, LoadingCard } from "../ScreenState";
 import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
@@ -164,86 +164,90 @@ export function LexiconScreen() {
 
         {page.loading && !page.data ? (
           <LoadingCard label="Reading your Lexicon." />
-        ) : page.error ? (
-          <Failed
-            message="Your Lexicon could not be read. Nothing was lost."
-            onRetry={page.reload}
-          />
-        ) : entries.length ? (
-          <>
-            <p
-              style={{
-                margin: 0,
-                padding: "0 4px",
-                font: "var(--type-caption)",
-                color: "var(--fg-3)",
-              }}
-            >
-              {total === undefined
-                ? `${entries.length}${nextCursor ? "+" : ""} ${entries.length === 1 && !nextCursor ? "entry" : "entries"}`
-                : entries.length === total
-                  ? `${total} ${total === 1 ? "entry" : "entries"}`
-                  : `${entries.length} of ${total} entries`}
-            </p>
-            <Card padding={0}>
-              {entries.map((entry, index) => (
-                <EntryRow
-                  key={entry.id}
-                  headword={entry.headword}
-                  lang={entry.language}
-                  note={entry.note}
-                  state={rowState(entry)}
-                  languages={Object.entries(entry.mastery).map(
-                    ([code, mastery]) => ({
-                      code,
-                      name: nameOf(code),
-                      recognise: mastery.recognise,
-                      produce: mastery.produce,
-                    }),
-                  )}
-                  onClick={() => navigate(`/maintain/lexicon/${entry.id}`)}
-                  last={index === entries.length - 1}
-                />
-              ))}
-            </Card>
-            {nextCursor && (
-              <Button
-                variant="secondary"
-                full
-                disabled={loadingMore}
-                onClick={loadMore}
-              >
-                {loadingMore ? "Reading more." : "Show more"}
-              </Button>
-            )}
-          </>
-        ) : search.trim() ? (
-          <Empty
-            message={`Nothing in your Lexicon matches “${search.trim()}”.`}
-          >
-            <Button
-              variant="secondary"
-              icon="plus"
-              onClick={() =>
-                navigate("/maintain/add", {
-                  state: { headword: search.trim() },
-                })
-              }
-            >
-              Add “{search.trim()}”
-            </Button>
-          </Empty>
-        ) : filter !== "all" ? (
-          <Empty message="Nothing in your Lexicon fits this filter yet.">
-            <Button variant="secondary" onClick={() => setFilter("all")}>
-              Show everything
-            </Button>
-          </Empty>
         ) : (
-          <EmptyLexicon
-            onAdded={page.reload}
-            onAdd={() => navigate("/maintain/add")}
-          />
+          <Reveal>
+            {page.error ? (
+              <Failed
+                message="Your Lexicon could not be read. Nothing was lost."
+                onRetry={page.reload}
+              />
+            ) : entries.length ? (
+              <>
+                <p
+                  style={{
+                    margin: 0,
+                    padding: "0 4px",
+                    font: "var(--type-caption)",
+                    color: "var(--fg-3)",
+                  }}
+                >
+                  {total === undefined
+                    ? `${entries.length}${nextCursor ? "+" : ""} ${entries.length === 1 && !nextCursor ? "entry" : "entries"}`
+                    : entries.length === total
+                      ? `${total} ${total === 1 ? "entry" : "entries"}`
+                      : `${entries.length} of ${total} entries`}
+                </p>
+                <Card padding={0}>
+                  {entries.map((entry, index) => (
+                    <EntryRow
+                      key={entry.id}
+                      headword={entry.headword}
+                      lang={entry.language}
+                      note={entry.note}
+                      state={rowState(entry)}
+                      languages={Object.entries(entry.mastery).map(
+                        ([code, mastery]) => ({
+                          code,
+                          name: nameOf(code),
+                          recognise: mastery.recognise,
+                          produce: mastery.produce,
+                        }),
+                      )}
+                      onClick={() => navigate(`/maintain/lexicon/${entry.id}`)}
+                      last={index === entries.length - 1}
+                    />
+                  ))}
+                </Card>
+                {nextCursor && (
+                  <Button
+                    variant="secondary"
+                    full
+                    disabled={loadingMore}
+                    onClick={loadMore}
+                  >
+                    {loadingMore ? "Reading more." : "Show more"}
+                  </Button>
+                )}
+              </>
+            ) : search.trim() ? (
+              <Empty
+                message={`Nothing in your Lexicon matches “${search.trim()}”.`}
+              >
+                <Button
+                  variant="secondary"
+                  icon="plus"
+                  onClick={() =>
+                    navigate("/maintain/add", {
+                      state: { headword: search.trim() },
+                    })
+                  }
+                >
+                  Add “{search.trim()}”
+                </Button>
+              </Empty>
+            ) : filter !== "all" ? (
+              <Empty message="Nothing in your Lexicon fits this filter yet.">
+                <Button variant="secondary" onClick={() => setFilter("all")}>
+                  Show everything
+                </Button>
+              </Empty>
+            ) : (
+              <EmptyLexicon
+                onAdded={page.reload}
+                onAdd={() => navigate("/maintain/add")}
+              />
+            )}
+          </Reveal>
         )}
       </Screen>
 

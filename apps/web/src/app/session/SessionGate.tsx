@@ -9,6 +9,7 @@ import {
 import { TopBar } from "../../design-system";
 import { useClient } from "../shell/ClientProvider";
 import { Failed, Loading } from "../screens/ScreenState";
+import { ScreenFrame } from "../layout";
 import { OnboardingScreen } from "./OnboardingScreen";
 import { SignInScreen } from "./SignInScreen";
 import type { Account, Onboarding } from "../../api/types";
@@ -34,7 +35,7 @@ function GateFrame({ children }: { children: ReactNode }) {
   return (
     <div className="ow-app">
       <main className="ow-main" id="ow-main">
-        <div className="ow-screen">{children}</div>
+        <ScreenFrame>{children}</ScreenFrame>
       </main>
     </div>
   );

@@ -1,4 +1,38 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { Loaders, LoadersContext, useRevealClass } from "./reveal";
+
+/**
+ * One screen's frame: it eases in when it opens, and keeps count of the
+ * loading cards inside it, so what replaces one can ease in too.
+ */
+export function ScreenFrame({ children }: { children: ReactNode }) {
+  const [loaders] = useState(() => new Loaders());
+  return (
+    <LoadersContext.Provider value={loaders}>
+      <div className="ow-screen">{children}</div>
+    </LoadersContext.Provider>
+  );
+}
+
+/**
+ * What a read inside a screen replaces its loading card with, when the screen
+ * itself stays (the Lexicon under its search). It eases in like a screen body.
+ */
+export function Reveal({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className={useRevealClass()}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "inherit",
+        minWidth: 0,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** The standard screen body: one column, screen gutter, sections stacked. */
 export function Screen({
@@ -8,8 +42,10 @@ export function Screen({
   children: ReactNode;
   style?: CSSProperties;
 }) {
+  const reveal = useRevealClass();
   return (
     <div
+      className={reveal}
       style={{
         display: "flex",
         flexDirection: "column",

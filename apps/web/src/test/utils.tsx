@@ -5,6 +5,7 @@ import { ClientProvider } from "../app/shell/ClientProvider";
 import { ThemeProvider } from "../app/shell/ThemeProvider";
 import { ToastProvider } from "../app/shell/ToastProvider";
 import { OverlayProvider } from "../app/shell/OverlayHost";
+import { ScreenFrame } from "../app/layout";
 import {
   createDemoClient,
   type DemoClientOptions,
@@ -52,7 +53,13 @@ export function renderScreen(
     <Providers client={client}>
       <MemoryRouter initialEntries={[route]}>
         <Routes>
-          <Route element={<Outlet context={{ openPanel: () => {} }} />}>
+          <Route
+            element={
+              <ScreenFrame>
+                <Outlet context={{ openPanel: () => {} }} />
+              </ScreenFrame>
+            }
+          >
             <Route path={path} element={ui} />
             <Route path="*" element={<p>Somewhere else</p>} />
           </Route>
