@@ -13,6 +13,7 @@ export declare const USERS: Record<
   | "keyholder"
   | "offline"
   | "exporter"
-  | "firstrun",
+  | "firstrun"
+  | "reader",
   string
 >;

@@ -37,6 +37,16 @@
   animation: ow-kip-look 2.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 
+/* Reading: the eyes run along a line, return, and drop to the next; the body
+   nods at each return. One cycle is one line. */
+.ow-kip-read {
+  animation: ow-kip-read 2.4s linear infinite;
+}
+
+.ow-kip-reading .ow-kip-body {
+  animation: ow-kip-nod 2.4s var(--ease-in-out) infinite;
+}
+
 .ow-kip-joy {
   transform-box: fill-box;
   transform-origin: center;
@@ -109,6 +119,33 @@
   42%,
   52% {
     transform: translate(-1.9px, -1.5px);
+  }
+}
+
+@keyframes ow-kip-read {
+  0% {
+    transform: translate(-2.4px, 0.8px);
+  }
+  62%,
+  72% {
+    transform: translate(2.4px, 0.8px);
+  }
+  84% {
+    transform: translate(-2.4px, 1.8px);
+  }
+  100% {
+    transform: translate(-2.4px, 0.8px);
+  }
+}
+
+@keyframes ow-kip-nod {
+  0%,
+  68%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  80% {
+    transform: translateY(1px) rotate(-3deg);
   }
 }
 

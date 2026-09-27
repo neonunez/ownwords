@@ -23,4 +23,5 @@ export const USERS = {
   offline: "offline@example.com",
   exporter: "exporter@example.com",
   firstrun: "firstrun@example.com",
+  reader: "reader@example.com",
 };
