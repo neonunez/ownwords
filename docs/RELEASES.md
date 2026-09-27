@@ -73,16 +73,35 @@ the route, add zone-scoped `Workers Routes: Write` for `neonunez.com` to the sam
 remedy for exactly that refusal. Do not remove the route from the generated config to make the error go away: that is
 the accidental detachment this path exists to prevent.
 
-**If the deploy stage fails, the migration stage has already run.** `migrate` precedes `deploy`, so a deploy-stage
-failure — a refused route, a Cloudflare error, a read-back that does not match — can leave the release's migrations
-applied. The schema is the additive one the release intended and the previous version of the Worker is still live, so
-nothing user-visible has changed and no data was rewritten. Re-running the release is safe and normal: `d1_migrations`
-is the record, so an already-applied migration is never applied twice, and the rest of the run proceeds from the same
-committed head. Roll back the Worker with `wrangler rollback` only if the failure was _after_ a successful upload; see
-"Rollback" below.
+**A failed run leaves an unknown state — inspect it, do not assume it.** `migrate` precedes `deploy`, and the deploy
+stage's last three steps happen _after_ the upload, so a failed run may have applied migrations, uploaded a new
+version, or both. Do not assume the previous version is still live, and do not assume nothing user-visible changed:
+even an additive migration can change behaviour, because a new trigger starts refusing writes a previous version
+allowed, and a new column or table can change what a write is allowed to be.
 
-If a value is missing, the workflow fails before it installs, migrates, deploys or publishes, and names the value
-that is absent. It never guesses, and it never deploys a partially configured release.
+Before deciding anything, read the state (all read-only):
+
+```sh
+npx wrangler deployments list --config apps/api/wrangler.production.jsonc   # is the new version live?
+npx wrangler d1 migrations list ownwords-production --remote --config apps/api/wrangler.production.jsonc
+curl -fsS -D - -o /dev/null https://ownwords.neonunez.com/health            # what the origin answers?
+```
+
+Then choose deliberately:
+
+- _The deploy was refused before any upload_ (a route or token refusal, a dry-run that printed `workers.dev`): only the
+  migrations have been applied, and they are the intended additive schema. Fix the cause and re-run the release;
+  `d1_migrations` is the record, so an already-applied migration is never applied twice.
+- _The upload succeeded and the read-back or a probe failed_: the new version may already be serving. Read the
+  deployment list and the probes, then either leave the new version live if it is serving correctly, or `wrangler
+rollback` it deliberately. Do not blind-retry: the second deploy would be a no-op upload at best, and re-running
+  `publish` is safe only because an already-published version is reported as done and never written twice.
+- _A migration itself failed midway_: the schema may be partially applied, which is the one state this design cannot
+  reason about. Stop, do not re-run the release, and recover with D1 Time Travel or an export (see "Rollback").
+
+All four values are required, and the workflow checks all four before it installs, migrates, deploys or publishes, so
+a release can never mutate the database with the publication authority missing. It names the value that is absent,
+never its value, and it never deploys a partially configured release.
 
 ## Course content releases
 

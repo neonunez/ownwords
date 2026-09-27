@@ -613,3 +613,99 @@ test("the read-back accepts the deployment's own answers and fails on anything e
     [200, 200, 200, 404],
   );
 });
+
+// The workflow itself, checked as text: what it needs, when it needs it, and
+// which step a credential is allowed to reach.
+
+const workflow = await readFile(
+  path.join(repositoryRoot, ".github", "workflows", "release.yml"),
+  "utf8",
+);
+
+/** The text of one `- name:` step, up to the next step. */
+function step(name) {
+  const start = workflow.indexOf(`- name: ${name}\n`);
+  assert.notEqual(start, -1, `the release workflow must have a "${name}" step`);
+  const next = workflow.indexOf("\n      - ", start + 1);
+  return workflow.slice(start, next === -1 ? undefined : next);
+}
+
+test("the release runs on a merge to main, after the checks and the app build", () => {
+  assert.match(workflow, /on:\s*\n\s*push:\s*\n\s*branches: \[main\]/);
+  assert.equal(
+    /\bpull_request\b/.test(workflow),
+    false,
+    "no pull request deploys",
+  );
+  assert.equal(/workflow_dispatch/.test(workflow), false, "no release button");
+  // One release at a time, and a new push waits rather than cancelling one.
+  assert.match(workflow, /concurrency:\s*\n\s*group: release-production/);
+  assert.match(workflow, /cancel-in-progress: false/);
+  // The workflow may not deploy with anything but the repository's own checks
+  // and build: the release steps come after both.
+  const check = workflow.indexOf("- run: npm run check");
+  const build = workflow.indexOf("- run: npm run build");
+  const migrate = workflow.indexOf("Apply the additive migrations");
+  const deploy = workflow.indexOf("Deploy the Worker and the app");
+  const publish = workflow.indexOf("Publish the authorized course versions");
+  assert.ok(check > 0 && build > check, "the checks run before the build");
+  for (const stage of [migrate, deploy, publish]) {
+    assert.ok(
+      stage > build,
+      "no release stage runs before the checks and build",
+    );
+  }
+  assert.ok(migrate < deploy && deploy < publish, "stages run in order");
+});
+
+test("every value the release needs is checked before anything is mutated", () => {
+  const presence = step("The release configuration is present");
+  for (const value of [
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "OWNWORDS_D1_DATABASE_ID",
+    "CONTENT_PUBLISH_TOKEN",
+  ]) {
+    assert.match(
+      presence,
+      new RegExp(`\\[ -n "\\$${value}" \\] \\|\\| missing=`),
+      `${value} must be checked before the release mutates anything`,
+    );
+  }
+  assert.match(presence, /exit 1/);
+  assert.ok(
+    workflow.indexOf("The release configuration is present") <
+      workflow.indexOf("Apply the additive migrations"),
+    "the presence check runs before the migrations",
+  );
+});
+
+test("the publication token reaches only the check and the publication", () => {
+  const steps = workflow.split("\n      - ").slice(1);
+  const carrying = steps
+    .filter((text) => /CONTENT_PUBLISH_TOKEN: \$\{\{ secrets\./.test(text))
+    .map((text) => /name: ([^\n]+)/.exec(text)?.[1] ?? "an unnamed step");
+  assert.deepEqual(carrying, [
+    "The release configuration is present",
+    "Publish the authorized course versions",
+  ]);
+  // The check reads the secret's presence without printing it.
+  const presence = step("The release configuration is present");
+  assert.equal(/echo[^"'\n]*\$\{?CONTENT_PUBLISH_TOKEN/.test(presence), false);
+});
+
+test("a credential is never interpolated into a run line", () => {
+  for (const line of workflow.split("\n")) {
+    if (!/^\s*run:/.test(line)) continue;
+    assert.equal(
+      /secrets\./.test(line),
+      false,
+      `a secret is inlined in a run line: ${line.trim()}`,
+    );
+  }
+  // Least privilege: the workflow reads nothing but the token it deploys with.
+  assert.equal(
+    /secrets\.(?!CLOUDFLARE_API_TOKEN|CONTENT_PUBLISH_TOKEN)/.test(workflow),
+    false,
+  );
+});

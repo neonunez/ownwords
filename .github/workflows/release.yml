@@ -37,20 +37,24 @@ jobs:
           cache: npm
 
       - name: The release configuration is present
-        # Fails before anything is checked out further, mutated or deployed, and
-        # names the value that is missing. docs/RELEASES.md has the one-time
-        # setup; no value is ever printed.
+        # Every value the four stages need, checked before anything installs,
+        # migrates, deploys or publishes: a release must not change the database
+        # or the Worker with the publication authority still missing. Names the
+        # value that is absent, never its value. docs/RELEASES.md has the
+        # one-time setup.
         run: |
           missing=""
           [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
           [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
           [ -n "$OWNWORDS_D1_DATABASE_ID" ] || missing="$missing OWNWORDS_D1_DATABASE_ID"
+          [ -n "$CONTENT_PUBLISH_TOKEN" ] || missing="$missing CONTENT_PUBLISH_TOKEN"
           if [ -n "$missing" ]; then
             echo "::error::missing release configuration:$missing. See docs/RELEASES.md."
             exit 1
           fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONTENT_PUBLISH_TOKEN: ${{ secrets.CONTENT_PUBLISH_TOKEN }}
 
       - run: npm ci
 
@@ -68,6 +72,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Apply the additive migrations
+        # No credential but the Cloudflare token: the publication token is needed
+        # by the publish stage alone.
         run: npm run release --workspace @ownwords/api -- migrate
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
