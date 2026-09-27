@@ -17,7 +17,10 @@ import {
   PRODUCTION_HOST,
   readProductionTemplate,
 } from "./production-hosting.mjs";
-import { readPublicationTarget } from "./remote-publication.mjs";
+import {
+  readPublicationTarget,
+  PRODUCTION_WORKER_NAME,
+} from "./remote-publication.mjs";
 
 /** The generated, gitignored production config a release deploys from. */
 export const RELEASE_CONFIG_PATH = `${apiDirectory}/wrangler.production.jsonc`;
@@ -56,10 +59,16 @@ export class ReleaseRefusal extends Error {
  * @param {Record<string, any>} template
  */
 export function assertReleaseTemplate(template) {
-  if (template.workers_dev !== false) {
+  if (template.name !== PRODUCTION_WORKER_NAME) {
+    throw new ReleaseRefusal(
+      "wrong_worker",
+      `the production template names Worker ${String(template.name)}; a release may only deploy ${PRODUCTION_WORKER_NAME}`,
+    );
+  }
+  if (template.workers_dev !== false || template.subdomain !== undefined) {
     throw new ReleaseRefusal(
       "workers_dev_enabled",
-      "the production template must set workers_dev: false; a release never publishes a workers.dev hostname",
+      "the production template must set workers_dev: false and name no subdomain; a release never publishes a workers.dev hostname",
     );
   }
   if (template.routes !== undefined || template.triggers !== undefined) {

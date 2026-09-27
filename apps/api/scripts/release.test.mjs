@@ -808,3 +808,119 @@ test("a credential is read only as a step's env value, and only the two tokens",
     3,
   );
 });
+
+// The release can only ever name one Worker and one hostname. These are
+// correctness guards, not a credential boundary: the token itself reaches the
+// whole account (docs/RELEASES.md), so what the code refuses to touch is proved
+// here rather than asserted.
+
+test("the release names one Worker, one binding and one hostname, and only those", () => {
+  const config = buildReleaseConfig({ template, databaseId: DATABASE_ID });
+  assert.equal(config.name, "ownwords-api");
+  assert.deepEqual(config.routes, [
+    { pattern: PRODUCTION_HOST, custom_domain: true },
+  ]);
+  assert.equal(config.d1_databases.length, 1);
+  assert.equal(config.d1_databases[0].database_name, "ownwords-production");
+  assert.equal(config.d1_databases[0].binding, "DB");
+
+  // Every hostname the configuration can publish is the approved one. A
+  // hostname reaches a request through the Custom Domain route or an identity
+  // var, so those are the two places that can name one.
+  const hosts = new Set();
+  const collect = (value) => {
+    if (typeof value === "string") {
+      for (const match of value.matchAll(/\b([a-z0-9*.-]+\.[a-z]{2,})\b/gi)) {
+        hosts.add(match[1].toLowerCase());
+      }
+    } else if (Array.isArray(value)) {
+      value.forEach(collect);
+    } else if (value && typeof value === "object") {
+      Object.values(value).forEach(collect);
+    }
+  };
+  collect({ routes: config.routes, vars: config.vars });
+  assert.deepEqual([...hosts].sort(), [PRODUCTION_HOST]);
+  // The only paths the config names are this repository's own.
+  assert.equal(config.main, "src/index.ts");
+  assert.equal(config.assets.directory, "../web/dist");
+  assert.equal(
+    config.d1_databases[0].migrations_dir,
+    "../../.wrangler/migrations",
+  );
+});
+
+test("a template that would touch another Worker, route or database is refused", () => {
+  for (const mutate of [
+    // Another Worker, or a name that is not the approved one at all.
+    (t) => ({ ...t, name: "someone-elses-worker" }),
+    (t) => ({ ...t, name: `${t.name}-preview` }),
+    // A second D1 binding, so a migration could name another database.
+    (t) => ({
+      ...t,
+      d1_databases: [
+        ...t.d1_databases,
+        { ...t.d1_databases[0], binding: "OTHER" },
+      ],
+    }),
+    // A second database by name.
+    (t) => ({
+      ...t,
+      d1_databases: [
+        { ...t.d1_databases[0], database_name: "someone-elses-db" },
+      ],
+    }),
+    // A second hostname, a wildcard, or a `workers.dev` fallback.
+    (t) => ({
+      ...t,
+      routes: [{ pattern: "*.neonunez.com", custom_domain: true }],
+    }),
+    (t) => ({ ...t, subdomain: true }),
+    // A scheduled trigger, which is another Cloudflare resource to mutate.
+    (t) => ({ ...t, triggers: { crons: ["0 0 * * *"] } }),
+  ]) {
+    assert.throws(() => assertReleaseTemplate(mutate(template)), {
+      name: "ReleaseRefusal",
+    });
+  }
+});
+
+test("the guards run again on the file the release actually deploys from", async () => {
+  // A config that was generated correctly and then edited, or replaced, is
+  // re-read from disk by the release's own target reader before any write. A
+  // different real D1 ID is not refused here — only Cloudflare can say which
+  // database an ID names, which is what the live binding proof asks.
+  const config = buildReleaseConfig({ template, databaseId: DATABASE_ID });
+  const generated = await writeConfig(config);
+  assert.equal(readPublicationTarget(generated).workerName, "ownwords-api");
+
+  for (const [mutate, reason] of [
+    [(c) => ({ ...c, name: "someone-elses-worker" }), "wrong_worker"],
+    [
+      (c) => ({
+        ...c,
+        d1_databases: [
+          { ...c.d1_databases[0], database_name: "someone-elses-db" },
+        ],
+      }),
+      "wrong_binding",
+    ],
+    [
+      (c) => ({
+        ...c,
+        vars: { ...c.vars, BETTER_AUTH_URL: "https://example.com" },
+      }),
+      "wrong_origin",
+    ],
+    [
+      (c) => ({ ...c, vars: { ...c.vars, ENVIRONMENT: "staging" } }),
+      "not_production",
+    ],
+  ]) {
+    const mutated = await writeConfig(mutate(config));
+    assert.throws(() => readPublicationTarget(mutated), {
+      name: "PublicationRefusal",
+      reason,
+    });
+  }
+});
