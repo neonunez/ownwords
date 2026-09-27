@@ -140,9 +140,10 @@ Connected to the API, end to end:
 What the backend does not offer yet, the app says plainly rather than
 pretending:
 
-- **Translation suggestions** — the provider is switched off until its policy
-  is approved, so each language in the review step says so and can be typed
-  by hand. Nothing is stored as a suggestion that did not come back.
+- **Translation suggestions** — switched off until the owner enters the
+  provider key (`docs/SETUP.md` item 5); until then, and whenever the provider
+  fails, each language in the review step says so and can be typed by hand.
+  Nothing is stored as a suggestion that did not come back.
 - **Starter expressions** — the backend defines none, so an empty Lexicon
   offers only "Add your first entry".
 - **Complete the phrase** — nothing creates cloze items yet, so that format

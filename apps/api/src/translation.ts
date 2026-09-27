@@ -1,0 +1,214 @@
+import type {
+  TranslationProvider,
+  TranslationSuggestion,
+  TranslationSuggestionRequest,
+} from "@ownwords/lexicon";
+import type { Bindings } from "./types.js";
+
+/**
+ * OpenCode Go, the $10/month OpenCode Zen plan, called exactly as its own
+ * documentation describes (https://opencode.ai/docs/go/). Two things are
+ * deliberately not hidden from the provider:
+ *
+ * - The user agent names this product, not a coding agent. The Go endpoint asks
+ *   clients to "identify itself with its own user agent", and this is ours.
+ * - The `x-opencode-session` value is a real, stable identifier for one
+ *   translation conversation, derived from the request itself. It is not a
+ *   fabricated coding session, and it carries no entry text.
+ *
+ * PROVIDER TERMS RISK, accepted by the owner on 2026-09-27 after being shown
+ * the evidence (see docs/SETUP.md): OpenCode's Terms of Use say the Services
+ * are for "your own internal use, and not on behalf of or for the benefit of
+ * any third party", define the product as a coding agent in a terminal, and
+ * make termination the stated consequence of other use. End-user translation
+ * through this key is therefore outside those terms: OpenCode can suspend the
+ * account at any time, and the suggestion feature would stop working with it.
+ * The key stays absent until the owner enters it, so nothing here is reachable
+ * by default and the app behaves exactly as it does without a provider.
+ */
+
+/** The endpoint the Go documentation lists for OpenAI-compatible models. */
+export const OPENCODE_GO_ENDPOINT =
+  "https://opencode.ai/zen/go/v1/chat/completions";
+
+/**
+ * `space-bunny-free` is the only Go model this product can be sure of paying
+ * nothing for. It is a coding model offered "Free for a limited time", so the
+ * id is a constant in one place: when the Go catalogue changes, this line is
+ * the only thing to change. Bump `version` below with it, because the version
+ * is part of the suggestion cache key.
+ */
+export const OPENCODE_GO_MODEL = "space-bunny-free";
+
+/** Honest identification, per the Go documentation's user-agent guidance. */
+export const OPENCODE_GO_USER_AGENT =
+  "ownwords/1.0 (+https://ownwords.neonunez.com)";
+
+/** Matches the lexicon package's own request bound, and keeps the ask short. */
+const MAX_SUGGESTION_CHARS = 200;
+const MAX_SUGGESTION_OUTPUT_TOKENS = 64;
+const PROVIDER_TIMEOUT_MS = 10_000;
+
+/**
+ * `false_friend` is a human judgement and a provider may never suggest it, so a
+ * machine candidate is always labelled with the one value that claims the
+ * least: it works only in some situations. `exact` would be a claim this
+ * provider cannot support, and `AddEntryScreen` stores the label the reviewer
+ * confirms. The reviewer corrects the fit on the entry when it is wrong.
+ */
+const MACHINE_FIT = "context_only";
+
+const SYSTEM_PROMPT = [
+  "You translate short personal phrases for a language-learning app.",
+  "Reply with the translation only: no quotes, no explanation, no alternatives,",
+  "no punctuation that was not in the source, and never any commentary.",
+  "If you do not know the phrase in the target language, reply with nothing.",
+].join(" ");
+
+function userPrompt(request: TranslationSuggestionRequest): string {
+  const sense = request.sense?.trim();
+  return [
+    `Translate from ${request.sourceLanguage} to ${request.targetLanguage}.`,
+    sense ? `The sense is: ${sense}` : null,
+    `Phrase: ${request.text}`,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+/** A missing or blank key is no key at all: no call is ever attempted. */
+export function readOpenCodeGoApiKey(env: Bindings): string | undefined {
+  const key = env.OPENCODE_GO_API_KEY?.trim();
+  return key === undefined || key.length === 0 ? undefined : key;
+}
+
+interface ProviderOptions {
+  apiKey: string;
+  /** Overridable for tests; defaults to the documented endpoint. */
+  endpoint?: string;
+  model?: string;
+  fetch?: typeof fetch;
+}
+
+/**
+ * Stable per-conversation identifier for the Go routing and cache hint. It is a
+ * digest of the languages, sense and phrase only, so the same phrase and sense
+ * asked twice reuse it and a different language or sense does not. It carries
+ * no account identity: two people asking for the same phrase and sense send the
+ * same id. No entry text is readable from it.
+ */
+async function sessionId(
+  request: TranslationSuggestionRequest,
+): Promise<string> {
+  const material = [
+    "ownwords-translation",
+    request.sourceLanguage,
+    request.targetLanguage,
+    request.sense ?? "",
+    request.text,
+  ].join("\u0000");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(material),
+  );
+  return Array.from(new Uint8Array(digest).slice(0, 16), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function messageText(body: unknown): string {
+  if (typeof body !== "object" || body === null) return "";
+  const choices = (body as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return "";
+  const first = choices[0];
+  if (typeof first !== "object" || first === null) return "";
+  const message = (first as { message?: unknown }).message;
+  if (typeof message !== "object" || message === null) return "";
+  const content = (message as { content?: unknown }).content;
+  if (typeof content !== "string") return "";
+  return content;
+}
+
+export class OpenCodeTranslationProvider implements TranslationProvider {
+  readonly id = "opencode-go";
+  readonly version = "1";
+
+  constructor(private readonly options: ProviderOptions) {}
+
+  async suggest(
+    request: TranslationSuggestionRequest,
+  ): Promise<TranslationSuggestion[]> {
+    const text = request.text.trim();
+    if (text.length === 0 || text.length > MAX_SUGGESTION_CHARS) return [];
+
+    const call = this.options.fetch ?? fetch;
+    let response: Response;
+    try {
+      response = await call(this.options.endpoint ?? OPENCODE_GO_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.options.apiKey}`,
+          "Content-Type": "application/json",
+          "User-Agent": OPENCODE_GO_USER_AGENT,
+          // A real, stable session id for this one translation conversation.
+          "x-opencode-session": await sessionId(request),
+        },
+        body: JSON.stringify({
+          model: this.options.model ?? OPENCODE_GO_MODEL,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: userPrompt(request) },
+          ],
+          temperature: 0,
+          max_tokens: MAX_SUGGESTION_OUTPUT_TOKENS,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      });
+    } catch (error) {
+      // A timeout, a DNS failure or a refused connection is an upstream
+      // failure, never a suggestion. The route reports it honestly.
+      throw new Error(
+        `The translation provider could not be reached: ${
+          error instanceof Error ? error.name : "unknown error"
+        }`,
+      );
+    }
+
+    if (!response.ok) {
+      // The status is kept; the body is provider-internal text that could
+      // contain prompt echoes, so it never reaches a response.
+      throw new Error(`The translation provider answered ${response.status}`);
+    }
+
+    const suggested = messageText(await response.json().catch(() => null))
+      .trim()
+      .replace(/^["'“”]+|["'“”]+$/g, "")
+      .trim();
+
+    // Nothing usable, or the source echoed back: the honest answer is no
+    // suggestion, which the app already words as "type it yourself".
+    if (
+      suggested.length === 0 ||
+      suggested.length > MAX_SUGGESTION_CHARS ||
+      suggested.toLowerCase() === text.toLowerCase()
+    ) {
+      return [];
+    }
+
+    return [{ text: suggested, fit: MACHINE_FIT }];
+  }
+}
+
+/**
+ * The composition root's factory: no configured key means no provider, so the
+ * suggestions route keeps its existing, network-free "switched off" answer.
+ */
+export function openCodeTranslationProviderFor(
+  bindings: Bindings,
+): TranslationProvider | undefined {
+  const apiKey = readOpenCodeGoApiKey(bindings);
+  return apiKey === undefined
+    ? undefined
+    : new OpenCodeTranslationProvider({ apiKey });
+}

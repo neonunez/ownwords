@@ -142,6 +142,7 @@ test("a generated config carries no credential and is never committed", async ()
     "GOOGLE_CLIENT_SECRET",
     "INVITATION_ADMIN_TOKEN",
     "CONTENT_PUBLISH_TOKEN",
+    "OPENCODE_GO_API_KEY",
     environment.CLOUDFLARE_API_TOKEN,
   ]) {
     assert.ok(!text.includes(secret), `${secret} must not be in the config`);
@@ -199,6 +200,11 @@ test("the tracked template is checked, not assumed", () => {
     (t) => ({
       ...t,
       vars: { ...t.vars, CONTENT_PUBLISH_TOKEN: "0".repeat(64) },
+    }),
+    // The owner's OpenCode Go key is a Worker secret, never a config value.
+    (t) => ({
+      ...t,
+      vars: { ...t.vars, OPENCODE_GO_API_KEY: "k".repeat(40) },
     }),
   ]) {
     assert.throws(() => assertReleaseTemplate(mutate(template)), {

@@ -24,9 +24,13 @@ Mount `createLexiconRoutes()` at `/api/v1/lexicon` after Better Auth middleware 
 error envelope, and retry semantics.
 
 Translation suggestions default to `DisabledTranslationProvider`, which performs no network call. A configured
-provider is called only by the explicit suggestions endpoint. Its cache is partitioned by owner: that costs some
-duplicate provider work across accounts, but prevents private entry text, sense context, and access patterns from
-leaking through a shared cache. Provider retries return review candidates and never mutate human-corrected data.
+provider is called only by the explicit suggestions endpoint. `translationProvider` also accepts a **factory**,
+`(bindings) => TranslationProvider | undefined`, which is resolved on every request because Workers expose secrets
+per request; returning `undefined` leaves that request on the disabled provider, so a missing secret can never reach
+a network. Its cache is partitioned by owner: that costs some duplicate provider work across accounts, but prevents
+private entry text, sense context, and access patterns from leaking through a shared cache. "No suggestion" is never
+cached, so a later attempt can still answer. Provider retries return review candidates and never mutate
+human-corrected data.
 
 Cloze content is never inferred from a word list. It must be explicitly supplied with exactly one `{{blank}}`
 marker; reads return an honest `NO_VALIDATED_CLOZE` outcome when none exists.

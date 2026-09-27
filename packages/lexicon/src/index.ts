@@ -32,6 +32,7 @@ export type {
   ReviewRating,
   SenseInput,
   TranslationProvider,
+  TranslationProviderFactory,
   TranslationStatus,
   TranslationSuggestion,
   TranslationSuggestionRequest,

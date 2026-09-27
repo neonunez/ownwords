@@ -10,6 +10,11 @@ export interface Bindings {
   GOOGLE_CLIENT_SECRET?: string;
   INVITATION_ADMIN_TOKEN?: string;
   CONTENT_PUBLISH_TOKEN?: string;
+  /**
+   * The owner's OpenCode Go subscription key. Absent by default: suggestions
+   * stay switched off and no provider is called until it is entered.
+   */
+  OPENCODE_GO_API_KEY?: string;
 }
 
 export interface VerifiedSession {

@@ -134,8 +134,15 @@ export function createLexiconRoutes(
   const app = new Hono<LexiconEnv>();
   const clock = options.clock ?? systemClock;
   const ids = options.idGenerator ?? cryptoIdGenerator;
-  const provider =
-    options.translationProvider ?? new DisabledTranslationProvider();
+  const configured = options.translationProvider;
+  const disabled = new DisabledTranslationProvider();
+  // A provider that needs a per-request binding is resolved here; one that does
+  // not is resolved once. Absent configuration always means the disabled
+  // provider, so no request can reach a network without an explicit provider.
+  const providerFor = (bindings: LexiconEnv["Bindings"]) =>
+    typeof configured === "function"
+      ? (configured(bindings) ?? disabled)
+      : (configured ?? disabled);
   const wrongDelayMs = options.wrongAnswerDelayMs ?? DEFAULT_WRONG_DELAY_MS;
 
   app.onError((error, c) => {
@@ -739,7 +746,11 @@ export function createLexiconRoutes(
     );
     if (source === null || source.text === null) return notFound(c);
     const targetLanguage = languageTag(body.targetLanguage, "targetLanguage");
-    const service = new TranslationSuggestionService(c.env.DB, provider, clock);
+    const service = new TranslationSuggestionService(
+      c.env.DB,
+      providerFor(c.env),
+      clock,
+    );
     const result = await service.suggest({
       ownerId,
       sourceLanguage: source.language_tag,

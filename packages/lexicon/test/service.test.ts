@@ -47,7 +47,6 @@ class FakeProvider implements TranslationProvider {
     ];
   }
 }
-
 describe("translation boundary and private cache", () => {
   it("defaults to a disabled provider that performs no request", async () => {
     const provider = new DisabledTranslationProvider();
@@ -162,6 +161,86 @@ describe("translation boundary and private cache", () => {
       ((await response.json()) as any).error.code,
       "TRANSLATION_PROVIDER_DISABLED",
     );
+  });
+
+  it("resolves a factory provider per request and falls back when it declines", async () => {
+    const ctx = await context();
+    const entry = await createVerifiedEntry(ctx);
+    const sense = entry.senses[0];
+    const source = sense.equivalents[0];
+    const provider = new FakeProvider();
+    const seen: unknown[] = [];
+    let configured = true;
+    // A factory stands in for a provider that needs a per-request binding, such
+    // as a Worker secret. It is asked on every request, and its `undefined`
+    // means "no provider this time", which must stay a network-free refusal.
+    const app = appFor(ctx, "user-a", {
+      translationProvider: (bindings) => {
+        seen.push(bindings);
+        return configured ? provider : undefined;
+      },
+    });
+    const ask = () =>
+      jsonRequest(
+        app,
+        `/api/v1/lexicon/entries/${entry.id}/senses/${sense.id}/suggestions`,
+        {
+          method: "POST",
+          json: { sourceEquivalentId: source.id, targetLanguage: "ru" },
+        },
+        ctx.db,
+      );
+
+    assert.equal((await ask()).status, 200);
+    assert.equal(seen.length, 1);
+    assert.deepEqual(seen[0], { DB: ctx.db });
+
+    configured = false;
+    const refused = await ask();
+    assert.equal(refused.status, 503);
+    assert.equal(
+      ((await refused.json()) as any).error.code,
+      "TRANSLATION_PROVIDER_DISABLED",
+    );
+    // The second call was answered by the disabled provider, not by the cache.
+    assert.equal(provider.calls.length, 1);
+  });
+
+  it("never remembers that a provider had no suggestion", async () => {
+    const ctx = await context();
+    let answer = "нет";
+    const provider: TranslationProvider = {
+      id: "sometimes-silent",
+      version: "1",
+      async suggest() {
+        return answer === "нет"
+          ? []
+          : [{ text: answer, fit: "context_only" as const }];
+      },
+    };
+    const service = new TranslationSuggestionService(
+      ctx.db,
+      provider,
+      ctx.clock,
+    );
+    const request = {
+      ownerId: "user-a",
+      sourceLanguage: "en",
+      targetLanguage: "ru",
+      text: "a phrase the model cannot place",
+      senseVersion: 1,
+    };
+
+    assert.deepEqual((await service.suggest(request)).suggestions, []);
+    answer = "разместиться";
+    const retried = await service.suggest(request);
+    assert.deepEqual(
+      retried.suggestions.map((item) => item.text),
+      ["разместиться"],
+    );
+    assert.equal(retried.cache, "miss");
+    // The answered request is still cached, so a repeat costs no provider call.
+    assert.equal((await service.suggest(request)).cache, "hit");
   });
 });
 

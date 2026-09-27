@@ -102,6 +102,7 @@ export function assertReleaseTemplate(template) {
     "GOOGLE_CLIENT_SECRET",
     "INVITATION_ADMIN_TOKEN",
     "CONTENT_PUBLISH_TOKEN",
+    "OPENCODE_GO_API_KEY",
   ]) {
     if (tracked.includes(secret)) {
       throw new ReleaseRefusal(
@@ -230,6 +231,7 @@ export function serialiseReleaseConfig(config) {
     "GOOGLE_CLIENT_SECRET",
     "INVITATION_ADMIN_TOKEN",
     "CONTENT_PUBLISH_TOKEN",
+    "OPENCODE_GO_API_KEY",
     "CLOUDFLARE_API_TOKEN",
   ]) {
     if (text.includes(secret)) {

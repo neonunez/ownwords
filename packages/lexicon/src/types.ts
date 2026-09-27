@@ -98,10 +98,20 @@ export interface TranslationProvider {
   ): Promise<TranslationSuggestion[]>;
 }
 
+/**
+ * Resolves the provider for one request. Workers expose secrets and other
+ * bindings per request, so a composition root that builds its routes once
+ * injects this factory instead of a fixed provider. Returning `undefined`
+ * leaves suggestions switched off for that request, with no network call.
+ */
+export type TranslationProviderFactory<
+  E extends LexiconBindings = LexiconBindings,
+> = (bindings: E) => TranslationProvider | undefined;
+
 export interface CreateLexiconRoutesOptions {
   clock?: Clock;
   idGenerator?: IdGenerator;
-  translationProvider?: TranslationProvider;
+  translationProvider?: TranslationProvider | TranslationProviderFactory;
   wrongAnswerDelayMs?: number;
 }
 

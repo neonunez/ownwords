@@ -1,6 +1,6 @@
 # Backend setup
 
-Everything except live provider verification runs locally without external credentials. Do not paste secrets into chat, issues, commits, or logs.
+Everything except live provider verification runs locally without external credentials. Do not paste secrets into chat, issues, commits, or logs. Suggested translations are exercised locally against a mocked provider, so no key is needed for any test; the only live provider call happens with a key the owner enters, in an ignored file or as a Worker secret.
 
 ## What the owner must provide later
 
@@ -18,7 +18,37 @@ Everything except live provider verification runs locally without external crede
    `neonunez.com` would deliberately share credentials with eligible subdomains and is not used. Local development
    uses origin `http://localhost:8787` and RP ID `localhost`. Real iPhone/PWA validation remains a post-deployment
    device check.
-5. **OpenCode:** provider-policy approval is still pending. No translation key or account is requested, and this backend does not call the provider.
+5. **OpenCode Go (optional, the translation provider):** the app's suggested translations come from the owner's
+   $10/month [OpenCode Go](https://opencode.ai/docs/go/) plan when its API key is present as the Worker secret
+   `OPENCODE_GO_API_KEY`. It is **absent by default**: with no key the backend performs no provider request at all
+   and the suggestions route keeps its existing, network-free `TRANSLATION_PROVIDER_DISABLED` answer, so the app
+   behaves exactly as it does with no provider. To turn it on, privately and only by the owner:
+
+   ```sh
+   # local: put OPENCODE_GO_API_KEY=... in the ignored apps/api/.dev.vars
+   # production: a Worker secret, never a config value
+   npx wrangler secret put OPENCODE_GO_API_KEY --config apps/api/wrangler.production.jsonc
+   ```
+
+   The release refuses to deploy a config that names this secret, and
+   `apps/api/scripts/production-hosting-config.test.mjs` fails if the local Wrangler config or the production
+   template ever declares a value for it. The model id (`space-bunny-free`) and the endpoint
+   (`https://opencode.ai/zen/go/v1/chat/completions`) are constants in `apps/api/src/translation.ts`; when the Go
+   catalogue changes, that file is the only thing to change, and `version` there is part of the suggestion cache key.
+
+   **Provider terms risk, accepted by the owner on 2026-09-27 after being shown the evidence.** OpenCode's Terms of
+   Use (effective 2026-08-15, ANOMALY INNOVATIONS, INC.) say the Services - which they define to include the
+   "inference product", i.e. the API key - are for "your own internal use, and not on behalf of or for the benefit of
+   any third party", define the product as accessing models "through a coding agent running within your terminal",
+   prohibit "any other purpose not reasonably intended by OpenCode", and make a violation "grounds for termination of
+   your right to use or access the Services". End-user translation through this key is therefore outside those terms.
+   Consequences the owner accepts: **OpenCode can suspend the account at any time, and suggested translations stop
+   working for every user when it does**; the `space-bunny-free` model is offered "Free ... limited time"; the Go
+   usage limits are the owner's personal monthly caps, and an exhausted limit or an abuse block shows the same honest
+   failure as any other provider error, with a working Retry. The integration does not pretend otherwise: it
+   identifies itself as Ownwords in its user agent, sends a real stable `x-opencode-session` digest rather than a
+   fabricated coding session, and never sends anything but the phrase being reviewed. If the account is suspended,
+   deleting the secret restores the switched-off behaviour with no code change.
 
 ## Local development
 
@@ -279,7 +309,7 @@ origin's callback, answered by a stand-in so nothing reaches Google; the one-scr
 the selector with a level each and the course chosen apart, including at a 320px phone width from the keyboard;
 changing languages and a preference in Settings and reading them back after a reload, then the side panel's up-next
 step into the course; adding a passkey from Settings after sign-in and signing in with it alone, on a Chromium virtual authenticator against the real passkey endpoints; capturing an
-entry whose suggestions fail because the provider is off, typing equivalents by hand, search without stress marks,
+entry whose suggestions fail because no provider key is configured, typing equivalents by hand, search without stress marks,
 flashcard practice and the retention it records; finishing a Russian Foundations lesson, carrying on from the step reached,
 the Lexicon import and Learn practice; the absence of every audio affordance and listening claim in that published
 course and in the side panel; the alphabet and reference; cross-account denial; export; a session ending

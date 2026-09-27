@@ -120,6 +120,21 @@ test("the copied production config and the built app stay untracked", async () =
   assert.deepEqual(stdout.trim().split("\n"), paths);
 });
 
+test("the OpenCode Go key is server-only, and never a Wrangler value", async () => {
+  // The owner's translation key is a Worker secret, entered privately. Neither
+  // the local nor the production configuration may declare a value for it.
+  const local = parseJsonc(
+    await readFile(path.join(apiDirectory, "wrangler.jsonc"), "utf8"),
+  );
+  for (const config of [local, template]) {
+    assert.equal(
+      Object.hasOwn(config.vars ?? {}, "OPENCODE_GO_API_KEY"),
+      false,
+    );
+    assert.equal(Object.hasOwn(config, "secrets"), false);
+  }
+});
+
 test("the JSONC reader handles the dialect the template is written in", () => {
   assert.deepEqual(
     parseJsonc(`{
