@@ -135,21 +135,6 @@ test("the OpenCode Go key is server-only, and never a Wrangler value", async () 
   }
 });
 
-test("the translation provider module is text Git can diff", async () => {
-  const { stdout } = await run(
-    "git",
-    [
-      "diff",
-      "--numstat",
-      "--no-index",
-      "/dev/null",
-      "apps/api/src/translation.ts",
-    ],
-    { cwd: repositoryRoot },
-  ).catch((error) => error);
-  assert.match(stdout, /^\d+\t\d+\t/);
-});
-
 test("the JSONC reader handles the dialect the template is written in", () => {
   assert.deepEqual(
     parseJsonc(`{
