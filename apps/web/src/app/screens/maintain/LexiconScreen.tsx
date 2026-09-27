@@ -164,14 +164,14 @@ export function LexiconScreen() {
 
         {page.loading && !page.data ? (
           <LoadingCard label="Reading your Lexicon." />
+        ) : page.error ? (
+          <Failed
+            message="Your Lexicon could not be read. Nothing was lost."
+            onRetry={page.reload}
+          />
         ) : (
           <Reveal>
-            {page.error ? (
-              <Failed
-                message="Your Lexicon could not be read. Nothing was lost."
-                onRetry={page.reload}
-              />
-            ) : entries.length ? (
+            {entries.length ? (
               <>
                 <p
                   style={{

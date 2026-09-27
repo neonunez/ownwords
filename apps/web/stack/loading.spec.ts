@@ -64,14 +64,14 @@ test.describe("A read in flight, against the real backend", () => {
 
     release();
     // What was read rises into the card's place the way a screen opens,
-    // part by part, and settles.
-    const parts = page.locator(".ow-reveal > *");
-    await expect(parts.first()).toHaveCSS("animation-name", "ow-in");
+    // all at once, and settles.
+    const revealed = page.locator(".ow-reveal");
+    await expect(revealed).toHaveCSS("animation-name", "ow-in");
     await expect(page.getByText(/There are no streaks/)).toBeVisible();
     await expect(status).toHaveCount(0);
     await expect(page.locator(".ow-loading-ring")).toHaveCount(0);
-    await expect(parts.last()).toHaveCSS("opacity", "1");
-    await expect(parts.last()).toHaveCSS("transform", "none");
+    await expect(revealed).toHaveCSS("opacity", "1");
+    await expect(revealed).toHaveCSS("transform", "none");
     await page.screenshot({
       path: testInfo.outputPath("progress-loaded.png"),
     });
@@ -96,7 +96,7 @@ test.describe("A read in flight, against the real backend", () => {
 
     release();
     await expect(page.getByText(/Your Lexicon is empty/)).toBeVisible();
-    await expect(page.locator(".ow-reveal > *").first()).toHaveCSS(
+    await expect(page.locator(".ow-reveal")).toHaveCSS(
       "animation-name",
       "ow-in",
     );
@@ -131,8 +131,8 @@ test.describe("A read in flight, against the real backend", () => {
       page.getByRole("button", { name: /Continue · Unit 1/ }),
     ).toBeVisible();
     // The course is simply there: no rise, and no wait before it.
-    const part = page.locator(".ow-reveal > *").first();
-    await expect(part).toHaveCSS("animation-name", "none");
-    await expect(part).toHaveCSS("opacity", "1");
+    const revealed = page.locator(".ow-reveal");
+    await expect(revealed).toHaveCSS("animation-name", "none");
+    await expect(revealed).toHaveCSS("opacity", "1");
   });
 });

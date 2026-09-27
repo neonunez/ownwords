@@ -180,7 +180,7 @@ The product's rules, and how they are kept:
   neither flashes nor speaks, and a slow one is announced in words; Kip and
   the ring around it are decorative, and the ring goes when the read ends.
   What was read then rises into the card's place with the screen's own
-  entrance, part by part (`app/reveal.ts`); only once, never on later updates
+  entrance, all at once (`app/reveal.ts`); only once, never on later updates
   and never after a quick read. `npm run test:stack` holds requests to check
   it on real screens.
 - **Stress marks** use the combining acute U+0301. Search folds it away along

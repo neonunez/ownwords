@@ -207,30 +207,17 @@ body {
 }
 
 /* What a slow read brings replaces its loading card the way a screen opens:
-   each part rises into place with the screen's own entrance, a beat apart.
+   it rises into place with the screen's own entrance, all at once.
    It plays once, when the content mounts (see app/reveal.ts), and a quick
    read, which never showed the card, appears inside the entrance itself.
-   Filled backwards only, so a part waits hidden for its beat and keeps no
-   transform once it has landed. */
-.ow-reveal > * {
+   Filled backwards only, so it keeps no transform once it has landed. */
+.ow-reveal {
   animation: ow-in var(--motion-base) var(--ease-out) backwards;
 }
 
-.ow-reveal > :nth-child(2) {
-  animation-delay: 50ms;
-}
-
-.ow-reveal > :nth-child(3) {
-  animation-delay: 100ms;
-}
-
-.ow-reveal > :nth-child(n + 4) {
-  animation-delay: 150ms;
-}
-
-/* Reduced motion: no rise and no wait; the parts are simply there. */
+/* Reduced motion: no rise; what was read is simply there. */
 @media (prefers-reduced-motion: reduce) {
-  .ow-reveal > * {
+  .ow-reveal {
     animation: none !important;
   }
 }

@@ -518,6 +518,30 @@ describe("a read in flight", () => {
     expect(document.querySelector(".ow-reveal")).toBe(revealed);
   });
 
+  it("eases a slow Lexicon read that fails in once, not twice", async () => {
+    const demo = createDemoClient();
+    let fail: () => void = () => {};
+    const client = {
+      ...demo,
+      listEntries: () =>
+        new Promise<never>((_, reject) => {
+          fail = () => reject(new Error("offline"));
+        }),
+    };
+    renderScreen(<LexiconScreen />, { route: "/maintain/lexicon", client });
+    expect(
+      await screen.findByText("Reading your Lexicon."),
+    ).toBeInTheDocument();
+
+    fail();
+    const message = await screen.findByText(
+      "Your Lexicon could not be read. Nothing was lost.",
+    );
+    const revealed = document.querySelectorAll(".ow-reveal");
+    expect(revealed).toHaveLength(1);
+    expect(revealed[0]).toContainElement(message);
+  });
+
   it("keeps the Lexicon's search usable while its entries are read", async () => {
     const demo = createDemoClient();
     const client = {
