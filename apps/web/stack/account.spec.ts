@@ -100,15 +100,27 @@ test.describe("signing in and the first run", () => {
     const start = page.getByRole("button", { name: "Start" });
     await expect(start).toBeDisabled();
 
+    // Each spoken language comes from the selector, then says its level.
+    const add = page.getByRole("combobox", {
+      name: "Add a language you speak",
+    });
+    await add.selectOption("en");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
     await page
-      .getByRole("group", { name: "English: how well you speak it" })
-      .getByRole("button", { name: "Native" })
-      .click();
+      .getByRole("group", { name: "How well you speak English" })
+      .getByRole("radio", { name: "Native" })
+      .check();
+    await add.selectOption("es");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(start).toBeDisabled();
     await page
-      .getByRole("group", { name: "Español: how well you speak it" })
-      .getByRole("button", { name: "B2" })
-      .click();
-    await page.getByRole("button", { name: "Русский" }).click();
+      .getByRole("group", { name: "How well you speak Español" })
+      .getByRole("radio", { name: "B2" })
+      .check();
+    // The course is chosen apart, from the one language it teaches.
+    await page
+      .getByRole("combobox", { name: "Language to learn" })
+      .selectOption("ru");
     await start.click();
 
     await expect(
@@ -121,16 +133,17 @@ test.describe("signing in and the first run", () => {
 
     await page.getByRole("button", { name: "Open the side panel" }).click();
     const panel = page.getByRole("dialog", { name: "Ownwórds" });
-    await expect(panel.getByText("newcomer@example.com")).toBeVisible();
-    await expect(panel.getByText("learning · A0")).toBeVisible();
-    await expect(panel.getByText("B2")).toBeVisible();
+    const languages = panel.getByRole("list", { name: "Your languages" });
+    await expect(languages.getByText("learning · A0")).toBeVisible();
+    await expect(languages.getByText("B2")).toBeVisible();
+    await panel.getByRole("button", { name: /Settings/ }).click();
+    await expect(page.getByText("newcomer@example.com")).toBeVisible();
   });
 
   test("exports the account as a file", async ({ page, context, request }) => {
     await onboard(request, "exporter");
     await signIn(context, "exporter");
-    await page.goto("/maintain/progress");
-    await page.getByRole("button", { name: "Open the side panel" }).click();
+    await page.goto("/maintain/settings");
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export my data" }).click();
     const file = await download;
@@ -163,8 +176,7 @@ test.describe("signing in and the first run", () => {
     await expect(page.getByText(/You have been signed out/)).toBeVisible();
 
     await signIn(context, "leaver");
-    await page.goto("/maintain/progress");
-    await page.getByRole("button", { name: "Open the side panel" }).click();
+    await page.goto("/maintain/settings");
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Sign in" }),

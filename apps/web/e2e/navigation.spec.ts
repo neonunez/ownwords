@@ -66,6 +66,51 @@ test.describe("navigating the two modes", () => {
     ]);
   });
 
+  test("keeps settings on a page of their own, one row from the panel", async ({
+    page,
+  }) => {
+    await page.goto("/learn/alphabet");
+    await page.getByRole("button", { name: "Open the side panel" }).click();
+    const panel = page.getByRole("dialog", { name: "Ownwórds" });
+    await expect(
+      panel.getByRole("list", { name: "Your languages" }),
+    ).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Sign out" })).toHaveCount(
+      0,
+    );
+    await expect(panel.getByRole("switch")).toHaveCount(0);
+    await panel.getByRole("button", { name: /Settings/ }).click();
+
+    await expect(page).toHaveURL(/\/learn\/settings$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toBeVisible();
+    await expect(panel).toBeHidden();
+    // The tab bar stays the one the person came from, with no tab lit.
+    const bar = page.getByRole("navigation", { name: "Learn" });
+    await expect(bar).toBeVisible();
+    await expect(bar.locator('[aria-current="page"]')).toHaveCount(0);
+
+    // Back returns to the screen the panel was opened from.
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(page).toHaveURL(/\/learn\/alphabet$/);
+  });
+
+  test("goes from the panel straight to what is waiting", async ({ page }) => {
+    await page.goto("/learn/alphabet");
+    await page.getByRole("button", { name: "Open the side panel" }).click();
+    const panel = page.getByRole("dialog", { name: "Ownwórds" });
+    await panel.getByRole("button", { name: /Practice is due/ }).click();
+    await expect(page).toHaveURL(/\/maintain\/practice$/);
+    await expect(
+      page.getByRole("navigation", { name: "Maintain" }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Open the side panel" }).click();
+    await panel.getByRole("button", { name: /Carry on · Unit 3/ }).click();
+    await expect(page).toHaveURL(/\/learn\/course\/u3$/);
+  });
+
   test("closes the side panel with the phone back gesture", async ({
     page,
   }) => {

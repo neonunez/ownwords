@@ -1,21 +1,16 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Button,
   Card,
   Icon,
   IconButton,
   Mascot,
-  SegmentedControl,
-  Switch,
+  type IconName,
 } from "../../design-system";
 import { Section } from "../layout";
 import { useDialogBehaviour } from "../../lib/useDialogBehaviour";
-import { useTheme, type Appearance } from "./ThemeProvider";
 import { useClient } from "./ClientProvider";
-import { useToast } from "./ToastProvider";
-import { useSession } from "../session/SessionGate";
-import type { Language, Preferences } from "../../api/types";
+import type { Language } from "../../api/types";
 import type { Mode } from "../navigation";
 
 export interface SidePanelProps {
@@ -32,16 +27,30 @@ const modes: { key: Mode; title: string; icon: "repeat" | "graduation-cap" }[] =
     { key: "learn", title: "Learn", icon: "graduation-cap" },
   ];
 
-const appearances: { value: Appearance; label: string }[] = [
-  { value: "system", label: "System" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-];
+/** What is waiting on either side of the app, read when the panel opens. */
+interface Waiting {
+  /** The course step to carry on from; `null` when there is none to resume. */
+  lesson: {
+    lessonId: string;
+    unitNumber: number;
+    title: string;
+    step: string;
+    language: string;
+  } | null;
+  /** How long the Maintain practice due now takes; empty when nothing is due. */
+  estimate: string;
+  /** When Maintain practice comes next, if nothing is due now. */
+  next: string | null;
+  /** Whether Maintain progress could be read at all. */
+  progressRead: boolean;
+}
+
+type WaitingState = "loading" | "failed" | Waiting;
 
 /**
- * Mode, languages, preferences, export and account. Everything that is not a
- * daily action lives here, which is what leaves the tab bar to the four things
- * a person does every day.
+ * Mode, what is up next, and the languages: the panel is for moving around.
+ * Settings, the account and the data have a page of their own, one row away,
+ * which leaves the tab bar to the four things a person does every day.
  */
 export function SidePanel({
   open,
@@ -52,106 +61,58 @@ export function SidePanel({
 }: SidePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const suggestId = useId();
-  const { appearance, setAppearance } = useTheme();
   const client = useClient();
-  const session = useSession();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { showToast } = useToast();
-  const [preferences, setPreferences] = useState<Preferences | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState<WaitingState>("loading");
   const demo = client.kind === "demo";
+  const learningCode = languages.find(
+    (language) => language.role === "learning",
+  )?.code;
 
+  // The panel is the one place that crosses modes, so it is the one place
+  // that can say what is waiting on both sides, and go straight to it.
   useEffect(() => {
     if (!open) return;
     let live = true;
-    client.getPreferences().then(
-      (value) => {
-        if (live) setPreferences(value);
-      },
-      () => {
-        if (live) setPreferences(null);
-      },
-    );
+    // What was read last time stays up until the new answer replaces it.
+    Promise.allSettled([
+      client.getProgress(),
+      learningCode ? client.getCourse() : Promise.resolve(null),
+    ]).then(([progress, course]) => {
+      if (!live) return;
+      const summary = progress.status === "fulfilled" ? progress.value : null;
+      const resume =
+        course.status === "fulfilled" ? (course.value?.resume ?? null) : null;
+      const lesson =
+        resume && course.status === "fulfilled" && course.value
+          ? {
+              lessonId: resume.lessonId,
+              unitNumber: resume.unitNumber,
+              title: resume.title,
+              step: resume.step,
+              language: course.value.language,
+            }
+          : null;
+      if (!summary && !lesson) {
+        setWaiting("failed");
+        return;
+      }
+      setWaiting({
+        lesson,
+        estimate: summary?.estimate ?? "",
+        next: summary?.comingUp[0]?.when ?? null,
+        progressRead: summary !== null,
+      });
+    });
     return () => {
       live = false;
     };
-  }, [open, client]);
+  }, [open, client, learningCode]);
 
   useDialogBehaviour(panelRef, open, onClose);
 
-  const update = (patch: Partial<Preferences>) => {
-    if (!preferences) return;
-    const before = preferences;
-    const next = { ...preferences, ...patch };
-    setPreferences(next);
-    client.savePreferences(next).then(
-      (saved) => {
-        setPreferences(saved);
-        session?.refresh();
-      },
-      (error: unknown) => {
-        setPreferences(before);
-        showToast(
-          error instanceof Error
-            ? `Not saved. ${error.message}`
-            : "That preference was not saved. Try again.",
-        );
-      },
-    );
-  };
-
-  /** Runs an account action, saying in words when it did not work. */
-  const act = async (action: () => Promise<void>) => {
-    setBusy(true);
-    try {
-      await action();
-    } catch (error) {
-      showToast(
-        error instanceof Error && error.message
-          ? error.message
-          : "That did not work. Nothing changed; try again.",
-      );
-    }
-    setBusy(false);
-  };
-
-  const exportData = () =>
-    act(async () => {
-      const { filename, blob } = await client.exportAccount();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      // Give the browser a moment to start the download before letting go.
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      showToast("Your data is saved as a file.", { icon: "download" });
-    });
-
-  const addPasskey = () =>
-    act(async () => {
-      await client.addPasskey();
-      showToast("Passkey added. Next time, sign in with it.", {
-        icon: "check",
-      });
-    });
-
-  const signOut = () =>
-    act(async () => {
-      await session?.signOut();
-      // Close the panel in place, so the next sign-in does not reopen it.
-      navigate(`${location.pathname}${location.search}`, {
-        replace: true,
-        state: null,
-      });
-    });
-
-  const changeLanguages = () => {
-    // Replacing the panel's own history entry closes it on the way.
-    navigate(`/${mode}/languages`, { replace: true, state: null });
-  };
+  /** Replacing the panel's own history entry closes it on the way. */
+  const go = (path: string) => navigate(path, { replace: true, state: null });
 
   const maintained = languages
     .filter((language) => language.role !== "learning")
@@ -237,6 +198,9 @@ export function SidePanel({
             padding: "8px 20px 20px",
             display: "grid",
             gridTemplateColumns: "minmax(0, 1fr)",
+            // Shorter than the panel now, so rows keep their own height
+            // instead of stretching to fill it.
+            alignContent: "start",
             gap: 18,
             overflow: "auto",
             flex: 1,
@@ -264,7 +228,9 @@ export function SidePanel({
                       gridTemplateColumns: "24px minmax(0, 1fr) auto",
                       gap: 12,
                       alignItems: "center",
-                      borderColor: selected ? "var(--accent)" : undefined,
+                      // Left out rather than `undefined` when not selected: an
+                      // empty longhand would reset the card's border to ink.
+                      ...(selected ? { borderColor: "var(--accent)" } : {}),
                     }}
                   >
                     <Icon
@@ -316,158 +282,55 @@ export function SidePanel({
             </div>
           </Section>
 
+          <Section title="Up next">
+            <UpNext waiting={waiting} go={go} />
+          </Section>
+
           <Section title="Languages">
             <Card padding={0}>
-              {languages.map((language, index) => (
-                <div
-                  key={language.code}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "11px 14px",
-                    minHeight: 44,
-                    borderBottom:
-                      index < languages.length - 1
-                        ? "1px solid var(--border-1)"
-                        : 0,
-                    font: "var(--type-body)",
-                    fontSize: ".9375rem",
-                  }}
-                >
-                  <span lang={language.code}>{language.name}</span>
-                  <span
+              <ul
+                aria-label="Your languages"
+                style={{ listStyle: "none", margin: 0, padding: 0 }}
+              >
+                {languages.map((language, index) => (
+                  <li
+                    key={language.code}
                     style={{
-                      font: "var(--type-caption)",
-                      color: "var(--fg-3)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "11px 14px",
+                      minHeight: 44,
+                      borderBottom:
+                        index < languages.length - 1
+                          ? "1px solid var(--border-1)"
+                          : 0,
+                      font: "var(--type-body)",
+                      fontSize: ".9375rem",
                     }}
                   >
-                    {language.level}
-                  </span>
-                </div>
-              ))}
-            </Card>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon="languages"
-              disabled={demo}
-              onClick={changeLanguages}
-            >
-              Change languages
-            </Button>
-          </Section>
-
-          <Section title="Preferences">
-            <Card padding={0}>
-              <div style={row(true)}>
-                <Icon name="languages" size={18} color="var(--fg-3)" />
-                <span>Explanations in</span>
-                <span
-                  style={{ font: "var(--type-caption)", color: "var(--fg-3)" }}
-                >
-                  {preferences?.explanationsIn === "es" ? "Español" : "English"}
-                </span>
-              </div>
-              <div style={row(true)}>
-                <Icon name="sparkles" size={18} color="var(--fg-3)" />
-                <span id={suggestId}>Suggest translations</span>
-                <Switch
-                  checked={preferences?.suggestTranslations ?? true}
-                  labelledBy={suggestId}
-                  label="Suggest translations"
-                  disabled={!preferences}
-                  onChange={(next) => update({ suggestTranslations: next })}
-                />
-              </div>
-              <div style={row(true)}>
-                <Icon name="bell" size={18} color="var(--fg-3)" />
-                <span>Reminders</span>
-                <span
-                  style={{ font: "var(--type-caption)", color: "var(--fg-3)" }}
-                >
-                  After install
-                </span>
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "24px minmax(0, 1fr)",
-                  gap: "10px",
-                  alignItems: "center",
-                  padding: "10px 14px",
-                  borderTop: "1px solid var(--border-1)",
-                  font: "var(--type-body)",
-                  fontSize: ".9375rem",
-                }}
-              >
-                <Icon
-                  name={appearance === "dark" ? "moon" : "sun"}
-                  size={18}
-                  color="var(--fg-3)"
-                />
-                <span>Appearance</span>
-                <SegmentedControl
-                  style={{ gridColumn: 2 }}
-                  label="Appearance"
-                  options={appearances}
-                  value={appearance}
-                  onChange={setAppearance}
-                />
-              </div>
+                    <span lang={language.code}>{language.name}</span>
+                    <span
+                      style={{
+                        font: "var(--type-caption)",
+                        color: "var(--fg-3)",
+                      }}
+                    >
+                      {language.level}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </Card>
           </Section>
 
-          <Section title="Account">
-            {session && (
-              <p
-                style={{
-                  margin: 0,
-                  padding: "0 4px",
-                  font: "var(--type-body)",
-                  fontSize: ".9375rem",
-                  overflowWrap: "anywhere",
-                }}
-              >
-                <span className="ow-visually-hidden">Signed in as </span>
-                {session.account.email}
-              </p>
-            )}
-            <div style={{ display: "grid", gap: 4 }}>
-              <Button
-                variant="ghost"
-                icon="download"
-                style={{ justifyContent: "flex-start" }}
-                disabled={busy}
-                onClick={() => void exportData()}
-              >
-                Export my data
-              </Button>
-              {!demo && (
-                <>
-                  <Button
-                    variant="ghost"
-                    icon="key-round"
-                    style={{ justifyContent: "flex-start" }}
-                    disabled={busy}
-                    onClick={() => void addPasskey()}
-                  >
-                    Add a passkey on this device
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    icon="log-out"
-                    style={{ justifyContent: "flex-start" }}
-                    disabled={busy}
-                    onClick={() => void signOut()}
-                  >
-                    Sign out
-                  </Button>
-                </>
-              )}
-            </div>
-          </Section>
+          <Destination
+            icon="settings"
+            title="Settings"
+            detail="Languages, preferences, your data and sign-in"
+            onClick={() => go(`/${mode}/settings`)}
+          />
 
           {demo && (
             <p
@@ -488,15 +351,110 @@ export function SidePanel({
   );
 }
 
-const row = (bordered: boolean) =>
-  ({
-    display: "grid",
-    gridTemplateColumns: "24px minmax(0, 1fr) auto",
-    gap: 10,
-    alignItems: "center",
-    padding: "6px 14px",
-    minHeight: 48,
-    borderBottom: bordered ? "1px solid var(--border-1)" : 0,
-    font: "var(--type-body)",
-    fontSize: ".9375rem",
-  }) as const;
+/** What is waiting, each item one tap from where the person will do it. */
+function UpNext({
+  waiting,
+  go,
+}: {
+  waiting: WaitingState;
+  go: (path: string) => void;
+}) {
+  if (waiting === "loading" || waiting === "failed") {
+    return (
+      <p style={quiet}>
+        {waiting === "loading"
+          ? "Looking for what is waiting."
+          : "What is waiting could not be read. Open the panel again to retry."}
+      </p>
+    );
+  }
+  const { lesson, estimate, next, progressRead } = waiting;
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {lesson && (
+        <Destination
+          icon="graduation-cap"
+          title={`Carry on · Unit ${lesson.unitNumber}`}
+          detail={
+            <>
+              <span lang={lesson.language}>{lesson.title}</span> · {lesson.step}
+            </>
+          }
+          onClick={() => go(`/learn/course/${lesson.lessonId}`)}
+        />
+      )}
+      {estimate ? (
+        <Destination
+          icon="repeat"
+          title="Practice is due"
+          detail={estimate}
+          onClick={() => go("/maintain/practice")}
+        />
+      ) : (
+        progressRead && (
+          <p style={quiet}>
+            {next
+              ? `Nothing is due to practise. The next words come back ${next}.`
+              : "Nothing is due to practise."}
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
+/** A place to go: a real button, its name first and a line of detail under it. */
+function Destination({
+  icon,
+  title,
+  detail,
+  onClick,
+}: {
+  icon: IconName;
+  title: string;
+  detail: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Card
+      padding={12}
+      onClick={onClick}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "24px minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
+      }}
+    >
+      <Icon name={icon} size={20} color="var(--fg-2)" />
+      <span style={{ minWidth: 0 }}>
+        <span
+          style={{
+            display: "block",
+            font: "var(--type-label)",
+            fontSize: "1rem",
+          }}
+        >
+          {title}
+        </span>
+        <span
+          style={{
+            display: "block",
+            font: "var(--type-caption)",
+            color: "var(--fg-3)",
+          }}
+        >
+          {detail}
+        </span>
+      </span>
+      <Icon name="chevron-right" size={18} color="var(--fg-3)" />
+    </Card>
+  );
+}
+
+const quiet = {
+  margin: 0,
+  padding: "0 4px",
+  font: "var(--type-caption)",
+  color: "var(--fg-3)",
+} as const;

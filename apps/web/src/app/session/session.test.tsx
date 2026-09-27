@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ClientProvider } from "../shell/ClientProvider";
 import { SessionGate } from "./SessionGate";
@@ -40,10 +40,15 @@ describe("the session gate", () => {
     const start = screen.getByRole("button", { name: "Start" });
     expect(start).toBeDisabled();
 
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Add a language you speak" }),
+      "en",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
     await userEvent.click(
-      screen
-        .getByRole("group", { name: "English: how well you speak it" })
-        .querySelector("button")!,
+      within(
+        screen.getByRole("group", { name: "How well you speak English" }),
+      ).getByRole("radio", { name: "Native" }),
     );
     await userEvent.click(start);
     expect(await screen.findByText("Inside the app")).toBeInTheDocument();

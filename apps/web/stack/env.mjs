@@ -24,4 +24,5 @@ export const USERS = {
   exporter: "exporter@example.com",
   firstrun: "firstrun@example.com",
   reader: "reader@example.com",
+  settler: "settler@example.com",
 };

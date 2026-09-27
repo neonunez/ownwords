@@ -14,6 +14,7 @@ export declare const USERS: Record<
   | "offline"
   | "exporter"
   | "firstrun"
-  | "reader",
+  | "reader"
+  | "settler",
   string
 >;

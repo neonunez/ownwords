@@ -19,8 +19,9 @@ test.describe("light and dark", () => {
     await page.getByRole("button", { name: "Open the side panel" }).click();
     await page
       .getByRole("dialog", { name: "Ownwórds" })
-      .getByRole("radio", { name: "Dark" })
+      .getByRole("button", { name: /Settings/ })
       .click();
+    await page.getByRole("radio", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
     await page.reload();
