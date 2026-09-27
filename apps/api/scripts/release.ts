@@ -94,6 +94,19 @@ async function releaseTarget() {
   }
 }
 
+/**
+ * Before anything is written: the configured D1 ID is the one Cloudflare names
+ * ownwords-production and the one the live Worker is already bound to.
+ */
+async function proveLiveTarget(
+  target: Awaited<ReturnType<typeof releaseTarget>>,
+): Promise<void> {
+  const live = await verifyDeployedDatabaseBinding({ target, exec });
+  log(
+    `live        version ${live.versionIds.join(", ")} of ${target.workerName} is bound to ${target.databaseName} (${target.databaseId})`,
+  );
+}
+
 /** Stage one: the config, and the proof that it is the intended target. */
 async function stageConfig(): Promise<void> {
   const prepared = await prepareReleaseConfig({
@@ -111,6 +124,7 @@ async function stageConfig(): Promise<void> {
 /** Stage two: migrations, in order, with a list checkpoint and a gate. */
 async function stageMigrate(): Promise<void> {
   const target = await releaseTarget();
+  await proveLiveTarget(target);
   const composed = await composeMigrations(repositoryRoot);
   const directory = path.join(repositoryRoot, ".wrangler", "migrations");
   const sqlByName: Record<string, string> = {};
@@ -232,6 +246,7 @@ async function stageDeploy(): Promise<void> {
     );
   });
 
+  await proveLiveTarget(target);
   const dryRun = await wrangler(["deploy", "--dry-run"]);
   log(`dry-run\n${dryRun.trimEnd()}`);
   assertNoWorkersDev(dryRun);

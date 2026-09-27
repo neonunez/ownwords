@@ -719,7 +719,7 @@ function secretUse(document) {
       value.forEach((item, index) => walk(item, [...at, index]));
     } else if (value && typeof value === "object") {
       for (const [key, item] of Object.entries(value)) walk(item, [...at, key]);
-    } else if (typeof value === "string" && /secrets\s*[.[]/.test(value)) {
+    } else if (typeof value === "string" && /\bsecrets\b/.test(value)) {
       const whole = /^\$\{\{ secrets\.(\w+) \}\}$/.exec(value);
       const inStepEnv =
         at.length === 6 &&
@@ -789,6 +789,10 @@ test("a credential is read only as a step's env value, and only the two tokens",
       (w) => (w.env = { T: "${{ secrets.CONTENT_PUBLISH_TOKEN }}" }),
     ],
     ["index syntax", (_, s) => (s.at(-1).env.FOO = "${{ secrets['OTHER'] }}")],
+    [
+      "the whole secrets context",
+      (_, s) => (s.at(-1).env.FOO = "${{ toJSON(secrets) }}"),
+    ],
   ]) {
     assert.notDeepEqual(altered(change), [], `${label} must be refused`);
   }
