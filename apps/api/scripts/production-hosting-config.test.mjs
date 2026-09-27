@@ -121,29 +121,41 @@ test("the copied production config and the built app stay untracked", async () =
 });
 
 test("the OpenCode Go key is server-only, and never a tracked value", async () => {
-  // The owner's translation key is a Worker secret. Its name may appear where
-  // the Worker reads it, and nowhere else: not in the app, not in a Wrangler
-  // config, not in anything the release would serialise.
+  // The owner's translation key is a Worker secret. Its name may appear only
+  // where the Worker reads it or where that refusal is proved, and nowhere else:
+  // not in the app, not in a Wrangler config, not in anything the release would
+  // serialise. Each entry below is allowed for a stated reason.
+  const allowed = new Map([
+    ["apps/api/src/translation.ts", "the Worker module that reads the secret"],
+    ["apps/api/src/types.ts", "the binding type the Worker hands it through"],
+    ["apps/api/test/translation.test.ts", "proves an absent key is refused"],
+    ["apps/api/scripts/release-config.mjs", "refuses a config naming it"],
+    ["apps/api/scripts/release.test.mjs", "proves that refusal"],
+    ["apps/api/scripts/production-hosting-config.test.mjs", "this check"],
+    ["docs/SETUP.md", "the owner setup steps"],
+    ["AGENTS.md", "the project memory line"],
+  ]);
   const tracked = await run("git", ["ls-files"], { cwd: repositoryRoot });
   const offenders = [];
   for (const file of tracked.stdout.split("\n")) {
-    if (
-      file === "" ||
-      file === "apps/api/src/translation.ts" ||
-      file === "apps/api/src/types.ts" ||
-      file === "apps/api/scripts/release-config.mjs" ||
-      file === "apps/api/scripts/release.test.mjs" ||
-      file === "apps/api/scripts/production-hosting-config.test.mjs" ||
-      file === "docs/SETUP.md" ||
-      file === "AGENTS.md"
-    ) {
-      continue;
-    }
+    if (file === "" || allowed.has(file)) continue;
     if (file.endsWith(".png") || file.endsWith(".ico")) continue;
     const text = await readFile(path.join(repositoryRoot, file), "utf8");
     if (text.includes("OPENCODE_GO_API_KEY")) offenders.push(file);
   }
   assert.deepEqual(offenders, []);
+  // An allowed file may name the secret, never a value for it.
+  for (const file of allowed.keys()) {
+    const text = await readFile(path.join(repositoryRoot, file), "utf8");
+    for (const line of text.split("\n")) {
+      if (line.includes("OPENCODE_GO_API_KEY")) {
+        assert.ok(
+          !/OPENCODE_GO_API_KEY\s*[:=]\s*["']?[A-Za-z0-9_-]{20,}/.test(line),
+          `${file} must name the secret, never carry one: ${line.trim()}`,
+        );
+      }
+    }
+  }
   // The local and production configurations carry the name of no secret at all.
   const local = parseJsonc(
     await readFile(path.join(apiDirectory, "wrangler.jsonc"), "utf8"),
