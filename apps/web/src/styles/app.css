@@ -69,9 +69,15 @@ body {
     background: var(--bg-app);
   }
 
+  /* Installed, there is no browser toolbar, so the large viewport is the
+     whole window. The dynamic one is not safe here: an iPhone Home Screen
+     launch with the black-translucent status bar reports 100dvh, 100svh and
+     innerHeight short by the status bar until the first scroll (iOS 26,
+     WebKit bug 301108), which lifted the tab bar 62px off the bottom edge.
+     100lvh keeps the full height; a browser tab keeps 100dvh above. */
   .ow-app {
     width: 100%;
-    height: 100dvh;
+    height: 100lvh;
     border: 0;
     border-radius: 0;
     box-shadow: none;

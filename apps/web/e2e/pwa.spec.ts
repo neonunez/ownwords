@@ -36,6 +36,11 @@ test.describe("installing, and the offline shell", () => {
       "content",
       /viewport-fit=cover/,
     );
+    // The installed frame's 100lvh in app.css assumes the page is drawn under
+    // the status bar; with an opaque bar the window starts below it instead.
+    await expect(
+      page.locator('meta[name="apple-mobile-web-app-status-bar-style"]'),
+    ).toHaveAttribute("content", "black-translucent");
   });
 
   test("registers a service worker and takes control", async ({ page }) => {
