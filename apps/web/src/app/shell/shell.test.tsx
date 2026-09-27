@@ -1,11 +1,17 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { RouterProvider, createMemoryRouter } from "react-router-dom";
+import {
+  MemoryRouter,
+  RouterProvider,
+  createMemoryRouter,
+} from "react-router-dom";
 import { routeTree } from "../routes";
 import { ClientProvider } from "./ClientProvider";
+import { SidePanel } from "./SidePanel";
 import { ThemeProvider } from "./ThemeProvider";
 import { createDemoClient } from "../../api/demo/demoClient";
+import { OwnwordsError } from "../../api/client";
 import { activeTabKey, modeFromPath } from "../navigation";
 
 function renderApp(initial = "/maintain/progress") {
@@ -159,6 +165,42 @@ describe("the side panel", () => {
     );
     expect(
       screen.getByRole("navigation", { name: "Maintain" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says in words when what is waiting cannot be read and nothing is learned", async () => {
+    const client = {
+      ...createDemoClient({ suggestionDelaysMs: {} }),
+      getProgress: () =>
+        Promise.reject(new OwnwordsError("network", "Offline.")),
+    };
+    render(
+      <ThemeProvider>
+        <ClientProvider client={client}>
+          <MemoryRouter>
+            <SidePanel
+              open
+              onClose={() => {}}
+              mode="maintain"
+              onModeChange={() => {}}
+              languages={[
+                {
+                  code: "en",
+                  name: "English",
+                  role: "native",
+                  level: "native",
+                },
+              ]}
+            />
+          </MemoryRouter>
+        </ClientProvider>
+      </ThemeProvider>,
+    );
+    const panel = await screen.findByRole("dialog", { name: "Ownwórds" });
+    expect(
+      await within(panel).findByText(
+        "What is waiting could not be read. Open the panel again to retry.",
+      ),
     ).toBeInTheDocument();
   });
 

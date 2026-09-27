@@ -390,6 +390,7 @@ export function LanguageForm({
         <Select
           label="Language to learn"
           value={learn ?? ""}
+          disabled={full && !learn}
           onChange={(code) => setLearn(code || null)}
           hint={
             learnable.length === 0
@@ -416,6 +417,11 @@ export function LanguageForm({
               the alphabet and a reference beside it.
             </p>
           </Card>
+        ) : full ? (
+          <Note>
+            A profile holds up to {MOST_LANGUAGES} languages. Remove one to add
+            another.
+          </Note>
         ) : (
           <Note>
             Leave it at “Not now” to keep up only the languages you speak. You

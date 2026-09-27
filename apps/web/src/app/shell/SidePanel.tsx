@@ -80,24 +80,25 @@ export function SidePanel({
       learningCode ? client.getCourse() : Promise.resolve(null),
     ]).then(([progress, course]) => {
       if (!live) return;
-      if (progress.status === "rejected" && course.status === "rejected") {
-        setWaiting("failed");
-        return;
-      }
       const summary = progress.status === "fulfilled" ? progress.value : null;
       const resume =
         course.status === "fulfilled" ? (course.value?.resume ?? null) : null;
+      const lesson =
+        resume && course.status === "fulfilled" && course.value
+          ? {
+              lessonId: resume.lessonId,
+              unitNumber: resume.unitNumber,
+              title: resume.title,
+              step: resume.step,
+              language: course.value.language,
+            }
+          : null;
+      if (!summary && !lesson) {
+        setWaiting("failed");
+        return;
+      }
       setWaiting({
-        lesson:
-          resume && course.status === "fulfilled" && course.value
-            ? {
-                lessonId: resume.lessonId,
-                unitNumber: resume.unitNumber,
-                title: resume.title,
-                step: resume.step,
-                language: course.value.language,
-              }
-            : null,
+        lesson,
         estimate: summary?.estimate ?? "",
         next: summary?.comingUp[0]?.when ?? null,
         progressRead: summary !== null,

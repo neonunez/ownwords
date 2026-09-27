@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LanguageForm } from "./LanguageForm";
 import type { Onboarding } from "../../api/types";
+import { MAINTAINABLE, MOST_LANGUAGES } from "../../lib/languages";
 
 const preferences: Onboarding["preferences"] = {
   explanationsIn: "en",
@@ -186,6 +187,51 @@ describe("the language form", () => {
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
     expect(onSubmit).toHaveBeenCalledWith(initial);
+  });
+
+  it("offers no course to learn once the profile is full, and says why", async () => {
+    const { onSubmit } = renderForm({
+      initial: {
+        languages: MAINTAINABLE.filter((code) => code !== "ru")
+          .slice(0, MOST_LANGUAGES)
+          .map((code) => ({ code, kind: "maintain", level: "b2" })),
+        preferences,
+      },
+    });
+    expect(learnSelect()).toBeDisabled();
+    expect(
+      within(
+        screen.getByRole("region", { name: "A new language, from zero" }),
+      ).getByText(/A profile holds up to 12 languages\. Remove one/),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(onSubmit.mock.calls[0]?.[0].languages).toHaveLength(MOST_LANGUAGES);
+  });
+
+  it("keeps a course already chosen changeable when the profile is full", async () => {
+    const { onSubmit } = renderForm({
+      initial: {
+        languages: [
+          ...MAINTAINABLE.filter((code) => code !== "ru")
+            .slice(0, MOST_LANGUAGES - 1)
+            .map((code) => ({
+              code,
+              kind: "maintain" as const,
+              level: "b2" as const,
+            })),
+          { code: "ru", kind: "learn", level: "a0" },
+        ],
+        preferences,
+      },
+    });
+    expect(learnSelect()).toBeEnabled();
+    await userEvent.selectOptions(learnSelect(), "");
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(
+      onSubmit.mock.calls[0]?.[0].languages.some(
+        (language) => language.kind === "learn",
+      ),
+    ).toBe(false);
   });
 
   it("says in words when the languages were not saved", async () => {
