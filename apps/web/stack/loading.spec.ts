@@ -14,13 +14,23 @@ async function hold(page: Page, pattern: string): Promise<() => void> {
   return release;
 }
 
-/** Whether the element's transform changes over a moment: whether it moves. */
-async function moves(element: Locator): Promise<boolean> {
-  const at = () => element.evaluate((node) => getComputedStyle(node).transform);
+/** Whether the element's computed `property` changes over a moment. */
+async function changes(
+  element: Locator,
+  property: "transform" | "opacity",
+): Promise<boolean> {
+  const at = () =>
+    element.evaluate(
+      (node, name) => getComputedStyle(node).getPropertyValue(name),
+      property,
+    );
   const first = await at();
   await element.page().waitForTimeout(600);
   return (await at()) !== first;
 }
+
+/** Whether the element's transform changes over a moment: whether it moves. */
+const moves = (element: Locator) => changes(element, "transform");
 
 // A slow read is simulated by holding its request at the browser; the API
 // answers normally once released. Screenshots are kept with the results as
@@ -44,13 +54,27 @@ test.describe("A read in flight, against the real backend", () => {
     const eyes = status.locator(".ow-kip-read");
     await expect(eyes).toHaveCSS("animation-name", "ow-kip-read");
     expect(await moves(eyes)).toBe(true);
+    // The ring's arc turns, so the wait visibly goes on.
+    const arc = status.locator(".ow-loading-arc");
+    await expect(arc).toHaveCSS("animation-name", "ow-turn");
+    expect(await moves(arc)).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath("progress-loading.png"),
     });
 
     release();
+    // What was read rises into the card's place the way a screen opens,
+    // all at once, and settles.
+    const revealed = page.locator(".ow-reveal");
+    await expect(revealed).toHaveCSS("animation-name", "ow-in");
     await expect(page.getByText(/There are no streaks/)).toBeVisible();
     await expect(status).toHaveCount(0);
+    await expect(page.locator(".ow-loading-ring")).toHaveCount(0);
+    await expect(revealed).toHaveCSS("opacity", "1");
+    await expect(revealed).toHaveCSS("transform", "none");
+    await page.screenshot({
+      path: testInfo.outputPath("progress-loaded.png"),
+    });
   });
 
   test("the Lexicon reads under a search that stays usable, in dark", async ({
@@ -72,9 +96,13 @@ test.describe("A read in flight, against the real backend", () => {
 
     release();
     await expect(page.getByText(/Your Lexicon is empty/)).toBeVisible();
+    await expect(page.locator(".ow-reveal")).toHaveCSS(
+      "animation-name",
+      "ow-in",
+    );
   });
 
-  test("the course reads with Kip still when motion is reduced", async ({
+  test("the course reads with Kip still and the ring breathing when motion is reduced", async ({
     page,
   }, testInfo) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -88,6 +116,12 @@ test.describe("A read in flight, against the real backend", () => {
     const eyes = status.locator(".ow-kip-read");
     await expect(eyes).toHaveCSS("animation-name", "none");
     expect(await moves(eyes)).toBe(false);
+    // Nothing travels: the whole ring fades in and out in place instead.
+    const arc = status.locator(".ow-loading-arc");
+    await expect(arc).toHaveCSS("animation-name", "ow-breathe");
+    await expect(arc).toHaveCSS("stroke-dasharray", "none");
+    expect(await moves(arc)).toBe(false);
+    expect(await changes(arc, "opacity")).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath("course-loading-reduced-motion.png"),
     });
@@ -96,5 +130,9 @@ test.describe("A read in flight, against the real backend", () => {
     await expect(
       page.getByRole("button", { name: /Continue · Unit 1/ }),
     ).toBeVisible();
+    // The course is simply there: no rise, and no wait before it.
+    const revealed = page.locator(".ow-reveal");
+    await expect(revealed).toHaveCSS("animation-name", "none");
+    await expect(revealed).toHaveCSS("opacity", "1");
   });
 });

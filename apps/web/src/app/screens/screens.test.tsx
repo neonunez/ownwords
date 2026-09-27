@@ -446,15 +446,24 @@ describe("a read in flight", () => {
     expect(
       await within(status).findByText("Reading your progress."),
     ).toBeInTheDocument();
-    const kip = status.querySelector("svg");
+    const kip = status.querySelector("svg.ow-kip");
     expect(kip).toHaveClass("ow-kip-reading");
     expect(kip).toHaveAttribute("aria-hidden", "true");
+    // Kip reads inside a turning ring, which is decorative too.
+    const ring = status.querySelector(".ow-loading-circle");
+    expect(ring).toHaveAttribute("aria-hidden", "true");
+    expect(ring?.querySelector(".ow-loading-arc")).not.toBeNull();
 
     answer(await demo.getProgress());
     expect(await screen.findByText("Practice is due")).toBeInTheDocument();
     expect(
       screen.queryByText("Reading your progress."),
     ).not.toBeInTheDocument();
+    expect(document.querySelector(".ow-loading-ring")).toBeNull();
+    // What was read eases in where the card was, as a screen does when it opens.
+    expect(
+      screen.getByText("Practice is due").closest(".ow-reveal"),
+    ).not.toBeNull();
   });
 
   it("never shows the loading card when the read is quick", async () => {
@@ -468,6 +477,69 @@ describe("a read in flight", () => {
       screen.queryByText("Reading your progress."),
     ).not.toBeInTheDocument();
     expect(document.querySelector(".ow-kip-reading")).toBeNull();
+    expect(document.querySelector(".ow-loading-ring")).toBeNull();
+    // Nothing waited, so nothing replays: the screen's own entrance is enough.
+    expect(document.querySelector(".ow-reveal")).toBeNull();
+  });
+
+  it("eases the Lexicon's entries in once, not again on every search", async () => {
+    const demo = createDemoClient();
+    let slow = true;
+    let answer: () => void = () => {};
+    const client = {
+      ...demo,
+      listEntries: async (...args: Parameters<typeof demo.listEntries>) => {
+        if (slow) {
+          slow = false;
+          await new Promise<void>((resolve) => {
+            answer = resolve;
+          });
+        }
+        return demo.listEntries(...args);
+      },
+    };
+    renderScreen(<LexiconScreen />, { route: "/maintain/lexicon", client });
+    expect(
+      await screen.findByText("Reading your Lexicon."),
+    ).toBeInTheDocument();
+
+    answer();
+    const count = await screen.findByText(/\d+ entries/);
+    const revealed = count.closest(".ow-reveal");
+    expect(revealed).not.toBeNull();
+
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Search your Lexicon" }),
+      "a",
+    );
+    // The search reads again with the entries still held, so the list stays.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(document.querySelectorAll(".ow-reveal")).toHaveLength(1);
+    expect(document.querySelector(".ow-reveal")).toBe(revealed);
+  });
+
+  it("eases a slow Lexicon read that fails in once, not twice", async () => {
+    const demo = createDemoClient();
+    let fail: () => void = () => {};
+    const client = {
+      ...demo,
+      listEntries: () =>
+        new Promise<never>((_, reject) => {
+          fail = () => reject(new Error("offline"));
+        }),
+    };
+    renderScreen(<LexiconScreen />, { route: "/maintain/lexicon", client });
+    expect(
+      await screen.findByText("Reading your Lexicon."),
+    ).toBeInTheDocument();
+
+    fail();
+    const message = await screen.findByText(
+      "Your Lexicon could not be read. Nothing was lost.",
+    );
+    const revealed = document.querySelectorAll(".ow-reveal");
+    expect(revealed).toHaveLength(1);
+    expect(revealed[0]).toContainElement(message);
   });
 
   it("keeps the Lexicon's search usable while its entries are read", async () => {

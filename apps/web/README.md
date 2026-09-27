@@ -172,11 +172,17 @@ The product's rules, and how they are kept:
   interactive sits under the notch or the home indicator.
 - **Relative units** throughout, so system text scaling grows text without
   clipping the layout.
-- **Reduced motion** zeroes every duration, including the mascot's.
+- **Reduced motion** zeroes every duration, including the mascot's. The one
+  exception is the loading ring, which then stops turning and instead fades
+  slowly in place, so a slow read never looks frozen.
 - **A slow read is announced once.** `Loading` keeps an empty `role="status"`
   region from the first render and fills it only after 300ms, so a quick read
-  neither flashes nor speaks, and a slow one is announced in words; Kip is
-  decorative. `npm run test:stack` holds requests to check it on real screens.
+  neither flashes nor speaks, and a slow one is announced in words; Kip and
+  the ring around it are decorative, and the ring goes when the read ends.
+  What was read then rises into the card's place with the screen's own
+  entrance, all at once (`app/reveal.ts`); only once, never on later updates
+  and never after a quick read. `npm run test:stack` holds requests to check
+  it on real screens.
 - **Stress marks** use the combining acute U+0301. Search folds it away along
   with Latin accents; answer checking forgives it but nothing else, because й
   is a letter and not an accented и. Nobody is ever asked to type it.
@@ -230,7 +236,7 @@ Changed on the way in, deliberately:
 | `role="tablist"` with no tab panels | `role="radiogroup"` with roving arrow keys | It chooses a format; it does not switch panels |
 | Sheets and the side panel inside the scrolling screen | Raised to the app frame, `inert` while closed | Focus and screen readers must not reach a closed overlay |
 | Press states via inline mouse handlers | CSS classes on `:active` | Touch, keyboard and reduced motion all behave |
-| Kip with three expressions | A fourth, `reading`, above a screen's words once its first read passes 300ms | A still line of text looked stalled; a quick read shows nothing rather than flashing |
+| Kip with three expressions | A fourth, `reading`, inside a turning ring above a screen's words once its first read passes 300ms | A still line of text, and then Kip alone, looked stalled; the ring never fills because nothing measures the read; a quick read shows nothing rather than flashing |
 | Settings, export and account actions in the side panel | Settings on a page of its own, one row from the panel; the panel keeps the mode and the languages, and gains **Up next**: the course step to carry on from and Maintain practice when it is due, each one tap away | The panel is for moving around. It is the one place allowed to cross modes, so it is the one place that can say what is waiting on both sides and go straight there |
 | A fixed list of languages, each with level chips | A language selector with a level for each language chosen, and a selector for the course; `Select` and `ChoiceGroup` join the component set | A fixed list read as the only languages supported. The selector offers the Latin- and Cyrillic-script languages the app's typeface draws; the course selector offers Russian alone, the one course there is |
 | `--neutral-500`, `--green-500`, `--amber-500` | Three stops darker in light mode | Small text on its own tint was between 3.2:1 and 4.4:1 |

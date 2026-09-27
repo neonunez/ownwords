@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, Mascot } from "../../design-system";
 import { Screen } from "../layout";
+import { useCountedLoader } from "../reveal";
 
 /**
  * How long a read may take before the screen says it is reading. A quicker
@@ -9,8 +10,9 @@ import { Screen } from "../layout";
 export const LOADING_DELAY_MS = 300;
 
 /**
- * What a screen shows while its first read is in flight: Kip reading, and the
- * words for what is being read.
+ * What a screen shows while its first read is in flight: Kip reading inside a
+ * turning ring, and the words for what is being read. The ring never fills,
+ * because nothing measures how far the read has got.
  */
 export function Loading({ label }: { label: string }) {
   return (
@@ -34,6 +36,7 @@ export function LoadingCard({ label }: { label: string }) {
     const timer = setTimeout(() => setShown(true), LOADING_DELAY_MS);
     return () => clearTimeout(timer);
   }, []);
+  useCountedLoader(shown);
 
   return (
     <div role="status">
@@ -44,12 +47,18 @@ export function LoadingCard({ label }: { label: string }) {
           className="ow-loading"
           style={{ textAlign: "center" }}
         >
-          <Mascot
-            expression="reading"
-            size={56}
-            eye="var(--bg-sunken)"
-            style={{ margin: "0 auto 10px" }}
-          />
+          <div className="ow-loading-ring">
+            <svg
+              className="ow-loading-circle"
+              viewBox="0 0 88 88"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle className="ow-loading-track" cx="44" cy="44" r="41" />
+              <circle className="ow-loading-arc" cx="44" cy="44" r="41" />
+            </svg>
+            <Mascot expression="reading" size={52} eye="var(--bg-sunken)" />
+          </div>
           <p
             style={{
               margin: 0,

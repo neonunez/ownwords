@@ -13,6 +13,7 @@ import { SidePanel } from "./SidePanel";
 import { ToastProvider } from "./ToastProvider";
 import { UpdatePrompt } from "../../pwa/UpdatePrompt";
 import { useAsync } from "./useAsync";
+import { ScreenFrame } from "../layout";
 import { useClient } from "./ClientProvider";
 import { useSession } from "../session/SessionGate";
 
@@ -91,9 +92,9 @@ function ShellBody({
   return (
     <>
       <main ref={mainRef} className="ow-main" id="ow-main" inert={sealed}>
-        <div className="ow-screen" key={location.pathname}>
+        <ScreenFrame key={location.pathname}>
           <Outlet context={{ openPanel }} />
-        </div>
+        </ScreenFrame>
       </main>
 
       {/* Sheets and the floating action sit above the screen but before the tab
