@@ -31,8 +31,8 @@ Everything except live provider verification runs locally without external crede
    ```
 
    The release refuses to deploy a config that names this secret, and
-   `apps/api/scripts/production-hosting-config.test.mjs` fails if the name ever appears in the app or in a tracked
-   file outside the Worker that reads it. The model id (`space-bunny-free`) and the endpoint
+   `apps/api/scripts/production-hosting-config.test.mjs` fails if the local Wrangler config or the production
+   template ever declares a value for it. The model id (`space-bunny-free`) and the endpoint
    (`https://opencode.ai/zen/go/v1/chat/completions`) are constants in `apps/api/src/translation.ts`; when the Go
    catalogue changes, that file is the only thing to change, and `version` there is part of the suggestion cache key.
 
