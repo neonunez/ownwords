@@ -20,7 +20,6 @@ import {
   assertReleaseTemplate,
   buildReleaseConfig,
   prepareReleaseConfig,
-  readCustomDomain,
   readReleaseEnvironment,
   ReleaseRefusal,
   serialiseReleaseConfig,
@@ -110,23 +109,6 @@ test("a release keeps the Custom Domain and never publishes workers.dev", () => 
   });
 });
 
-test("only the approved host is publishable", () => {
-  assert.equal(readCustomDomain(undefined), PRODUCTION_HOST);
-  assert.equal(readCustomDomain(PRODUCTION_HOST), PRODUCTION_HOST);
-  for (const domain of [
-    "*.neonunez.com",
-    "neonunez.com",
-    `www.${PRODUCTION_HOST}`,
-    `http://${PRODUCTION_HOST}`,
-    `${PRODUCTION_HOST}:8787`,
-    `${PRODUCTION_HOST}/maintain`,
-    "ownwords-api.workers.dev",
-    "",
-  ]) {
-    assert.throws(() => readCustomDomain(domain), { name: "ReleaseRefusal" });
-  }
-});
-
 test("a missing or wrong release value stops the release before anything is generated", () => {
   for (const key of Object.keys(environment)) {
     assert.throws(
@@ -175,7 +157,6 @@ test("the generated config is proved by the publisher's own production guards", 
   const prepared = await prepareReleaseConfig({
     env: environment,
     write: (file, text) => writeFile(file, text),
-    read: (file) => readFile(file, "utf8"),
     configPath: path.join(
       await mkdtemp(path.join(os.tmpdir(), "ownwords-release-")),
       "wrangler.production.jsonc",
@@ -259,6 +240,39 @@ test("a trigger body is not mistaken for a data change", () => {
   assert.ok(statements[1].includes("SELECT RAISE(ABORT"));
   for (const statement of statements) {
     assert.equal(classifyStatement(statement).safe, true);
+  }
+});
+
+test("an identifier ending in begin cannot merge the statements after it", () => {
+  const classified = classifyMigration({
+    name: "0300_begin.sql",
+    sql: "CREATE TABLE a (x_begin INTEGER, begin_at TEXT);\nDROP TABLE users;\nDELETE FROM sessions;",
+  });
+  assert.equal(classified.statements, 3);
+  assert.equal(classified.safe, false);
+  assert.equal(classified.reasons.length, 2);
+});
+
+test("only a trigger that refuses writes applies on its own", () => {
+  assert.equal(
+    classifyStatement(
+      "CREATE TRIGGER t BEFORE UPDATE ON a WHEN OLD.x_begin <> NEW.x_begin BEGIN SELECT RAISE(ABORT, 'it''s immutable'); SELECT RAISE(IGNORE); END",
+    ).safe,
+    true,
+  );
+  for (const sql of [
+    "CREATE TRIGGER t AFTER INSERT ON a BEGIN DELETE FROM users; END;",
+    "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT RAISE(ABORT, 'x'); UPDATE users SET email = ''; END;",
+    "CREATE TRIGGER t AFTER INSERT ON a BEGIN INSERT INTO log VALUES (1); END;",
+    "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT 1; END;",
+    "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT RAISE(ABORT, 'x'); END; DROP TABLE users;",
+    "CREATE TRIGGER t AFTER INSERT ON a BEGIN BEGIN SELECT RAISE(ABORT, 'x'); END; DROP TABLE users; END;",
+  ]) {
+    assert.equal(
+      classifyMigration({ name: "0300_trigger.sql", sql }).safe,
+      false,
+      `${sql} must not apply automatically`,
+    );
   }
 });
 

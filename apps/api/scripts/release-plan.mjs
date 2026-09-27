@@ -3,7 +3,7 @@
 // it may publish, and how it reads the live deployment back afterwards.
 //
 // The line this draws is the one the owner asked for. A backward-compatible
-// addition - a new table, an index, a nullable column, a trigger - applies
+// addition - a new table, an index, a nullable column, a guard trigger - applies
 // itself on merge, because the deployed code keeps working either way. Anything
 // that could destroy or reinterpret data, and anything this module cannot prove
 // is safe, stops the release before a single migration is applied, and says
@@ -75,6 +75,9 @@ export function stripSqlComments(sql) {
  * Splits SQL into statements, keeping a `CREATE TRIGGER` together with its
  * `BEGIN ... END` body. Without that, a trigger's own `BEFORE UPDATE` guard
  * would be read as a data-mutating statement and block its own migration.
+ * `BEGIN` and `END` count only as whole words, and only inside a statement that
+ * is itself a `CREATE TRIGGER`, so an identifier such as `x_begin` can never
+ * swallow the statements after it.
  *
  * @param {string} sql
  * @returns {string[]}
@@ -88,28 +91,18 @@ export function splitStatements(sql) {
   while (index < text.length) {
     const character = text[index];
     if (character === "'" || character === '"' || character === "`") {
-      const quote = character;
-      index += 1;
-      while (index < text.length) {
-        if (text[index] === quote) {
-          if (text[index + 1] === quote) {
-            index += 2;
-            continue;
-          }
-          break;
-        }
-        index += 1;
-      }
-      index += 1;
+      index = skipQuoted(text, index);
       continue;
     }
-    // A trigger's own `BEGIN ... END` body: its statements are part of the
-    // CREATE TRIGGER, and the block ends at the `;` after its own `END`.
-    const word = /^[A-Za-z]+/.exec(text.slice(index))?.[0];
+    const word = /^[A-Za-z0-9_$]+/.exec(text.slice(index))?.[0];
     if (word) {
       const keyword = word.toUpperCase();
-      if (keyword === "BEGIN") depth += 1;
-      else if (keyword === "END") depth -= 1;
+      if (
+        (keyword === "BEGIN" || keyword === "END") &&
+        TRIGGER.test(text.slice(start, index).trim())
+      ) {
+        depth += keyword === "BEGIN" ? 1 : -1;
+      }
       index += word.length;
       continue;
     }
@@ -128,12 +121,71 @@ export function splitStatements(sql) {
   return statements;
 }
 
+/**
+ * @param {string} text
+ * @param {number} index the opening quote
+ * @returns {number} the index just past the closing quote
+ */
+function skipQuoted(text, index) {
+  const quote = text[index];
+  let cursor = index + 1;
+  while (cursor < text.length) {
+    if (text[cursor] === quote) {
+      if (text[cursor + 1] === quote) {
+        cursor += 2;
+        continue;
+      }
+      break;
+    }
+    cursor += 1;
+  }
+  return cursor + 1;
+}
+
+const TRIGGER = /^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?TRIGGER\b/i;
+
+/** The only trigger body a release applies on its own: a guard that aborts a write. */
+const GUARD =
+  /^SELECT\s+RAISE\s*\(\s*(?:ABORT|FAIL|ROLLBACK|IGNORE)\s*(?:,\s*'(?:[^']|'')*'\s*)?\)$/i;
+
+/**
+ * A trigger is additive only when its body does nothing but refuse a write. A
+ * trigger that deletes, updates or inserts rewrites data on every later write,
+ * and a Worker rollback does not undo it.
+ *
+ * @param {string} statement a whole `CREATE TRIGGER` statement
+ */
+function isGuardTrigger(statement) {
+  let index = 0;
+  let body = null;
+  while (index < statement.length) {
+    const character = statement[index];
+    if (character === "'" || character === '"' || character === "`") {
+      index = skipQuoted(statement, index);
+      continue;
+    }
+    const word = /^[A-Za-z0-9_$]+/.exec(statement.slice(index))?.[0];
+    if (word) {
+      index += word.length;
+      if (word.toUpperCase() === "BEGIN") {
+        body = statement.slice(index);
+        break;
+      }
+      continue;
+    }
+    index += 1;
+  }
+  const end = body === null ? null : /^([\s\S]*)\bEND$/i.exec(body.trim());
+  if (!end) return false;
+  const guards = splitStatements(end[1]);
+  return guards.length > 0 && guards.every((guard) => GUARD.test(guard));
+}
+
 /** Statements a release applies on merge: additive DDL and nothing else. */
 const ADDITIVE = [
   /^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?TABLE\b/i,
   /^CREATE\s+(?:UNIQUE\s+)?INDEX\b/i,
   /^CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?VIEW\b/i,
-  /^CREATE\s+TRIGGER\b/i,
   /^PRAGMA\s+(?:foreign_keys|foreign_key_check|defer_foreign_keys)\b/i,
 ];
 
@@ -148,6 +200,15 @@ const ADDITIVE = [
  */
 export function classifyStatement(statement) {
   const text = statement.trim();
+  if (TRIGGER.test(text)) {
+    return isGuardTrigger(text)
+      ? { safe: true, reason: null }
+      : {
+          safe: false,
+          reason:
+            "a trigger whose body does more than SELECT RAISE(...) changes data on later writes",
+        };
+  }
   if (ADDITIVE.some((pattern) => pattern.test(text))) {
     return { safe: true, reason: null };
   }

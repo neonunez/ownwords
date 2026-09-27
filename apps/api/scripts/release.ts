@@ -45,6 +45,7 @@ import {
 import {
   assertExpectation,
   planPublicationRequests,
+  PublicationRefusal,
   readPublicationTarget,
   readPublishToken,
   verifyDeployedDatabaseBinding,
@@ -53,15 +54,19 @@ import {
 const execFileAsync = promisify(execFile);
 const log = (line: string) => process.stdout.write(`${line}\n`);
 
-/** Read-only or writing Wrangler calls, always against the generated config. */
-const wrangler = async (args: string[]): Promise<string> => {
+/** A Wrangler call exactly as given; the binding read-back names its own config. */
+const exec = async (args: string[]): Promise<string> => {
   const { stdout } = await execFileAsync(
     "npx",
-    ["--no-install", "wrangler", ...args, "--config", RELEASE_CONFIG_PATH],
+    ["--no-install", "wrangler", ...args],
     { cwd: repositoryRoot, maxBuffer: 64 * 1024 * 1024 },
   );
   return stdout;
 };
+
+/** Read-only or writing Wrangler calls, always against the generated config. */
+const wrangler = (args: string[]): Promise<string> =>
+  exec([...args, "--config", RELEASE_CONFIG_PATH]);
 
 const PRODUCTION_DATABASE = "ownwords-production";
 
@@ -80,7 +85,8 @@ async function releaseTarget() {
   try {
     return readPublicationTarget(RELEASE_CONFIG_PATH);
   } catch (error) {
-    if (error instanceof ReleaseRefusal) throw error;
+    if (error instanceof ReleaseRefusal || error instanceof PublicationRefusal)
+      throw error;
     throw new ReleaseRefusal(
       "missing_config",
       `no production config at ${RELEASE_CONFIG_PATH}; run "npm run release --workspace @ownwords/api -- config" first`,
@@ -93,7 +99,6 @@ async function stageConfig(): Promise<void> {
   const prepared = await prepareReleaseConfig({
     env: process.env,
     write: async (file, text) => writeFile(file, text),
-    read: (file) => readFile(file, "utf8"),
   });
   log(`config      ${prepared.configPath} (generated, gitignored)`);
   log(`worker      ${prepared.target.workerName}`);
@@ -142,12 +147,14 @@ async function stageMigrate(): Promise<void> {
         ? `destructive; authorized by ${migration.authorizedBy}`
         : "destructive; NOT authorized";
     log(
-      `pending     ${migration.name} (${migration.statements} statements, sha256:${migration.sha256.slice(0, 12)}…) ${how}`,
+      `pending     ${migration.name} (${migration.statements} statements, sha256:${migration.sha256}) ${how}`,
     );
   }
   if (plan.blocked.length > 0) {
     for (const migration of plan.blocked) {
-      log(`refused     ${migration.name}: ${migration.reasons.join("; ")}`);
+      log(
+        `refused     ${migration.name} sha256:${migration.sha256}: ${migration.reasons.join("; ")}`,
+      );
     }
     throw new ReleaseRefusal(
       "unauthorized_migration",
@@ -232,7 +239,7 @@ async function stageDeploy(): Promise<void> {
   log(`deploy\n${deployed.trimEnd()}`);
   assertNoWorkersDev(deployed);
 
-  const live = await verifyDeployedDatabaseBinding({ target, exec: wrangler });
+  const live = await verifyDeployedDatabaseBinding({ target, exec });
   // The version this run deployed is the version now serving, read back from
   // Cloudflare rather than trusted from the deploy's own output.
   const current = /Current Version ID:\s*([0-9a-f-]{36})/i.exec(deployed)?.[1];
@@ -314,7 +321,7 @@ async function stagePublish(): Promise<void> {
     return;
   }
   const token = readPublishToken(process.env);
-  const live = await verifyDeployedDatabaseBinding({ target, exec: wrangler });
+  const live = await verifyDeployedDatabaseBinding({ target, exec });
   log(
     `deployed    version ${live.versionIds.join(", ")} of ${target.workerName} is bound to ${target.databaseName}`,
   );
@@ -384,7 +391,7 @@ try {
   log(`stage       ${stage} (${PRODUCTION_HOST})`);
   await STAGES[stage]();
 } catch (error) {
-  if (error instanceof ReleaseRefusal) {
+  if (error instanceof ReleaseRefusal || error instanceof PublicationRefusal) {
     console.error(`refused (${error.reason}): ${error.message}`);
   } else {
     console.error(error instanceof Error ? error.message : String(error));

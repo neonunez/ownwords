@@ -181,33 +181,12 @@ export function readReleaseEnvironment(env) {
 }
 
 /**
- * The exact hostname a release may publish. One host, no wildcard, no apex, no
- * `www`, no scheme, no port and no path, and never anything but the approved
- * production host - a Custom Domain that is silently different is a detached or
- * hijacked site.
- *
- * @param {string | undefined} customDomain
- */
-export function readCustomDomain(customDomain) {
-  const value = String(customDomain ?? PRODUCTION_HOST)
-    .trim()
-    .toLowerCase();
-  if (value !== PRODUCTION_HOST) {
-    throw new ReleaseRefusal(
-      "wrong_domain",
-      `a release may publish only ${PRODUCTION_HOST}, found ${value || "nothing"}; the Custom Domain is never widened`,
-    );
-  }
-  return value;
-}
-
-/**
  * The production config a release deploys from: the tracked template's identity
  * with the real database ID and the one live Custom Domain route.
  *
- * @param {{ template: Record<string, any>, databaseId: string, customDomain?: string }} input
+ * @param {{ template: Record<string, any>, databaseId: string }} input
  */
-export function buildReleaseConfig({ template, databaseId, customDomain }) {
+export function buildReleaseConfig({ template, databaseId }) {
   assertReleaseTemplate(template);
   if (!D1_ID.test(databaseId) || databaseId === ZERO_D1_ID) {
     throw new ReleaseRefusal(
@@ -215,11 +194,10 @@ export function buildReleaseConfig({ template, databaseId, customDomain }) {
       `database_id is not a real production D1 ID (${databaseId || "empty"})`,
     );
   }
-  const host = readCustomDomain(customDomain);
   const config = {
     ...structuredClone(template),
     workers_dev: false,
-    routes: [{ pattern: host, custom_domain: true }],
+    routes: [{ pattern: PRODUCTION_HOST, custom_domain: true }],
     d1_databases: template.d1_databases.map((database) => ({
       ...database,
       database_id: databaseId,
@@ -273,7 +251,6 @@ export async function prepareReleaseConfig({
   const config = buildReleaseConfig({
     template,
     databaseId: release.databaseId,
-    customDomain: env.OWNWORDS_CUSTOM_DOMAIN,
   });
   const text = serialiseReleaseConfig(config);
   await write(configPath, text);
@@ -284,6 +261,6 @@ export async function prepareReleaseConfig({
     config,
     configPath,
     target,
-    host: readCustomDomain(env.OWNWORDS_CUSTOM_DOMAIN),
+    host: PRODUCTION_HOST,
   };
 }

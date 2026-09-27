@@ -82,12 +82,13 @@ earlier version stay on.
 ## Database migrations
 
 An ordinary backward-compatible addition applies itself on merge, with no human step: `CREATE TABLE`, `CREATE INDEX`,
-`CREATE VIEW`, `CREATE TRIGGER`, and `ALTER TABLE … ADD COLUMN` that is nullable or has a default. The gate reads the
-composed SQL statement by statement, so a trigger body is part of its `CREATE TRIGGER` rather than a data change, and
-a comment or a string literal cannot smuggle one past it.
+`CREATE VIEW`, a `CREATE TRIGGER` whose body is only `SELECT RAISE(...)` guards, and `ALTER TABLE … ADD COLUMN` that
+is nullable or has a default. The gate reads the composed SQL statement by statement, so a guard trigger's body is part
+of its `CREATE TRIGGER` rather than a data change, and a comment, a string literal or an identifier cannot smuggle one
+past it.
 
 Anything that could destroy or reinterpret data the deployed code already serves stops the release and names the file
-and the statement — `DROP`, `DELETE`, `UPDATE`, `INSERT`, `REPLACE`, a rename, a dropped column, a `NOT NULL` column
+and the statement — `DROP`, `DELETE`, `UPDATE`, `INSERT`, `REPLACE`, a trigger that does more than refuse a write, a rename, a dropped column, a `NOT NULL` column
 with no default, a new foreign key, `VACUUM`, or any statement it does not recognise. To authorize one, add it to
 `apps/api/release/database-authorizations.json` in the same reviewed pull request, naming the exact file, its exact
 `sha256`, who authorized it and why:
@@ -97,7 +98,7 @@ with no default, a new foreign key, `VACUUM`, or any statement it does not recog
   "migrations": [
     {
       "file": "0300_learning_retention.sql",
-      "sha256": "<the sha256 of the file as it is now, which the refused release prints>",
+      "sha256": "<the full sha256 of the file as it is now, which the refused release prints>",
       "authorizedBy": "captain",
       "note": "why this data change is safe, and what it does to existing rows"
     }
