@@ -1,0 +1,4 @@
+{
+  "comment": "Migrations here that are not backward-compatible additions. A release applies an additive migration on merge with no human step; anything that could destroy or reinterpret data the deployed code already serves stops the release until this file names the exact file and its exact sha256. Editing an authorized migration withdraws its authorization.",
+  "migrations": []
+}

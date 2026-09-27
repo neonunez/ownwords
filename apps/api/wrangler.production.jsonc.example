@@ -9,7 +9,9 @@
   //
   // `workers_dev: false` with no `routes` means this deploy publishes no
   // hostname at all: attaching ownwords.neonunez.com is a Custom Domain step the
-  // owner takes separately, never a side effect of deploying.
+  // owner takes separately, never a side effect of deploying. The automated
+  // release (`docs/RELEASES.md`) generates its config from this template and
+  // adds only the already-attached Custom Domain, so it cannot drop it.
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "ownwords-api",
   "main": "src/index.ts",

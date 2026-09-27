@@ -1,0 +1,90 @@
+name: Release
+
+# The production release runs on merge to main, once the repository's own checks
+# are green. There is no release button and no per-release terminal ceremony: the
+# stages below generate the config from the tracked template, apply the additive
+# migrations, deploy the Worker with the built app, and publish the course
+# versions a reviewed pull request authorized. Everything that cannot be proved
+# stops the run before it mutates anything.
+on:
+  push:
+    branches: [main]
+
+# One production release at a time; a new push waits rather than cancelling a
+# half-finished release.
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Neither of these is a credential: a Cloudflare account ID names the
+      # account, and a D1 ID names the database. Both are release configuration,
+      # set once, and both are proved against the live deployment before use.
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      OWNWORDS_D1_DATABASE_ID: ${{ vars.OWNWORDS_D1_DATABASE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: The release configuration is present
+        # Every value the four stages need, checked before anything installs,
+        # migrates, deploys or publishes: a release must not change the database
+        # or the Worker with the publication authority still missing. Names the
+        # value that is absent, never its value. docs/RELEASES.md has the
+        # one-time setup.
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -n "$OWNWORDS_D1_DATABASE_ID" ] || missing="$missing OWNWORDS_D1_DATABASE_ID"
+          [ -n "$CONTENT_PUBLISH_TOKEN" ] || missing="$missing CONTENT_PUBLISH_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "::error::missing release configuration:$missing. See docs/RELEASES.md."
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONTENT_PUBLISH_TOKEN: ${{ secrets.CONTENT_PUBLISH_TOKEN }}
+
+      - run: npm ci
+
+      # The same checks CI runs on a pull request. A release never ships code
+      # those did not pass.
+      - run: npm run check
+
+      # The real app build is the deployed asset. `apps/web/demo-dist` is never
+      # uploaded, and the deploy stage refuses to run without this build.
+      - run: npm run build
+
+      - name: Generate and prove the production config
+        run: npm run release --workspace @ownwords/api -- config
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Apply the additive migrations
+        # No credential but the Cloudflare token: the publication token is needed
+        # by the publish stage alone.
+        run: npm run release --workspace @ownwords/api -- migrate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Deploy the Worker and the app
+        run: npm run release --workspace @ownwords/api -- deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Publish the authorized course versions
+        run: npm run release --workspace @ownwords/api -- publish
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONTENT_PUBLISH_TOKEN: ${{ secrets.CONTENT_PUBLISH_TOKEN }}
