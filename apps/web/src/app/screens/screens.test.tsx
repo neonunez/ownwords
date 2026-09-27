@@ -10,6 +10,7 @@ import { ProgressScreen } from "./maintain/ProgressScreen";
 import { PracticeScreen } from "./PracticeScreen";
 import { AlphabetScreen } from "./learn/AlphabetScreen";
 import { CourseScreen } from "./learn/CourseScreen";
+import { LOADING_DELAY_MS } from "./ScreenState";
 
 describe("the Lexicon", () => {
   it("lists the collection and says how much of it is shown", async () => {
@@ -419,5 +420,68 @@ describe("learn", () => {
     expect(
       screen.getByRole("button", { name: /Ско́лько сто́ит\?/ }),
     ).toBeDisabled();
+  });
+});
+
+describe("a read in flight", () => {
+  it("shows Kip reading, and says what is being read, once the read is slow", async () => {
+    const demo = createDemoClient();
+    let answer: (
+      value: Awaited<ReturnType<typeof demo.getProgress>>,
+    ) => void = () => {};
+    const client = {
+      ...demo,
+      getProgress: () =>
+        new Promise<Awaited<ReturnType<typeof demo.getProgress>>>((resolve) => {
+          answer = resolve;
+        }),
+    };
+    renderScreen(<ProgressScreen />, { route: "/maintain/progress", client });
+
+    // Silent at first: the region waits for the words, so a quick read
+    // neither flashes nor announces anything.
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+
+    expect(
+      await within(status).findByText("Reading your progress."),
+    ).toBeInTheDocument();
+    const kip = status.querySelector("svg");
+    expect(kip).toHaveClass("ow-kip-reading");
+    expect(kip).toHaveAttribute("aria-hidden", "true");
+
+    answer(await demo.getProgress());
+    expect(await screen.findByText("Practice is due")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Reading your progress."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never shows the loading card when the read is quick", async () => {
+    renderScreen(<ProgressScreen />, { route: "/maintain/progress" });
+    expect(
+      screen.queryByText("Reading your progress."),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByText("Practice is due")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, LOADING_DELAY_MS + 100));
+    expect(
+      screen.queryByText("Reading your progress."),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".ow-kip-reading")).toBeNull();
+  });
+
+  it("keeps the Lexicon's search usable while its entries are read", async () => {
+    const demo = createDemoClient();
+    const client = {
+      ...demo,
+      listEntries: () => new Promise<never>(() => {}),
+    };
+    renderScreen(<LexiconScreen />, { route: "/maintain/lexicon", client });
+    expect(
+      await screen.findByText("Reading your Lexicon."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: "Search your Lexicon" }),
+    ).toBeEnabled();
   });
 });

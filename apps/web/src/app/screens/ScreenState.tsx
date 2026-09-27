@@ -1,20 +1,67 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, Mascot } from "../../design-system";
 import { Screen } from "../layout";
 
-/** What a screen shows while its first read is in flight. */
+/**
+ * How long a read may take before the screen says it is reading. A quicker
+ * answer replaces the empty body directly, so nothing flashes on the way.
+ */
+export const LOADING_DELAY_MS = 300;
+
+/**
+ * What a screen shows while its first read is in flight: Kip reading, and the
+ * words for what is being read.
+ */
 export function Loading({ label }: { label: string }) {
   return (
     <Screen>
-      <Card tone="sunken" padding={24} style={{ textAlign: "center" }}>
-        <p
-          role="status"
-          style={{ margin: 0, font: "var(--type-body)", color: "var(--fg-2)" }}
-        >
-          {label}
-        </p>
-      </Card>
+      <LoadingCard label={label} />
     </Screen>
+  );
+}
+
+/**
+ * The same, for a read inside a screen whose other controls stay usable.
+ *
+ * The status region is there from the first render and stays empty for the
+ * delay, so the words are announced once when they arrive, and a quick read
+ * announces nothing.
+ */
+export function LoadingCard({ label }: { label: string }) {
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(true), LOADING_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div role="status">
+      {shown && (
+        <Card
+          tone="sunken"
+          padding={24}
+          className="ow-loading"
+          style={{ textAlign: "center" }}
+        >
+          <Mascot
+            expression="reading"
+            size={56}
+            eye="var(--bg-sunken)"
+            style={{ margin: "0 auto 10px" }}
+          />
+          <p
+            style={{
+              margin: 0,
+              font: "var(--type-body)",
+              color: "var(--fg-2)",
+            }}
+          >
+            {label}
+          </p>
+        </Card>
+      )}
+    </div>
   );
 }
 

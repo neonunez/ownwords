@@ -128,6 +128,23 @@ body {
   animation: ow-in var(--motion-base) var(--ease-out) both;
 }
 
+/* ---- a read in flight -------------------------------------------------- */
+
+/* The loading card only appears once a read has been slow (see ScreenState),
+   and then eases in rather than flashing. */
+@keyframes ow-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ow-loading {
+  animation: ow-appear var(--motion-slow) var(--ease-out) both;
+}
+
 /* ---- press, hover and focus -------------------------------------------- */
 
 .ow-press,

@@ -11,7 +11,7 @@ import {
 } from "../../../design-system";
 import type { StateKind } from "../../../design-system";
 import { Screen } from "../../layout";
-import { Empty, Failed, Loading } from "../ScreenState";
+import { Empty, Failed, LoadingCard } from "../ScreenState";
 import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
 import { useScreen } from "../../shell/useScreen";
@@ -163,7 +163,7 @@ export function LexiconScreen() {
         </div>
 
         {page.loading && !page.data ? (
-          <Loading label="Reading your Lexicon." />
+          <LoadingCard label="Reading your Lexicon." />
         ) : page.error ? (
           <Failed
             message="Your Lexicon could not be read. Nothing was lost."

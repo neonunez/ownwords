@@ -5,7 +5,7 @@ import "./Mascot.css";
 const BODY =
   "M17 22c0-4.4 3.6-8 8-8h14c4.4 0 8 3.6 8 8v33.6c0 1.6-1.7 2.6-3.1 1.7L32 46l-11.9 9.3c-1.4.9-3.1-.1-3.1-1.7Z";
 
-export type MascotExpression = "default" | "happy" | "thinking";
+export type MascotExpression = "default" | "happy" | "thinking" | "reading";
 
 export interface MascotProps {
   expression?: MascotExpression;
@@ -31,9 +31,11 @@ export function Mascot({
 }: MascotProps) {
   const happy = expression === "happy";
   const thinking = expression === "thinking";
+  // Reading: the eyes run along a line and drop to the next, for a read in flight.
+  const reading = expression === "reading";
   const ref = useRef<SVGSVGElement>(null);
   const [look, setLook] = useState<[number, number]>([0, 0]);
-  const track = interactive && !thinking;
+  const track = interactive && !thinking && !reading;
 
   const tracking = track && !prefersReducedMotion();
   const offset = tracking ? look : ([0, 0] as const);
@@ -64,6 +66,7 @@ export function Mascot({
     bob ? "ow-kip-bob" : "",
     happy ? "ow-kip-happy" : "",
     thinking ? "ow-kip-think" : "",
+    reading ? "ow-kip-reading" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -112,9 +115,15 @@ export function Mascot({
           strokeLinecap="round"
         />
         <g
-          className={thinking ? "ow-kip-eyes ow-kip-look" : "ow-kip-eyes"}
-          style={
+          className={
             thinking
+              ? "ow-kip-eyes ow-kip-look"
+              : reading
+                ? "ow-kip-eyes ow-kip-read"
+                : "ow-kip-eyes"
+          }
+          style={
+            thinking || reading
               ? undefined
               : { transform: `translate(${offset[0]}px, ${offset[1]}px)` }
           }

@@ -167,6 +167,10 @@ The product's rules, and how they are kept:
 - **Relative units** throughout, so system text scaling grows text without
   clipping the layout.
 - **Reduced motion** zeroes every duration, including the mascot's.
+- **A slow read is announced once.** `Loading` keeps an empty `role="status"`
+  region from the first render and fills it only after 300ms, so a quick read
+  neither flashes nor speaks, and a slow one is announced in words; Kip is
+  decorative. `npm run test:stack` holds requests to check it on real screens.
 - **Stress marks** use the combining acute U+0301. Search folds it away along
   with Latin accents; answer checking forgives it but nothing else, because й
   is a letter and not an accented и. Nobody is ever asked to type it.
@@ -219,6 +223,7 @@ Changed on the way in, deliberately:
 | `role="tablist"` with no tab panels | `role="radiogroup"` with roving arrow keys | It chooses a format; it does not switch panels |
 | Sheets and the side panel inside the scrolling screen | Raised to the app frame, `inert` while closed | Focus and screen readers must not reach a closed overlay |
 | Press states via inline mouse handlers | CSS classes on `:active` | Touch, keyboard and reduced motion all behave |
+| Kip with three expressions | A fourth, `reading`, above a screen's words once its first read passes 300ms | A still line of text looked stalled; a quick read shows nothing rather than flashing |
 | `--neutral-500`, `--green-500`, `--amber-500` | Three stops darker in light mode | Small text on its own tint was between 3.2:1 and 4.4:1 |
 
 Not imported: the generated review artefacts that ship alongside the package
