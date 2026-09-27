@@ -164,9 +164,9 @@ a change into an additive migration that ships with the code and a separate, exp
 A Worker rollback redeploys the previous version; `wrangler deployments list` names the versions and
 `wrangler rollback` returns to the one before. It does **not** reverse D1 writes, it does not reverse a published
 course version, and it does not reverse a migration the release applied — an applied migration is a schema change, and
-a Worker rolled back to a version that predates it may not even run. This is why the migration gate exists. Whether a failed run is fixed by
-re-running, by rolling back or by restoring depends on how far it got, which is read from the live state, never
-assumed.
+a Worker rolled back to a version that predates it may not even run. This is why the migration gate exists. Whether a
+failed run is fixed by re-running, by rolling back or by restoring depends on how far it got, which is read from the
+live state, never assumed.
 
 For a bad release, in the order the damage occurs:
 
