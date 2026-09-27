@@ -4,7 +4,7 @@ Everything except live provider verification runs locally without external crede
 
 ## What the owner must provide later
 
-1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. The deploy itself attaches no new hostname, so it needs no `Workers Routes Write`; add zone-scoped `Workers Routes Write` if the release's reconciliation of the already-attached Custom Domain is refused. That token and the account ID are the release workflow's only Cloudflare credentials: they live in GitHub Actions secrets and variables (`docs/RELEASES.md`), never in this repository, and no local test needs them.
+1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. The deploy itself leaves the attached Custom Domain exactly as it is, so the documented minimum is `Editor` on the Worker plus `D1 Write`; add zone-scoped `Workers Routes Write` if the release's reconciliation of that connection is refused (`docs/RELEASES.md` cites the Cloudflare rule and the one thing the documentation does not settle). That token and the account ID are the release workflow's only Cloudflare credentials: they live in GitHub Actions secrets and variables, never in this repository, and no local test needs them.
 2. **Google OAuth:** a **Web application** OAuth client exists in the `ownwords` Google Cloud project (External,
    Testing), authorised for the JavaScript origin `https://ownwords.neonunez.com` and exactly
    `https://ownwords.neonunez.com/api/auth/callback/google` as its redirect URI; the owner holds its secret. Add
@@ -320,8 +320,9 @@ These need the live resources listed at the top of this file; no test here stand
    the same ceremony is checked only on a Chromium virtual authenticator, which says nothing about Safari, iCloud
    Keychain or the installed app.
 3. **Cloudflare:** the automated release path in `docs/RELEASES.md` has not yet run against the live account, so its
-   first real release is unverified: the token scopes, whether reconciling the attached Custom Domain needs
-   zone-scoped `Workers Routes: Write`, and one remote `wrangler d1 export` restored into a separate test database.
+   first real release is unverified: whether Wrangler's reconciliation of the already-attached Custom Domain is
+   refused by a token scoped to the Worker, and one remote `wrangler d1 export` restored into a separate test
+   database. The documented token scopes are settled; the route reconciliation is not.
 4. **Course content:** the automated `publish` stage has not yet run; `russian-foundations` v1 was published by the
    owner's own confirmed run of the command in "Publishing course content to production", and every later version goes
    through `apps/api/release/content-releases.json`.
