@@ -1,0 +1,11 @@
+{
+  "comment": "The course versions a reviewed pull request authorizes for publication to production. Each entry is one exact course, version and content hash with the single pack it names - there is no wildcard and no publish-everything sweep, because a published version is immutable. A release publishes an entry whose version is not yet published, and treats an already-published entry as done.",
+  "releases": [
+    {
+      "course": "russian-foundations",
+      "version": 1,
+      "hash": "684033be47b582f4d4fc87b95c0dd7c62f9a1015a45523af52cdb817c59ad708",
+      "pack": "packages/learning/content/russian-foundations-v1.json"
+    }
+  ]
+}

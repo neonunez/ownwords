@@ -4,7 +4,7 @@ Everything except live provider verification runs locally without external crede
 
 ## What the owner must provide later
 
-1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. The deploy itself attaches no hostname, so it needs no `Workers Routes Write`; add zone-scoped `Workers Routes Write` only if the owner delegates the Custom Domain attachment to an operator. These are deploy-time credentials only; local work and CI do not need them.
+1. **Cloudflare deploy access:** the target Cloudflare account ID and an account-owned API token restricted to that account. First-time automated setup needs `D1 Write` plus Workers product `Admin` to create the database and Worker. The safer ongoing token is scoped to `D1 Write` and `Editor` on only the created `ownwords-api` Worker; the owner can pre-create the Worker to avoid granting product-level `Admin`. The deploy itself attaches no new hostname, so it needs no `Workers Routes Write`; add zone-scoped `Workers Routes Write` if the release's reconciliation of the already-attached Custom Domain is refused. That token and the account ID are the release workflow's only Cloudflare credentials: they live in GitHub Actions secrets and variables (`docs/RELEASES.md`), never in this repository, and no local test needs them.
 2. **Google OAuth:** a **Web application** OAuth client exists in the `ownwords` Google Cloud project (External,
    Testing), authorised for the JavaScript origin `https://ownwords.neonunez.com` and exactly
    `https://ownwords.neonunez.com/api/auth/callback/google` as its redirect URI; the owner holds its secret. Add
@@ -72,13 +72,15 @@ and no secret is ever in it. `npm run check:hosting --workspace @ownwords/api` b
 and serves it under a real `wrangler dev`, checking the shell, the manifest, the service worker, and that `/api/*`
 answers with JSON — including its own 404 — on local state and with no credential.
 
-The checked-in `apps/api/wrangler.jsonc` stays local-only, with a non-deployable placeholder D1 ID. No repository
-workflow deploys.
+The checked-in `apps/api/wrangler.jsonc` stays local-only, with a non-deployable placeholder D1 ID. Merges to
+`main` deploy automatically: `.github/workflows/release.yml` and `docs/RELEASES.md` are the release path, and the
+steps below are how the same deployment is done by hand, or how the first one is done.
 
-### Deployment (not executed here; every step is the owner's to approve)
+### Deployment by hand (`docs/RELEASES.md` is the automated path)
 
-Each numbered step is a separate permission boundary. None of them has been run: this repository contains the
-configuration, not a deployment.
+Each numbered step is a separate permission boundary. The production Worker, its D1 database, its five secrets and the
+Custom Domain `ownwords.neonunez.com` already exist; the steps below are what a hand deployment still does, and what
+the automated release does on every merge.
 
 1. **Create the production database and copy the template.** D1 creation is billable.
 
@@ -137,8 +139,8 @@ configuration, not a deployment.
 
 **Nothing is published to make authentication work.** Deploying and inviting the first account do not publish
 course content: the database holds the invited account's own data, and the Russian Foundations pack (teacher-reviewed
-and shipped without recordings; `packages/learning/content/README.md`) is only ever loaded by the explicit operator run
-below.
+and shipped without recordings; `packages/learning/content/README.md`) is only ever loaded by an authorized
+publication, by the release record or by the operator run below.
 
 **Rollback.** A Worker rollback redeploys the previous version; `npx wrangler deployments list --config
 apps/api/wrangler.production.jsonc` names the versions and `npx wrangler rollback --config
@@ -169,7 +171,13 @@ other administrative credential opens this route. Provision it with `wrangler se
 browser storage, URLs, shell history, logs and exported API collections. Replacing the secret revokes publication
 authority.
 
-**This publication has not been run.** `npm run content:publish:remote` refuses to target anything but the copied
+**A publication is authorized by a reviewed pull request, not by a terminal.** `apps/api/release/content-releases.json`
+lists the exact course, version, content hash and pack a change authorizes; the `publish` stage of
+`.github/workflows/release.yml` publishes each entry that is not yet published through the same guarded route, and
+reports an already-published entry as done. `docs/RELEASES.md` has the shape of an entry and the whole release path.
+The command below is the by-hand equivalent, and its refusals are the ones the automated path inherits.
+
+`npm run content:publish:remote` refuses to target anything but the copied
 production config: the tracked `apps/api/wrangler.jsonc`, the tracked `wrangler.production.jsonc.example`, a config
 whose `ENVIRONMENT` is not `production`, a Worker other than `ownwords-api`, an origin other than
 `https://ownwords.neonunez.com`, a database other than `ownwords-production`, and a `database_id` that is still the
@@ -186,7 +194,7 @@ permission.
 
 From the repository root, in an owner-controlled terminal, with the production config already copied, the real D1 ID
 in it, the migrations applied and the Worker deployed (npm runs the workspace script from `apps/api`, so `--config`
-and the pack path are relative to it):
+and the pack path are relative to it). This is how `russian-foundations` v1 was published:
 
 ```sh
 npm run content:validate --workspace @ownwords/learning -- content/russian-foundations-v1.json
@@ -311,12 +319,12 @@ These need the live resources listed at the top of this file; no test here stand
    Home Screen app, then sign out and sign in with it. Confirm the RP ID and origin match the deployed host. Locally
    the same ceremony is checked only on a Chromium virtual authenticator, which says nothing about Safari, iCloud
    Keychain or the installed app.
-3. **Cloudflare:** create the production D1 database, apply the composed migrations remotely, dry-run and deploy the
-   Worker and its assets, attach the Custom Domain, then run one remote `wrangler d1 export` and restore it into a
-   separate test database. The configuration for this is in the repository and locally tested; the steps are not run.
-4. **Course content:** publish the reviewed production course pack to the remote database. `content:publish:remote`
-   exists and is exercised locally against an isolated local D1, but nothing has been published: the production
-   publication is the owner's own confirmed run of the command in "Publishing course content to production" below.
+3. **Cloudflare:** the automated release path in `docs/RELEASES.md` has not yet run against the live account, so its
+   first real release is unverified: the token scopes, whether reconciling the attached Custom Domain needs
+   zone-scoped `Workers Routes: Write`, and one remote `wrangler d1 export` restored into a separate test database.
+4. **Course content:** the automated `publish` stage has not yet run; `russian-foundations` v1 was published by the
+   owner's own confirmed run of the command in "Publishing course content to production", and every later version goes
+   through `apps/api/release/content-releases.json`.
 5. **The app on the deployed origin:** the hosting configuration is in the repository and checked locally, but the
    installed app, the standalone launch, safe areas, the offline shell and the "new version" prompt are still only
    Chromium on a desktop, shaped like a phone. Check them on the iPhone, after a real deployment.
