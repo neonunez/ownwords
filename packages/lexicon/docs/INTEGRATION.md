@@ -81,7 +81,9 @@ Russian suggestions impossible at the integration boundary.
 - Gather `packages/lexicon/migrations/0100_lexicon.sql` after core `0001*` migrations and before learning `0200*`.
 - Runtime dependencies: `hono@4.13.8`, `ts-fsrs@5.4.2`.
 - `createLexiconRoutes({ clock, idGenerator, translationProvider, wrongAnswerDelayMs })` supports deterministic tests.
-- `translationProvider` defaults to a no-network disabled implementation.
+- `translationProvider` defaults to a no-network disabled implementation, and also accepts a
+  `(bindings) => TranslationProvider | undefined` factory resolved per request, for a provider that needs a per-request
+  binding such as a secret. A factory that returns `undefined` answers that request with the disabled provider.
 
 `ts-fsrs` owns the scheduling algorithm. Flashcard and cloze views select different presentation data but update the
 same `(owner, equivalent, direction)` card. A rating of `Again` also creates a short, session-scoped revisit; later

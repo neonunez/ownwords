@@ -120,6 +120,38 @@ test("the copied production config and the built app stay untracked", async () =
   assert.deepEqual(stdout.trim().split("\n"), paths);
 });
 
+test("the OpenCode Go key is server-only, and never a tracked value", async () => {
+  // The owner's translation key is a Worker secret. Its name may appear where
+  // the Worker reads it, and nowhere else: not in the app, not in a Wrangler
+  // config, not in anything the release would serialise.
+  const tracked = await run("git", ["ls-files"], { cwd: repositoryRoot });
+  const offenders = [];
+  for (const file of tracked.stdout.split("\n")) {
+    if (
+      file === "" ||
+      file === "apps/api/src/translation.ts" ||
+      file === "apps/api/src/types.ts" ||
+      file === "apps/api/scripts/release-config.mjs" ||
+      file === "apps/api/scripts/release.test.mjs" ||
+      file === "apps/api/scripts/production-hosting-config.test.mjs" ||
+      file === "docs/SETUP.md" ||
+      file === "AGENTS.md"
+    ) {
+      continue;
+    }
+    if (file.endsWith(".png") || file.endsWith(".ico")) continue;
+    const text = await readFile(path.join(repositoryRoot, file), "utf8");
+    if (text.includes("OPENCODE_GO_API_KEY")) offenders.push(file);
+  }
+  assert.deepEqual(offenders, []);
+  // The local and production configurations carry the name of no secret at all.
+  const local = parseJsonc(
+    await readFile(path.join(apiDirectory, "wrangler.jsonc"), "utf8"),
+  );
+  assert.equal(JSON.stringify(local).includes("OPENCODE_GO_API_KEY"), false);
+  assert.equal(JSON.stringify(template).includes("OPENCODE_GO_API_KEY"), false);
+});
+
 test("the JSONC reader handles the dialect the template is written in", () => {
   assert.deepEqual(
     parseJsonc(`{

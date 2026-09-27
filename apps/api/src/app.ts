@@ -20,6 +20,7 @@ import {
 import { createOnboardingRoutes } from "./onboarding.js";
 import { apiCors, privateNoStore, requireTrustedOrigin } from "./security.js";
 import { createSessionMiddleware } from "./session.js";
+import { openCodeTranslationProviderFor } from "./translation.js";
 import type { AppEnv } from "./types.js";
 
 export interface AppDependencies {
@@ -71,7 +72,15 @@ export function createApp(dependencies: AppDependencies = {}): Hono<AppEnv> {
     app.use(`${prefix}/*`, requireSession, limitBody);
   }
   app.route("/api/v1/account", createAccountRoutes(now));
-  app.route("/api/v1/lexicon", createLexiconRoutes({ clock }));
+  app.route(
+    "/api/v1/lexicon",
+    // Resolved per request because the key is a per-request binding. Absent by
+    // default, which leaves the route's network-free "switched off" answer.
+    createLexiconRoutes({
+      clock,
+      translationProvider: openCodeTranslationProviderFor,
+    }),
+  );
   app.route(
     "/api/v1/learning",
     createLearningRoutes({

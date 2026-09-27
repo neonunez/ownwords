@@ -8,6 +8,7 @@ import type {
   IdGenerator,
   LexiconEnv,
   TranslationProvider,
+  TranslationProviderFactory,
 } from "../src/types.js";
 import { TestD1Database } from "./d1.js";
 
@@ -62,7 +63,7 @@ export function appFor(
   context: TestContext,
   ownerId?: string,
   options: {
-    translationProvider?: TranslationProvider;
+    translationProvider?: TranslationProvider | TranslationProviderFactory;
     wrongAnswerDelayMs?: number;
   } = {},
 ): Hono<LexiconEnv> {

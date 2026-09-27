@@ -81,6 +81,11 @@ export class TranslationSuggestionService {
       ...(input.sense === undefined ? {} : { sense: input.sense }),
     });
     validateProviderResult(suggestions);
+    // "No suggestion" is not an answer worth remembering: a later attempt, or a
+    // different provider version, must be able to succeed.
+    if (suggestions.length === 0) {
+      return { suggestions, cache: "miss" };
+    }
     const expiresAt = new Date(now.getTime() + this.ttlMs);
     await run(
       this.db

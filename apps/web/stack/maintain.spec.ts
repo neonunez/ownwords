@@ -26,8 +26,9 @@ test.describe("Maintain, against the real backend", () => {
       .fill("when it isn’t ideal but works");
     await page.getByRole("button", { name: "Translate" }).click();
 
-    // The translation provider is switched off on this backend, and the
-    // review step says so for each language instead of pretending.
+    // No provider key is configured on this backend, so the review step says
+    // so for each language instead of pretending. With a key configured the
+    // same step shows a candidate; the mocked provider covers that path.
     await expect(page.getByText(/Suggestions are switched off/)).toHaveCount(2);
     await page
       .getByRole("button", { name: "Type the Español equivalent yourself" })
