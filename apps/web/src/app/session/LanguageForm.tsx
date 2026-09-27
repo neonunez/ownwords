@@ -391,7 +391,10 @@ export function LanguageForm({
           label="Language to learn"
           value={learn ?? ""}
           disabled={full && !learn}
-          onChange={(code) => setLearn(code || null)}
+          onChange={(code) => {
+            setLearn(code || null);
+            if (code === adding) setAdding("");
+          }}
           hint={
             learnable.length === 0
               ? `You already speak ${joined(spokenCourses.map(ownName))}, and there is no other course yet.`

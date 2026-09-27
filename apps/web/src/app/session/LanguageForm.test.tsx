@@ -150,6 +150,33 @@ describe("the language form", () => {
     );
   });
 
+  it("drops a pending language to add once it is chosen to learn", async () => {
+    const { onSubmit } = renderForm();
+    await addSpoken("en");
+    await userEvent.click(screen.getByRole("radio", { name: "Native" }));
+
+    await userEvent.selectOptions(addSelect(), "ru");
+    await userEvent.selectOptions(learnSelect(), "ru");
+    expect(addSelect()).toHaveValue("");
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add).toBeDisabled();
+    await userEvent.click(add);
+
+    expect(
+      screen.queryByRole("group", { name: "How well you speak Русский" }),
+    ).not.toBeInTheDocument();
+    expect(learnSelect()).toHaveValue("ru");
+    expect(screen.getByText(/starts at A0/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(onSubmit).toHaveBeenCalledWith({
+      languages: [
+        { code: "en", kind: "maintain", level: "native" },
+        { code: "ru", kind: "learn", level: "a0" },
+      ],
+      preferences,
+    });
+  });
+
   it("keeps a saved profile's languages and levels as they were", async () => {
     const initial: Onboarding = {
       languages: [
