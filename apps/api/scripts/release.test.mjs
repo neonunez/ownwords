@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { parse as parseYaml } from "yaml";
 import {
   apiDirectory,
   PRODUCTION_HOST,
@@ -614,98 +615,134 @@ test("the read-back accepts the deployment's own answers and fails on anything e
   );
 });
 
-// The workflow itself, checked as text: what it needs, when it needs it, and
-// which step a credential is allowed to reach.
+// The workflow itself, parsed as GitHub reads it: what it needs, when it needs
+// it, and which step a credential is allowed to reach.
 
-const workflow = await readFile(
-  path.join(repositoryRoot, ".github", "workflows", "release.yml"),
-  "utf8",
+const workflow = parseYaml(
+  await readFile(
+    path.join(repositoryRoot, ".github", "workflows", "release.yml"),
+    "utf8",
+  ),
 );
+const steps = workflow.jobs.release.steps;
 
-/** The text of one `- name:` step, up to the next step. */
+/** One named step. */
 function step(name) {
-  const start = workflow.indexOf(`- name: ${name}\n`);
-  assert.notEqual(start, -1, `the release workflow must have a "${name}" step`);
-  const next = workflow.indexOf("\n      - ", start + 1);
-  return workflow.slice(start, next === -1 ? undefined : next);
+  const found = steps.find((candidate) => candidate.name === name);
+  assert.ok(found, `the release workflow must have a "${name}" step`);
+  return found;
 }
 
-test("the release runs on a merge to main, after the checks and the app build", () => {
-  assert.match(workflow, /on:\s*\n\s*push:\s*\n\s*branches: \[main\]/);
-  assert.equal(
-    /\bpull_request\b/.test(workflow),
-    false,
-    "no pull request deploys",
+/** Each step's position, by name or by its run command. */
+function position(label) {
+  const index = steps.findIndex(
+    (candidate) => candidate.name === label || candidate.run === label,
   );
-  assert.equal(/workflow_dispatch/.test(workflow), false, "no release button");
+  assert.notEqual(index, -1, `the release workflow must have "${label}"`);
+  return index;
+}
+
+const PRESENCE = "The release configuration is present";
+const PUBLISH = "Publish the authorized course versions";
+
+test("the release runs on a merge to main, after the checks and the app build", () => {
+  assert.deepEqual(workflow.on, { push: { branches: ["main"] } });
   // One release at a time, and a new push waits rather than cancelling one.
-  assert.match(workflow, /concurrency:\s*\n\s*group: release-production/);
-  assert.match(workflow, /cancel-in-progress: false/);
+  assert.deepEqual(workflow.concurrency, {
+    group: "release-production",
+    "cancel-in-progress": false,
+  });
   // The workflow may not deploy with anything but the repository's own checks
   // and build: the release steps come after both.
-  const check = workflow.indexOf("- run: npm run check");
-  const build = workflow.indexOf("- run: npm run build");
-  const migrate = workflow.indexOf("Apply the additive migrations");
-  const deploy = workflow.indexOf("Deploy the Worker and the app");
-  const publish = workflow.indexOf("Publish the authorized course versions");
-  assert.ok(check > 0 && build > check, "the checks run before the build");
-  for (const stage of [migrate, deploy, publish]) {
-    assert.ok(
-      stage > build,
-      "no release stage runs before the checks and build",
-    );
-  }
-  assert.ok(migrate < deploy && deploy < publish, "stages run in order");
+  const check = position("npm run check");
+  const build = position("npm run build");
+  const stages = [
+    "Generate and prove the production config",
+    "Apply the additive migrations",
+    "Deploy the Worker and the app",
+    PUBLISH,
+  ].map(position);
+  assert.ok(check < build, "the checks run before the build");
+  assert.ok(
+    stages[0] > build,
+    "no release stage runs before the checks and build",
+  );
+  assert.deepEqual(
+    stages,
+    [...stages].sort((a, b) => a - b),
+    "stages run in order",
+  );
 });
 
-test("every value the release needs is checked before anything is mutated", () => {
-  const presence = step("The release configuration is present");
-  for (const value of [
-    "CLOUDFLARE_API_TOKEN",
-    "CLOUDFLARE_ACCOUNT_ID",
-    "OWNWORDS_D1_DATABASE_ID",
-    "CONTENT_PUBLISH_TOKEN",
-  ]) {
-    assert.match(
-      presence,
-      new RegExp(`\\[ -n "\\$${value}" \\] \\|\\| missing=`),
-      `${value} must be checked before the release mutates anything`,
+test("every value the release needs is checked before anything is mutated", async () => {
+  const presence = step(PRESENCE);
+  assert.ok(position(PRESENCE) < position("npm ci"), "checked before install");
+  const values = {
+    CLOUDFLARE_API_TOKEN: "api-token-value",
+    CLOUDFLARE_ACCOUNT_ID: "account-id-value",
+    OWNWORDS_D1_DATABASE_ID: "database-id-value",
+    CONTENT_PUBLISH_TOKEN: "publish-token-value",
+  };
+  const shell = (env) =>
+    run("bash", ["-e", "-c", presence.run], {
+      env: { PATH: process.env.PATH, ...env },
+    }).then(
+      (result) => ({ code: 0, output: result.stdout + result.stderr }),
+      (error) => ({ code: error.code, output: error.stdout + error.stderr }),
     );
+  assert.equal((await shell(values)).code, 0);
+  for (const name of Object.keys(values)) {
+    const { [name]: _absent, ...rest } = values;
+    const result = await shell(rest);
+    assert.equal(result.code, 1, `${name} must be required`);
+    assert.match(
+      result.output,
+      new RegExp(`missing release configuration:.*${name}`),
+    );
+    for (const value of Object.values(rest)) {
+      assert.equal(result.output.includes(value), false, "no value is printed");
+    }
   }
-  assert.match(presence, /exit 1/);
-  assert.ok(
-    workflow.indexOf("The release configuration is present") <
-      workflow.indexOf("Apply the additive migrations"),
-    "the presence check runs before the migrations",
-  );
 });
 
 test("the publication token reaches only the check and the publication", () => {
-  const steps = workflow.split("\n      - ").slice(1);
   const carrying = steps
-    .filter((text) => /CONTENT_PUBLISH_TOKEN: \$\{\{ secrets\./.test(text))
-    .map((text) => /name: ([^\n]+)/.exec(text)?.[1] ?? "an unnamed step");
-  assert.deepEqual(carrying, [
-    "The release configuration is present",
-    "Publish the authorized course versions",
-  ]);
-  // The check reads the secret's presence without printing it.
-  const presence = step("The release configuration is present");
-  assert.equal(/echo[^"'\n]*\$\{?CONTENT_PUBLISH_TOKEN/.test(presence), false);
+    .filter((candidate) => candidate.env?.CONTENT_PUBLISH_TOKEN !== undefined)
+    .map((candidate) => candidate.name);
+  assert.deepEqual(carrying, [PRESENCE, PUBLISH]);
+  for (const name of carrying) {
+    assert.equal(
+      step(name).env.CONTENT_PUBLISH_TOKEN,
+      "${{ secrets.CONTENT_PUBLISH_TOKEN }}",
+    );
+  }
+  assert.equal(workflow.env?.CONTENT_PUBLISH_TOKEN, undefined);
+  assert.equal(workflow.jobs.release.env?.CONTENT_PUBLISH_TOKEN, undefined);
 });
 
 test("a credential is never interpolated into a run line", () => {
-  for (const line of workflow.split("\n")) {
-    if (!/^\s*run:/.test(line)) continue;
+  for (const candidate of steps) {
+    if (candidate.run === undefined) continue;
     assert.equal(
-      /secrets\./.test(line),
+      /\$\{\{[^}]*secrets\./.test(candidate.run),
       false,
-      `a secret is inlined in a run line: ${line.trim()}`,
+      `a secret is inlined in a run line: ${candidate.name ?? candidate.run}`,
     );
   }
-  // Least privilege: the workflow reads nothing but the token it deploys with.
-  assert.equal(
-    /secrets\.(?!CLOUDFLARE_API_TOKEN|CONTENT_PUBLISH_TOKEN)/.test(workflow),
-    false,
-  );
+  // Least privilege: the workflow reads nothing but the tokens it releases
+  // with, and only through a step's env.
+  const secretsRead = new Set();
+  for (const candidate of steps) {
+    for (const value of Object.values(candidate.env ?? {})) {
+      const reference = /^\$\{\{ secrets\.(\w+) \}\}$/.exec(value);
+      if (reference) secretsRead.add(reference[1]);
+    }
+  }
+  assert.deepEqual([...secretsRead].sort(), [
+    "CLOUDFLARE_API_TOKEN",
+    "CONTENT_PUBLISH_TOKEN",
+  ]);
+  for (const value of Object.values(workflow.jobs.release.env)) {
+    assert.match(value, /^\$\{\{ vars\.\w+ \}\}$/, "job env holds no secret");
+  }
 });

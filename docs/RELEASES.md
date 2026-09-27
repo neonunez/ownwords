@@ -21,8 +21,9 @@ terminal ritual for each release.
 
 The stages are ordered so that a failure has the smallest possible blast radius: the database is migrated before the
 code that reads it is deployed, and content is published only through a deployment this same run has just proved. The
-one consequence of that order is that a `deploy` or `publish` failure can leave this release's migrations applied —
-see "One-time configuration" for what that means and why re-running the release is safe.
+one consequence of that order is that a failed run can leave migrations applied, a new version uploaded, or both — see
+"A failed run leaves an unknown state" under "One-time configuration" for how to read that state and when re-running
+is and is not safe.
 
 ## One-time configuration
 
@@ -163,15 +164,17 @@ a change into an additive migration that ships with the code and a separate, exp
 A Worker rollback redeploys the previous version; `wrangler deployments list` names the versions and
 `wrangler rollback` returns to the one before. It does **not** reverse D1 writes, it does not reverse a published
 course version, and it does not reverse a migration the release applied — an applied migration is a schema change, and
-a Worker rolled back to a version that predates it may not even run. This is why the migration gate exists, and why
-a deploy-stage failure is normally fixed by fixing the cause and re-running the release rather than by rolling back:
-the migrations that release applied are the intended ones.
+a Worker rolled back to a version that predates it may not even run. This is why the migration gate exists. Whether a failed run is fixed by
+re-running, by rolling back or by restoring depends on how far it got, which is read from the live state, never
+assumed.
 
 For a bad release, in the order the damage occurs:
 
-0. Nothing to undo, but the run failed: a release stopped in `config` or `migrate` before deploying changed nothing a
-   user can see; a release that failed in `deploy` or `publish` may have applied its migrations, which is the intended
-   additive schema. Re-run the release from the same commit.
+0. The run failed: read the state first, with the read-only checks in "A failed run leaves an unknown state"
+   (`wrangler deployments list`, `wrangler d1 migrations list`, the origin probes), and do not assume nothing changed —
+   a failed `migrate` can have applied migrations before it stopped. Then take the matching case there: refused before
+   any upload (fix the cause, re-run); failed after the upload (leave the new version live or roll it back, do not
+   blind-retry); a migration that failed midway (do not re-run, restore as in item 2).
 1. A bad deploy: `npx wrangler rollback --config apps/api/wrangler.production.jsonc`, then check the public origin.
 2. A bad additive migration: there is no automated reversal. D1 Time Travel and a weekly `wrangler d1 export` are the
    recovery mechanism (`docs/SETUP.md`, "Backup and restore"); rehearse a restore into a separate database, never over
