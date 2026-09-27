@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import {
+  OpenCodeTranslationProvider,
   OPENCODE_GO_ENDPOINT,
   OPENCODE_GO_MODEL,
   OPENCODE_GO_USER_AGENT,
@@ -43,6 +44,10 @@ const SPARE_LANGUAGES = [
   "cs",
   "el",
   "uk",
+  "hu",
+  "ro",
+  "da",
+  "no",
 ];
 let spare = 0;
 function freshLanguage(): string {
@@ -165,19 +170,31 @@ describe("the absent key is the default, and it calls nothing", () => {
     });
   });
 
-  it("refuses a placeholder, a blank and a too-short key the same way", () => {
-    for (const value of [
-      undefined,
-      "",
-      "   ",
-      "replace-with-your-opencode-key",
-      "short",
-    ]) {
+  it("treats only a missing or blank key as absent", () => {
+    for (const value of [undefined, "", "   "]) {
       expect(readOpenCodeGoApiKey({ ...env, OPENCODE_GO_API_KEY: value })).toBe(
         undefined,
       );
     }
     expect(readOpenCodeGoApiKey(withKey())).toBe(TEST_KEY);
+  });
+
+  it("accepts any non-blank key without guessing its format", async () => {
+    for (const value of ["short", "replace-me-is-still-a-key"]) {
+      expect(readOpenCodeGoApiKey({ ...env, OPENCODE_GO_API_KEY: value })).toBe(
+        value,
+      );
+    }
+    const { calls } = await stubGo(() => goResponse("до скорого"));
+    const response = await ask(
+      withKey({ OPENCODE_GO_API_KEY: "short" }),
+      freshLanguage(),
+    );
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(new Headers(calls[0]!.init.headers).get("Authorization")).toBe(
+      "Bearer short",
+    );
   });
 });
 
@@ -258,7 +275,7 @@ describe("the configured provider, called the documented way", () => {
       "   ",
       "see you later",
       '"see you later"',
-      `[{"type":"text","text":"до свидания"}]`,
+      `[разг.] до свидания`,
     ]) {
       const { calls } = await stubGo(() => goResponse(content));
       const response = await ask(withKey(), freshLanguage());
@@ -269,7 +286,7 @@ describe("the configured provider, called the documented way", () => {
       };
       if (content.includes("до свидания")) {
         expect(body.data).toEqual([
-          { text: "до свидания", fit: "context_only" },
+          { text: "[разг.] до свидания", fit: "context_only" },
         ]);
       } else {
         // An echoed or empty answer is never offered as a translation.
@@ -341,6 +358,51 @@ describe("the configured provider, called the documented way", () => {
     expect(firstBody.cache).toBe("miss");
     await expect(second.json()).resolves.toMatchObject({ cache: "hit" });
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("the session id names the phrase, not the person", () => {
+  const request = {
+    sourceLanguage: "en",
+    targetLanguage: "ru",
+    sense: "leaving politely",
+    text: "see you later",
+  };
+
+  async function sessionFor(asked: typeof request): Promise<string | null> {
+    const calls: RequestInit[] = [];
+    const provider = new OpenCodeTranslationProvider({
+      apiKey: TEST_KEY,
+      fetch: async (_input, init = {}) => {
+        calls.push(init);
+        return goResponse("пока");
+      },
+    });
+    await provider.suggest(asked);
+    return new Headers(calls[0]!.headers).get("x-opencode-session");
+  }
+
+  it("is a digest of the languages, sense and phrase, and nothing else", async () => {
+    const material = [
+      "ownwords-translation",
+      request.sourceLanguage,
+      request.targetLanguage,
+      request.sense,
+      request.text,
+    ].join("\u0000");
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(material),
+    );
+    const expected = Array.from(new Uint8Array(digest).slice(0, 16), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    expect(await sessionFor(request)).toBe(expected);
+    // No account identity is part of it, so the same ask is the same session.
+    expect(await sessionFor({ ...request })).toBe(expected);
+    expect(await sessionFor({ ...request, sense: "a toast" })).not.toBe(
+      expected,
+    );
   });
 });
 
