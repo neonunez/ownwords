@@ -29,7 +29,8 @@ is and is not safe.
 
 Set once in the repository settings; no value is ever committed, printed in a log, or pasted into a pull request. The
 Cloudflare token and the content publication token are encrypted secrets; the account ID and the D1 ID are not
-credentials, so they are ordinary repository variables.
+credentials, so they are ordinary repository variables — but the D1 ID pins _what the release acts on_, it does not
+limit _what the token can reach_; see the table below.
 
 ```sh
 # In a terminal of your own. `gh secret set` prompts with the value hidden and
@@ -43,36 +44,56 @@ gh variable set CLOUDFLARE_ACCOUNT_ID      # the account that owns ownwords-prod
 gh variable set OWNWORDS_D1_DATABASE_ID    # the D1 ID `wrangler d1 info ownwords-production` prints
 ```
 
-What the token needs, and what it does not:
+What the token needs, and — as importantly — what it cannot be narrowed to:
 
-| Permission                                                              | Scope                                                                   | Why                                                                                                                                                                                                                                                                                                                                          |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Workers Scripts: Edit` (also spelled `Worker:Edit`, the `Editor` role) | the `ownwords-api` Worker                                               | Uploads and deploys a new version. Cloudflare's docs: deploying a Worker needs `Editor` access to it, and "you do not need separate permissions on the bound resources to deploy the Worker" ([Workers roles and permissions](https://developers.cloudflare.com/workers/authorization/workers/)).                                            |
-| `D1: Edit` (called `D1: Write` in older docs)                           | the `ownwords-production` database                                      | The release talks to the D1 API directly — `migrations list`, the `d1_migrations` read, `migrations apply` — and "D1:Edit permission is required for any database writes via HTTP API" ([D1 release notes](https://developers.cloudflare.com/d1/platform/release-notes/)). `Edit` includes the reads the release and the binding proof make. |
-| `Workers Routes: Write` (dashboard name `Workers Routes: Edit`)         | the `neonunez.com` zone, **only if** a deploy changes the Custom Domain | Cloudflare's docs: "To add, update, or remove Routes or Custom Domains, you need `Editor` access to the Worker and `Workers Routes Write` permission for every affected zone… API tokens need Zone > Workers Routes > Write, scoped to each affected zone." See the note below.                                                              |
+| Permission                                                                                                                                                                                                      | Resource scope that actually exists                                                                                                                                                                                                                                                             | Why                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `D1: Edit` (called `D1: Write` in older docs)                                                                                                                                                                   | **The account, not one database.** `D1 Edit` is an _account_ permission ([API token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)); there is no per-database token resource. Set Account Resources to _Include → this account_, never _All accounts_. | The release talks to the D1 API directly — `migrations list`, the `d1_migrations` read, `migrations apply` — and "D1:Edit permission is required for any database writes via HTTP API" ([D1 release notes](https://developers.cloudflare.com/d1/platform/release-notes/)). `Edit` includes the reads the release and the binding proof make. |
+| `Editor` on Workers ([granular roles](https://developers.cloudflare.com/workers/authorization/workers/), [changelog](https://developers.cloudflare.com/changelog/post/2026-09-15-granular-worker-permissions/)) | **One Worker**, if the account offers the individual-Worker scope: "Only selected Workers", and `Editor` "can read, update, deploy, and rename existing Workers… Cannot create or delete Workers".                                                                                              | Uploads and deploys a new version of `ownwords-api`. Per-Worker roles apply only to Workers that already exist, which `ownwords-api` does.                                                                                                                                                                                                   |
+| `Workers Scripts: Edit` (the legacy equivalent)                                                                                                                                                                 | **The whole account's Workers.** "These legacy permissions and roles were account-level."                                                                                                                                                                                                       | Use this only if the account does not offer the per-Worker `Editor` scope. Prefer the per-Worker role when it is available, because it confines the token to `ownwords-api`.                                                                                                                                                                 |
+| `Workers Routes: Write` (dashboard name `Workers Routes: Edit`)                                                                                                                                                 | The `neonunez.com` zone, **only if** a deploy changes the Custom Domain                                                                                                                                                                                                                         | Cloudflare's docs: "To add, update, or remove Routes or Custom Domains, you need `Editor` access to the Worker and `Workers Routes Write` permission for every affected zone… API tokens need Zone > Workers Routes > Write, scoped to each affected zone." See the note below.                                                              |
 
-Nothing else is needed, and nothing else should be granted: no `Account Settings`, no `Workers KV Storage: Edit`, no
-`R2: Edit`, no DNS or billing permission. (Cloudflare's own auto-generated token for a CI deploy
+**The honest limit, stated plainly: `D1: Edit` is account-wide authority, and this release cannot narrow it.** A token
+carrying it can read and write _every_ D1 database in that Cloudflare account, not only `ownwords-production` —
+including any other database that account holds. Cloudflare's permission model does not offer a per-database token
+resource, so this is a property of the platform, not a choice this repository can make. The narrower things the release
+_can_ do are:
+
+- limit the token to **one account** (never _All accounts_);
+- confine the Worker authority to `ownwords-api` with the per-Worker `Editor` role, where the account supports it;
+- refuse to act on anything else at runtime. `OWNWORDS_D1_DATABASE_ID` and `readPublicationTarget` pin the target, and
+  the release reads the live deployment's `DB` binding back from Cloudflare before it deploys, migrates or publishes.
+
+That runtime pin is a correctness control, not a credential boundary. It stops a mistake, a stale variable or a
+malformed config; it does not stop a token that was deliberately aimed at the wrong database. The credential boundary is
+the account choice above, and the account-wide `D1` authority is escalated to the owner as a known consequence of
+granting a release workflow any D1 write at all.
+
+Nothing else is needed: no `Account Settings`, no `Workers KV Storage: Edit`, no `R2: Edit`, no DNS or billing
+permission. (Cloudflare's own auto-generated token for a CI deploy
 — [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) — is broader
-than this: it also carries account-settings read, KV edit, R2 edit and `Workers Routes` edit for _all_ zones. This
-release deliberately asks for less.)
+than this: it also carries account-settings read, KV edit, R2 edit and `Workers Routes` edit for _all_ zones, and it
+grants Workers `Editor` at the account level. This release asks for less, and asks for the narrower Workers scope where
+it exists.)
 
 **The Custom Domain question, answered from the documentation.** The generated config carries the live Custom Domain
 (`{"pattern": "ownwords.neonunez.com", "custom_domain": true}`) so that a deploy can never silently detach the
 hostname. The same page continues: "**After a Route or Custom Domain is configured, you can deploy new Worker versions
 with only `Editor` access, as long as the deployment does not add, update, or remove that connection.**"
 
-- _Known:_ a deploy that leaves the Custom Domain connection exactly as it is needs only `Workers Scripts: Edit`.
-  Adding, changing or removing it needs zone-scoped `Workers Routes: Write` on `neonunez.com`.
+- _Known:_ a deploy that leaves the Custom Domain connection exactly as it is needs only the Workers `Editor` role
+  (account-wide with the legacy `Workers Scripts: Edit`, or per-Worker with the granular scope). Adding, changing or
+  removing it needs zone-scoped `Workers Routes: Write` on `neonunez.com`.
 - _Not provable from the documentation:_ whether Wrangler's route reconciliation issues a zone write for a Custom
   Domain that is declared identically to the live one. It compares the declared routes with the live ones and skips
   unchanged ones in the paths we can read, but that is a code reading, not a guarantee, and it has never been run
   against this account.
 
-So the least-privilege token is `Workers Scripts: Edit` + `D1: Edit`, scoped as above. If the first deploy is refused on
-the route, add zone-scoped `Workers Routes: Write` for `neonunez.com` to the same token — that is the documented
-remedy for exactly that refusal. Do not remove the route from the generated config to make the error go away: that is
-the accidental detachment this path exists to prevent.
+So the least-privilege token is Workers `Editor` (per-Worker scope where the account offers it) plus account-scoped
+`D1: Edit`, on the one account that holds `ownwords-production`. If the first deploy is refused on the route, add
+zone-scoped `Workers Routes: Write` for `neonunez.com` to the same token — that is the documented remedy for exactly
+that refusal. Do not remove the route from the generated config to make the error go away: that is the accidental
+detachment this path exists to prevent.
 
 **A failed run leaves an unknown state — inspect it, do not assume it.** `migrate` precedes `deploy`, and the deploy
 stage's last three steps happen _after_ the upload, so a failed run may have applied migrations, uploaded a new
