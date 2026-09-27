@@ -54,7 +54,7 @@ token scoped only to the Worker can refuse it. If the first deploy fails on the 
 to the same token and re-run the release — the failing run changed nothing else. Do not remove the route from the
 generated config to make the error go away: that is exactly the accidental detachment this path exists to prevent.
 
-If a value is missing, the workflow fails before it checks out, migrates, deploys or publishes, and names the value
+If a value is missing, the workflow fails before it installs, migrates, deploys or publishes, and names the value
 that is absent. It never guesses, and it never deploys a partially configured release.
 
 ## Course content releases
