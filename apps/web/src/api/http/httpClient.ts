@@ -208,6 +208,11 @@ export function createHttpClient(
   let accountId: string | null = null;
   let identityGeneration = 0;
   let profileGeneration = 0;
+  let verifying: {
+    generation: number;
+    accountId: string | null;
+    noticed: Set<string>;
+  } | null = null;
   const recent = new RecentReads(options.now);
   const clearAccount = () => {
     identityGeneration += 1;
@@ -245,8 +250,12 @@ export function createHttpClient(
         message.type === "session" &&
         accountId === null &&
         typeof message.accountId === "string"
-      )
-        clearAccount();
+      ) {
+        if (verifying?.generation !== identityGeneration) clearAccount();
+        else if (verifying.accountId === null)
+          verifying.noticed.add(message.accountId);
+        else if (verifying.accountId !== message.accountId) clearAccount();
+      }
       else if (
         message.type === "profile" &&
         typeof message.accountId === "string" &&
@@ -601,6 +610,11 @@ export function createHttpClient(
       clearAccount();
       const generation = identityGeneration;
       const profileVersion = profileGeneration;
+      const check = (verifying = {
+        generation,
+        accountId: null,
+        noticed: new Set<string>(),
+      });
       const session = await json("GET", `${API.auth}/get-session`, {
         quietWhenSignedOut: true,
       });
@@ -610,6 +624,10 @@ export function createHttpClient(
       }
       const user = object(object(session, "session").user, "session.user");
       const verifiedAccountId = string(user.id, "session.user.id");
+      check.accountId = verifiedAccountId;
+      if ([...check.noticed].some((noticed) => noticed !== verifiedAccountId))
+        clearAccount();
+      assertIdentity(generation);
       profile = null;
       try {
         const onboarding = await json("GET", `${API.v1}/profile`, {

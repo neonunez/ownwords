@@ -72,6 +72,7 @@ export function AddEntryScreen() {
   const [busy, setBusy] = useState(false);
   const [pendingLabel, setPendingLabel] = useState("Saving entry…");
   const requests = useRef<AbortController | null>(null);
+  const inFlight = useRef(false);
 
   const languages = useAsync(() => client.listLanguages(), [client]);
   const preferences = useAsync(() => client.getPreferences(), [client]);
@@ -124,7 +125,8 @@ export function AddEntryScreen() {
   };
 
   const moveOn = async () => {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPendingLabel("Saving entry…");
     setBusy(true);
     try {
@@ -143,6 +145,7 @@ export function AddEntryScreen() {
     } catch (error) {
       showToast(written(error, "That entry was not saved. Try again."));
     }
+    inFlight.current = false;
     setBusy(false);
   };
 
@@ -194,7 +197,8 @@ export function AddEntryScreen() {
       // Never asked for: nothing to keep.
       return [];
     });
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPendingLabel("Saving entry…");
     setBusy(true);
     try {
@@ -204,6 +208,7 @@ export function AddEntryScreen() {
       navigate("/maintain/lexicon");
       showToast("Saved to your Lexicon.", { icon: "check" });
     } catch (error) {
+      inFlight.current = false;
       setBusy(false);
       navigate(`/maintain/lexicon/${draft.id}`);
       showToast(

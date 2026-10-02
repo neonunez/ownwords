@@ -247,4 +247,63 @@ describe("truthful action feedback", () => {
       screen.queryByText("Saved to your Lexicon."),
     ).not.toBeInTheDocument();
   });
+
+  it("sends one capture and one equivalent save per same-frame activation, and retries capture after failure", async () => {
+    const demo = createDemoClient({ suggestionDelaysMs: {} });
+    let capture = deferred<void>();
+    const save = deferred<Awaited<ReturnType<typeof demo.addEquivalents>>>();
+    const created = vi.fn(
+      async (...args: Parameters<typeof demo.createEntry>) => {
+        await capture.promise;
+        return demo.createEntry(...args);
+      },
+    );
+    const saved = vi.fn(() => save.promise);
+    const client = { ...demo, createEntry: created, addEquivalents: saved };
+    renderScreen(<AddEntryScreen />, { route: "/maintain/add", client });
+    await userEvent.type(
+      await screen.findByRole("textbox", { name: "Word or expression" }),
+      "a single word",
+    );
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Suggest translations" }),
+    );
+    const next = screen.getByRole("button", { name: "Next" });
+    act(() => {
+      next.click();
+      next.click();
+    });
+    expect(created).toHaveBeenCalledTimes(1);
+    await act(async () => capture.reject(new Error("Capture failed.")));
+    expect(await screen.findByText("Capture failed.")).toBeInTheDocument();
+    capture = deferred();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(created).toHaveBeenCalledTimes(2);
+    await act(async () => capture.resolve());
+    await userEvent.click(
+      (
+        await screen.findAllByRole("button", {
+          name: /Type the .* equivalent yourself/,
+        })
+      )[0]!,
+    );
+    const sheet = await screen.findByRole("dialog");
+    await userEvent.type(
+      within(sheet).getByRole("textbox", {
+        name: /^Type the equivalent yourself/,
+      }),
+      "palabra",
+    );
+    await userEvent.click(
+      within(sheet).getByRole("button", { name: "Use this wording" }),
+    );
+    const saveButton = screen.getByRole("button", { name: "Save entry" });
+    act(() => {
+      saveButton.click();
+      saveButton.click();
+    });
+    expect(saved).toHaveBeenCalledTimes(1);
+    await act(async () => save.resolve(undefined as never));
+    expect(saved).toHaveBeenCalledTimes(1);
+  });
 });

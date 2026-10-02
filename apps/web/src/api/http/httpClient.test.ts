@@ -1515,6 +1515,84 @@ describe("recent account data and acknowledgement", () => {
     }
   });
 
+  it("lets a tab start while another tab announces the same account, and fences a different one", async () => {
+    const ports = new Set<{
+      onmessage: ((event: MessageEvent) => void) | null;
+    }>();
+    class Channel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor() {
+        ports.add(this);
+      }
+      postMessage(data: unknown) {
+        for (const port of ports)
+          if (port !== this) port.onmessage?.({ data } as MessageEvent);
+      }
+      close() {
+        ports.delete(this);
+      }
+    }
+    vi.stubGlobal("BroadcastChannel", Channel);
+    try {
+      let owner = "a";
+      const held = { session: false, profile: false };
+      const waiting: Array<() => void> = [];
+      const hold = (key: keyof typeof held, answer: Response) => {
+        if (!held[key]) return answer;
+        held[key] = false;
+        return new Promise<Response>((resolve) =>
+          waiting.push(() => resolve(answer)),
+        );
+      };
+      const api = fakeApi({
+        ...signedIn,
+        "GET /api/auth/get-session": () =>
+          hold(
+            "session",
+            Response.json({
+              session: {},
+              user: { id: owner, name: owner, email: `${owner}@example.com` },
+            }),
+          ),
+        "GET /api/v1/profile": () => hold("profile", Response.json(profile)),
+      });
+      const first = createHttpClient({ fetch: api.fetch });
+      const second = createHttpClient({ fetch: api.fetch });
+      const release = async (announce: () => Promise<unknown>) => {
+        await vi.waitFor(() => expect(waiting).toHaveLength(1));
+        await announce();
+        waiting.pop()!();
+      };
+
+      held.profile = true;
+      const duringProfile = first.getSession();
+      await release(() => second.getSession());
+      await expect(duringProfile).resolves.toMatchObject({
+        status: "signed-in",
+      });
+
+      held.session = true;
+      const duringSession = first.getSession();
+      await release(() => second.getSession());
+      await expect(duringSession).resolves.toMatchObject({
+        status: "signed-in",
+      });
+
+      held.session = true;
+      const changed = first.getSession();
+      const fenced = expect(changed).rejects.toMatchObject({
+        code: "session_changed",
+      });
+      await release(async () => {
+        owner = "b";
+        await second.getSession();
+      });
+      await fenced;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not publish an old profile save after another session probe, and clears caches even when sign-out fails", async () => {
     const save = deferred<Response>();
     const { api, client } = await connected({
