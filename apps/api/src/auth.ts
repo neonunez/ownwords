@@ -24,6 +24,59 @@ export async function authorizeRegistration(
 }
 
 export function createAuth(env: Bindings, now: () => number = Date.now) {
+  return buildAuth(env, now, true);
+}
+
+// Only a completed schema verdict is retained, never an adapter, session,
+// request-bound D1 handle or pending I/O. A different binding starts cold.
+// D1 disallows PRAGMA schema_version. Instead, one read of all schema
+// definitions detects DDL (including indexes) without table-info introspection.
+const validatedSchemas = new WeakMap<D1Database, string>();
+
+async function schemaFingerprint(db: D1Database): Promise<string> {
+  const rows = await db
+    .prepare(
+      "SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name",
+    )
+    .all<{
+      type: string;
+      name: string;
+      tbl_name: string;
+      sql: string | null;
+    }>();
+  if (!rows.success) {
+    throw new Error("The authentication schema could not be checked");
+  }
+  return JSON.stringify(rows.results);
+}
+
+/** A fresh, request-owned auth instance, with DDL-guarded schema checks. */
+export async function createRequestAuth(
+  env: Bindings,
+  now: () => number = Date.now,
+): Promise<OwnwordsAuth> {
+  // Configuration is read on every request, including a warm schema verdict.
+  loadRuntimeConfig(env);
+  const fingerprint = await schemaFingerprint(env.DB);
+  if (validatedSchemas.get(env.DB) === fingerprint) {
+    return buildAuth(env, now, false);
+  }
+  validatedSchemas.delete(env.DB);
+  const auth = buildAuth(env, now, true);
+  const context = await auth.$context;
+  if (!context.checkSchema) {
+    throw new Error("The pinned authentication adapter has no schema check");
+  }
+  await context.checkSchema();
+  // Do not publish a verdict if DDL raced the introspection.
+  if ((await schemaFingerprint(env.DB)) !== fingerprint) {
+    throw new Error("The authentication schema changed during validation");
+  }
+  validatedSchemas.set(env.DB, fingerprint);
+  return auth;
+}
+
+function buildAuth(env: Bindings, now: () => number, validateSchema: boolean) {
   const config = loadRuntimeConfig(env);
   const socialProviders = config.google
     ? {
@@ -67,6 +120,7 @@ export function createAuth(env: Bindings, now: () => number = Date.now) {
       },
     },
     advanced: {
+      database: { validateSchema },
       cookiePrefix: "ownwords",
       useSecureCookies: config.environment === "production",
       disableCSRFCheck: false,
@@ -153,4 +207,4 @@ export function createAuth(env: Bindings, now: () => number = Date.now) {
   });
 }
 
-export type OwnwordsAuth = ReturnType<typeof createAuth>;
+export type OwnwordsAuth = ReturnType<typeof buildAuth>;

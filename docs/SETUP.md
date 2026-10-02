@@ -300,6 +300,24 @@ wire them into the app without that pack.
 Migration composition accepts core `0001–0099`, Lexicon `0100–0199`, and Learning `0200–0299` in deterministic
 filename order and rejects duplicate numeric IDs even with different filenames.
 
+### Authentication schema checks and request isolation
+
+`apps/api/src/auth.ts` creates a fresh auth instance for every request; sessions, invitation grants,
+configuration and injected clocks are never shared between requests. Cookie session caching stays disabled.
+Only a completed schema verdict is retained weakly by D1 binding identity. Every request first reads
+`sqlite_master` definitions (tables, indexes, views and triggers): unchanged definitions reuse the verdict;
+changed definitions or a new binding run the pinned Better Auth/passkey adapter's full validation.
+A failed check is not cached; DDL racing validation fails closed. D1 disallows `PRAGMA schema_version`,
+so the guard deliberately uses the schema definitions, not an assumed migration counter.
+
+This replaces repeated all-table `table_info` batches, not authentication or rate limiting. The auth schema
+footprint is fixed by the deployed factory/plugins; runtime secrets, origins and Google configuration are
+still read anew. `apps/api/test/authPerformance.test.ts` checks cold/warm counts, schema drift, failures,
+races, distinct bindings, revocation and configuration/clock rotation. The existing migration test also
+validates the composed schema against the pinned dependency. Revisit these checks when adding dynamic
+schema options or changing the auth dependencies. Local timing evidence and limits are in
+[PERFORMANCE.md](PERFORMANCE.md).
+
 ### What is verified locally
 
 `npm run test:stack --workspace @ownwords/web` drives the production build of the app in Chromium against the real

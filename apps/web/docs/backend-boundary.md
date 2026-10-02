@@ -141,13 +141,34 @@ stored and dormant for a future pack of original recordings.
 - **Limits.** At most 20 senses per entry, 30 equivalents per sense, 100
   equivalents in total.
 
-## Online-first
+## Online-first and recent reads
 
-Every method needs the backend and a connection. The service worker precaches
-the shell and nothing else; it never caches or replays a backend answer, so an
-offline launch shows each screen's written failure and retry rather than stale
-data. The only thing the client keeps between calls is the profile, read at
-sign-in and dropped whenever it is saved.
+The service worker precaches the shell only; API responses are never persisted,
+served by its fallback, or cached in a shared/CDN cache. A fresh launch still
+verifies the session and reads the profile online. Writes always await server
+acknowledgement, never an offline queue or optimistic committed state.
+
+Within one verified client/account, lists and Learning reads and the combined
+progress summary can reuse answers for **15 seconds**. Course resolution alone
+lasts **30 seconds**; versioned content keys include the course/version URL.
+Keys also include the verified account and profile generation. Practice queues
+are never reused across sittings; individual entry reads remain fresh. Expired
+reads revalidate through the API, and failures are not retained. This is bounded
+recent-data reuse in a running tab, not an offline fallback or persistent cache.
+
+Profile/session changes, sign-out (even a failed attempt) and current-account
+`401`s clear cached data. Writes clear affected reads before and after the
+request, including failures and partial successes; old in-flight answers cannot
+refill an evicted slot or escape after account/profile rotation. Lesson writes
+keep only the pinned enrollment's course-resolution metadata; version conflicts
+clear it too. The API still checks access and progression on every write.
+
+Entry PATCH consumes its returned updated entry without another GET. Equivalent
+POSTs remain sequential, followed by a fresh entry GET only on success; a failure
+stops the sequence, preserving earlier acknowledged equivalents. Saving/Next
+labels describe pending work immediately, but success and lesson advancement
+still wait for acknowledgement. See `docs/PERFORMANCE.md` at the repository root
+for timing methodology, regression tests and remaining waits.
 
 ## What must not drift
 

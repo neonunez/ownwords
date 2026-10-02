@@ -9,7 +9,7 @@ import {
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createAccountRoutes } from "./account.js";
-import { createAuth } from "./auth.js";
+import { createRequestAuth } from "./auth.js";
 import { ConfigurationError } from "./config.js";
 import { createContentPublicationAdminRoutes } from "./contentPublication.js";
 import { errorResponse } from "./errors.js";
@@ -48,7 +48,9 @@ export function createApp(dependencies: AppDependencies = {}): Hono<AppEnv> {
   // session, and always a preflight unless the request opts into the write.
   app.route("/api/v1/admin/content", createContentPublicationAdminRoutes());
 
-  app.all("/api/auth/*", (c) => createAuth(c.env, now).handler(c.req.raw));
+  app.all("/api/auth/*", async (c) =>
+    (await createRequestAuth(c.env, now)).handler(c.req.raw),
+  );
 
   const requireSession = createSessionMiddleware(now);
   app.use("/api/v1/profile", requireSession);

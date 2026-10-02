@@ -25,4 +25,6 @@ export const USERS = {
   firstrun: "firstrun@example.com",
   reader: "reader@example.com",
   settler: "settler@example.com",
+  performance: "performance@example.com",
+  peer: "peer@example.com",
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Chip, IconButton, TopBar } from "../../../design-system";
 import { Screen, Spacer } from "../../layout";
@@ -82,6 +82,7 @@ function LessonSteps({
   );
   const [choice, setChoice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
 
   const step = lesson.steps[index];
   if (!step) return null;
@@ -98,6 +99,8 @@ function LessonSteps({
   };
 
   const next = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     try {
       if (last) {
@@ -121,8 +124,10 @@ function LessonSteps({
           ? `Your place was not saved. ${error.message}`
           : "Your place was not saved. Try again.",
       );
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   return (
@@ -183,7 +188,13 @@ function LessonSteps({
           iconRight={last ? "check" : "arrow-right"}
           onClick={() => void next()}
         >
-          {last ? "Finish lesson" : "Next"}
+          {busy
+            ? last
+              ? "Finishing lesson…"
+              : "Saving progress…"
+            : last
+              ? "Finish lesson"
+              : "Next"}
         </Button>
       </Screen>
     </>

@@ -2,10 +2,9 @@
  * `OwnwordsClient` answered by the Ownwords API.
  *
  * Every call carries the session cookie; the API derives the owner from the
- * verified session alone, so nothing here ever names a user. Reads go straight
- * to the backend on every call: Ownwords is online-first, and nothing is kept
- * or replayed offline except the profile, which is read once per sign-in and
- * dropped whenever it changes.
+ * verified session alone, so nothing here ever sends an owner. Recent reads are
+ * reused briefly inside this verified account/profile generation, never in
+ * storage or a shared cache. Writes always wait for real acknowledgement.
  */
 
 import {
@@ -85,9 +84,21 @@ import {
   optionalString,
   string,
 } from "./read";
-import { API, createTransport, type TransportOptions } from "./request";
+import {
+  API,
+  createTransport,
+  type TransportOptions,
+  type RequestOptions,
+} from "./request";
+import { RecentReads } from "./recentReads";
 
-export type HttpClientOptions = TransportOptions;
+export interface HttpClientOptions extends TransportOptions {
+  /** The cache clock; tests can advance it without delaying real requests. */
+  now?: () => number;
+}
+
+const RECENT_READ_MS = 15_000;
+const COURSE_RESOLUTION_MS = 30_000;
 
 /* ---- the profile --------------------------------------------------------- */
 
@@ -190,23 +201,159 @@ export function createHttpClient(
   options: HttpClientOptions = {},
 ): OwnwordsClient {
   const transport = createTransport(options);
-  const { json } = transport;
   const lexicon = `${API.v1}/lexicon`;
   const learning = `${API.v1}/learning`;
 
   let profile: Promise<Onboarding | null> | null = null;
+  let accountId: string | null = null;
+  let identityGeneration = 0;
+  let profileGeneration = 0;
+  const recent = new RecentReads(options.now);
+  const clearAccount = () => {
+    identityGeneration += 1;
+    profileGeneration += 1;
+    accountId = null;
+    profile = null;
+    recent.clear();
+  };
+  const signedOutListeners = new Set<() => void>();
+  // Same-origin tabs learn about app-managed account/profile changes. Nothing
+  // here is persisted; a notice can only clear data, never grant an identity.
+  const channel =
+    typeof window !== "undefined" &&
+    typeof window.BroadcastChannel === "function"
+      ? new window.BroadcastChannel("ownwords-account")
+      : null;
+  const announceSignedOut = () => {
+    clearAccount();
+    for (const listener of signedOutListeners) listener();
+  };
+  if (channel)
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      const notice = event.data;
+      if (!notice || typeof notice !== "object") return;
+      const message = notice as { type?: string; accountId?: string };
+      if (
+        message.type === "signed-out" ||
+        (message.type === "session" &&
+          accountId !== null &&
+          typeof message.accountId === "string" &&
+          message.accountId !== accountId)
+      )
+        announceSignedOut();
+      else if (
+        message.type === "session" &&
+        accountId === null &&
+        typeof message.accountId === "string"
+      )
+        clearAccount();
+      else if (
+        message.type === "profile" &&
+        typeof message.accountId === "string" &&
+        (accountId === null || message.accountId === accountId)
+      ) {
+        profileGeneration += 1;
+        profile = null;
+        recent.clear();
+      }
+    };
+  const assertIdentity = (generation: number) => {
+    if (generation !== identityGeneration) {
+      throw new OwnwordsError(
+        "session_changed",
+        "Your account changed. Try again.",
+        409,
+      );
+    }
+  };
+  const cacheKey = (group: string, path: string) =>
+    `${group}:${JSON.stringify([accountId, profileGeneration, path])}`;
+  const invalidateWrite = (path: string) => {
+    // Step/completion writes cannot change the pinned enrollment's resolution.
+    // Keep that small metadata read; clear every personalized course/list/progress answer.
+    if (path.startsWith(learning))
+      recent.clear((key) => !key.startsWith("resolution:"));
+    else recent.clear();
+  };
+  const json = async (
+    method: string,
+    path: string,
+    requestOptions?: RequestOptions,
+  ): Promise<unknown> => {
+    const generation = identityGeneration;
+    const writing = method !== "GET";
+    if (writing) invalidateWrite(path);
+    const load = async () => {
+      const value = await transport.json(method, path, requestOptions);
+      assertIdentity(generation);
+      return value;
+    };
+    try {
+      // No account identity yet: reads remain uncached until getSession verifies it.
+      if (!writing && accountId !== null) {
+        if (path === `${learning}/courses`)
+          return await recent.read(
+            cacheKey("resolution", path),
+            COURSE_RESOLUTION_MS,
+            load,
+          );
+        if (path.startsWith(`${learning}/`))
+          return await recent.read(
+            cacheKey("learning", path),
+            RECENT_READ_MS,
+            load,
+          );
+        if (path.startsWith(`${lexicon}/entries?`))
+          return await recent.read(
+            cacheKey("entries", path),
+            RECENT_READ_MS,
+            load,
+          );
+      }
+      return await load();
+    } catch (error) {
+      if (
+        error instanceof OwnwordsError &&
+        error.status === 401 &&
+        !requestOptions?.quietWhenSignedOut &&
+        generation === identityGeneration
+      )
+        announceSignedOut();
+      if (
+        error instanceof OwnwordsError &&
+        error.code === "COURSE_VERSION_MISMATCH"
+      )
+        recent.clear();
+      throw error;
+    } finally {
+      // Failed writes may have committed, or equivalent writes may have succeeded part-way.
+      // Also evict reads that started while a write was pending.
+      if (writing && generation === identityGeneration) invalidateWrite(path);
+    }
+  };
 
   /** The profile, read once and shared until something changes it. */
   const readOnboarding = (): Promise<Onboarding | null> => {
     if (!profile) {
-      const reading = json("GET", `${API.v1}/profile`).then(readProfile);
+      const generation = profileGeneration;
+      const reading = json("GET", `${API.v1}/profile`).then((answer) => {
+        if (generation !== profileGeneration)
+          throw new OwnwordsError(
+            "profile_changed",
+            "Your languages changed. Try again.",
+            409,
+          );
+        return readProfile(answer);
+      });
       profile = reading;
       // A failed read is not kept: the next call asks again.
       reading.catch(() => {
         if (profile === reading) profile = null;
       });
     }
-    return profile;
+    return profile.then((current) =>
+      current === null ? null : structuredClone(current),
+    );
   };
 
   const requireOnboarding = async (): Promise<Onboarding> => {
@@ -223,13 +370,23 @@ export function createHttpClient(
 
   const saveProfile = async (input: Onboarding): Promise<Onboarding> => {
     profile = null;
+    const generation = ++profileGeneration;
+    recent.clear();
     const saved = readProfile(
       await json("PUT", `${API.v1}/onboarding`, { body: profileBody(input) }),
     );
     if (!saved)
       throw new OwnwordsError("bad_response", "The profile was not saved.");
+    if (generation !== profileGeneration)
+      throw new OwnwordsError(
+        "profile_changed",
+        "Your languages changed. Try again.",
+        409,
+      );
     profile = Promise.resolve(saved);
-    return saved;
+    if (accountId !== null)
+      channel?.postMessage({ type: "profile", accountId });
+    return structuredClone(saved);
   };
 
   const natives = async (): Promise<Set<string>> =>
@@ -431,13 +588,19 @@ export function createHttpClient(
     return all;
   };
 
-  return {
+  const client: OwnwordsClient = {
     kind: "http",
-    onSignedOut: transport.onSignedOut,
+    onSignedOut(listener) {
+      signedOutListeners.add(listener);
+      return () => signedOutListeners.delete(listener);
+    },
 
     /* ---- the account ---- */
 
     async getSession(): Promise<Session> {
+      clearAccount();
+      const generation = identityGeneration;
+      const profileVersion = profileGeneration;
       const session = await json("GET", `${API.auth}/get-session`, {
         quietWhenSignedOut: true,
       });
@@ -446,23 +609,35 @@ export function createHttpClient(
         return { status: "signed-out" };
       }
       const user = object(object(session, "session").user, "session.user");
+      const verifiedAccountId = string(user.id, "session.user.id");
       profile = null;
       try {
         const onboarding = await json("GET", `${API.v1}/profile`, {
           quietWhenSignedOut: true,
         }).then(readProfile);
+        assertIdentity(generation);
+        if (profileVersion !== profileGeneration)
+          throw new OwnwordsError(
+            "profile_changed",
+            "Your languages changed. Try again.",
+            409,
+          );
+        accountId = verifiedAccountId;
         profile = Promise.resolve(onboarding);
+        channel?.postMessage({ type: "session", accountId });
         return {
           status: "signed-in",
           account: {
             name: string(user.name, "session.user.name"),
             email: string(user.email, "session.user.email"),
           },
-          onboarding,
+          onboarding: onboarding === null ? null : structuredClone(onboarding),
         };
       } catch (error) {
+        assertIdentity(generation);
         // A session the API does not accept (no invitation) is no session.
         if (error instanceof OwnwordsError && error.status === 401) {
+          clearAccount();
           return { status: "signed-out" };
         }
         throw error;
@@ -521,7 +696,7 @@ export function createHttpClient(
       await json("POST", `${API.auth}/passkey/verify-authentication`, {
         body: { response: withoutExtensions(response) },
       });
-      profile = null;
+      clearAccount();
     },
 
     async addPasskey() {
@@ -550,8 +725,10 @@ export function createHttpClient(
     },
 
     async signOut() {
+      // Clear immediately, even if the acknowledgement fails or old reads finish late.
+      clearAccount();
       await json("POST", `${API.auth}/sign-out`, { body: {} });
-      profile = null;
+      channel?.postMessage({ type: "signed-out" });
     },
 
     saveOnboarding: saveProfile,
@@ -636,10 +813,17 @@ export function createHttpClient(
       const body: Record<string, unknown> = { version: patch.version };
       if (patch.note !== undefined) body.note = patch.note.trim() || null;
       if (patch.kind !== undefined) body.kind = patch.kind;
-      await json("PATCH", `${lexicon}/entries/${encodeURIComponent(entryId)}`, {
-        body,
-      });
-      return entry(entryId);
+      const updated = readEntry(
+        object(
+          await json(
+            "PATCH",
+            `${lexicon}/entries/${encodeURIComponent(entryId)}`,
+            { body },
+          ),
+          "updated",
+        ).data,
+      );
+      return toEntry(updated, await natives());
     },
 
     async deleteEntry(entryId, version) {
@@ -822,53 +1006,61 @@ export function createHttpClient(
     },
 
     async getProgress() {
-      const { languages } = await requireOnboarding();
-      const practised = languages.filter(
-        (language) => language.level !== "native",
-      );
-      const [rows, { queue, dueLanes }] = await Promise.all([
-        Promise.all(
-          practised.map(async (language) => {
-            const answer = object(
-              await json(
-                "GET",
-                `${lexicon}/progress?${new URLSearchParams({ language: language.code })}`,
-              ),
-              "progress",
-            );
-            return array(answer.data, "progress.data", (item, path) => {
-              const row = object(item, path);
-              const retention = row.retention;
-              return {
-                language: language.code,
-                direction: directionFromWire(
-                  oneOf(row.direction, `${path}.direction`, [
-                    "recognize",
-                    "produce",
-                  ] as const),
+      const load = async () => {
+        const { languages } = await requireOnboarding();
+        const practised = languages.filter(
+          (language) => language.level !== "native",
+        );
+        const [rows, { queue, dueLanes }] = await Promise.all([
+          Promise.all(
+            practised.map(async (language) => {
+              const answer = object(
+                await json(
+                  "GET",
+                  `${lexicon}/progress?${new URLSearchParams({ language: language.code })}`,
                 ),
-                retention:
-                  typeof retention === "number" && Number.isFinite(retention)
-                    ? retention
-                    : null,
-                nextDueAt: optionalString(row.nextDueAt, `${path}.nextDueAt`),
-              };
-            });
+                "progress",
+              );
+              return array(answer.data, "progress.data", (item, path) => {
+                const row = object(item, path);
+                const retention = row.retention;
+                return {
+                  language: language.code,
+                  direction: directionFromWire(
+                    oneOf(row.direction, `${path}.direction`, [
+                      "recognize",
+                      "produce",
+                    ] as const),
+                  ),
+                  retention:
+                    typeof retention === "number" && Number.isFinite(retention)
+                      ? retention
+                      : null,
+                  nextDueAt: optionalString(row.nextDueAt, `${path}.nextDueAt`),
+                };
+              });
+            }),
+          ),
+          // What is due is what the practice tab would ask now; a fresh session
+          // id reads it without touching any sitting in progress.
+          dueQueue({
+            mode: "maintain",
+            format: "flashcard",
+            sessionId: newId(),
           }),
-        ),
-        // What is due is what the practice tab would ask now; a fresh session
-        // id reads it without touching any sitting in progress.
-        dueQueue({ mode: "maintain", format: "flashcard", sessionId: newId() }),
-      ]);
-      const perLanguage: LanguageProgress[] = rows.flat().map((row) => ({
-        ...row,
-        dueNow: dueLanes.has(`${row.language}:${row.direction}`),
-      }));
-      return {
-        perLanguage,
-        estimate: queue.estimate,
-        comingUp: queue.comingUp,
+        ]);
+        const perLanguage: LanguageProgress[] = rows.flat().map((row) => ({
+          ...row,
+          dueNow: dueLanes.has(`${row.language}:${row.direction}`),
+        }));
+        return {
+          perLanguage,
+          estimate: queue.estimate,
+          comingUp: queue.comingUp,
+        };
       };
+      if (accountId === null) return load();
+      return recent.read(cacheKey("progress", "summary"), RECENT_READ_MS, load);
     },
 
     /* ---- the course ---- */
@@ -988,6 +1180,62 @@ export function createHttpClient(
       return { ...saved.preferences, reminders: "after-install" };
     },
   };
+  // Fence complete multi-request methods too: a late old-account response must
+  // not combine with later reads or escape to a caller after account rotation.
+  const reads = new Set([
+    "listLanguages",
+    "listEntries",
+    "getEntry",
+    "getDueQueue",
+    "getProgress",
+    "getCourse",
+    "getLesson",
+    "getAlphabet",
+    "listReferenceTopics",
+    "getPreferences",
+  ]);
+  for (const [name, candidate] of Object.entries(client)) {
+    if (
+      typeof candidate !== "function" ||
+      ["onSignedOut", "getSession", "signOut", "signInWithPasskey"].includes(
+        name,
+      )
+    )
+      continue;
+    const operation = candidate as (...args: unknown[]) => Promise<unknown>;
+    Object.assign(client, {
+      [name]: async (...args: unknown[]) => {
+        const generation = identityGeneration;
+        const profileVersion = profileGeneration;
+        try {
+          const result = await operation(...args);
+          assertIdentity(generation);
+          if (reads.has(name) && profileVersion !== profileGeneration)
+            throw new OwnwordsError(
+              "profile_changed",
+              "Your languages changed. Try again.",
+              409,
+            );
+          return result;
+        } catch (error) {
+          if (
+            error instanceof OwnwordsError &&
+            error.code === "bad_response" &&
+            generation === identityGeneration
+          )
+            recent.clear();
+          if (
+            error instanceof OwnwordsError &&
+            error.status === 401 &&
+            generation === identityGeneration
+          )
+            announceSignedOut();
+          throw error;
+        }
+      },
+    });
+  }
+  return client;
 }
 
 /** The Reference tab's topics, and the content categories each one gathers. */

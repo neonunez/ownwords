@@ -70,6 +70,7 @@ export function AddEntryScreen() {
   const [typing, setTyping] = useState<LanguageTag | null>(null);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingLabel, setPendingLabel] = useState("Saving entry…");
   const requests = useRef<AbortController | null>(null);
 
   const languages = useAsync(() => client.listLanguages(), [client]);
@@ -123,6 +124,8 @@ export function AddEntryScreen() {
   };
 
   const moveOn = async () => {
+    if (busy) return;
+    setPendingLabel("Saving entry…");
     setBusy(true);
     try {
       const entry = await client.createEntry({
@@ -146,6 +149,7 @@ export function AddEntryScreen() {
   const backToCapture = async () => {
     requests.current?.abort();
     if (draft) {
+      setPendingLabel("Setting aside draft…");
       setBusy(true);
       try {
         // Nothing has been reviewed yet, so the stored headword goes too.
@@ -190,6 +194,8 @@ export function AddEntryScreen() {
       // Never asked for: nothing to keep.
       return [];
     });
+    if (busy) return;
+    setPendingLabel("Saving entry…");
     setBusy(true);
     try {
       if (sense && equivalents.length) {
@@ -329,7 +335,11 @@ export function AddEntryScreen() {
             iconRight="arrow-right"
             onClick={() => void moveOn()}
           >
-            {suggest && others.length ? "Translate" : "Next"}
+            {busy
+              ? pendingLabel
+              : suggest && others.length
+                ? "Translate"
+                : "Next"}
           </Button>
         </Screen>
       </>
@@ -417,7 +427,7 @@ export function AddEntryScreen() {
           disabled={busy || waiting}
           onClick={() => void save()}
         >
-          Save entry
+          {busy ? pendingLabel : "Save entry"}
         </Button>
       </Screen>
 

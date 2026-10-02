@@ -248,6 +248,18 @@ export function EntryScreen() {
         }
       />
       <Screen>
+        {busy && (
+          <p
+            role="status"
+            style={{
+              margin: 0,
+              font: "var(--type-body)",
+              color: "var(--fg-2)",
+            }}
+          >
+            Saving changes…
+          </p>
+        )}
         <div style={{ padding: "4px 4px 0" }}>
           <p
             style={{
