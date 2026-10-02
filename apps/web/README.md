@@ -7,7 +7,9 @@ Ownwords design system and the product requirements in the repository's root
 It is a TypeScript React application, served as a static bundle and
 installable on a phone. Once installed, its shell opens without a network; the
 account, the collection, practice, progress and the course are backend data,
-and Ownwords is online-first, so reading and changing them needs a connection.
+and Ownwords is online-first: fresh reads and every change need a connection.
+A running tab can reuse recent account-scoped reads briefly; it never queues a
+write or claims a save before the server acknowledges it.
 It talks to the Ownwords API (`apps/api`) on its own origin, under `/api`,
 through one typed interface — see
 [docs/backend-boundary.md](docs/backend-boundary.md).
@@ -201,11 +203,13 @@ gone.
 That is all that works offline. Ownwords is online-first and offline use is
 not a goal for the first release: the service worker precaches only the built
 bundle, caches nothing at runtime, and never serves `/api/` from its fallback,
-so no backend answer is ever kept or replayed. Opened without a connection,
-the app says Ownwords could not be reached and offers to try again; a screen
-that loses the connection later shows its own written failure and a retry, and
-the collection, practice, progress and the course come back once the backend
-can be reached.
+so no backend answer is persisted or replayed by the service worker. Opened
+without a connection, the app says Ownwords could not be reached and offers to
+try again. In an already running tab, the HTTP client can reuse bounded recent
+reads in memory (15 seconds for screens, 30 for course resolution), scoped to the
+verified account/profile and invalidated after writes and session changes.
+There is no offline fallback when a fresh read fails: the screen shows its own
+written failure and a retry. See [docs/backend-boundary.md](docs/backend-boundary.md).
 
 A new build never replaces a running one silently. The waiting worker stays
 waiting, the app says "A new version of Ownwords is ready" and offers a

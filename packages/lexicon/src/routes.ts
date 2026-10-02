@@ -311,9 +311,7 @@ export function createLexiconRoutes(
     );
     const page = rows.slice(0, limit);
     const now = clock.now();
-    const data = await Promise.all(
-      page.map((row) => getEntry(c.env.DB, ownerId, row.id, now)),
-    );
+    const data = await hydrateEntries(c.env.DB, ownerId, page, now);
     const last = page.at(-1);
     return c.json({
       data,
@@ -1147,6 +1145,86 @@ function appendEquivalentInserts(
   });
 }
 
+/** Hydrate only the selected page; owner checks apply to every descendant join. */
+async function hydrateEntries(
+  db: D1Database,
+  ownerId: string,
+  entries: EntryRow[],
+  now: Date,
+): Promise<Record<string, unknown>[]> {
+  const senses: SenseRow[] = [];
+  const equivalents: EquivalentRow[] = [];
+  const cards: CardMasteryRow[] = [];
+  // D1 permits 100 bound parameters. Reserve one for the verified owner.
+  for (let offset = 0; offset < entries.length; offset += 99) {
+    const ids = entries.slice(offset, offset + 99).map((entry) => entry.id);
+    const placeholders = ids.map(() => "?").join(",");
+    const bindings = [ownerId, ...ids];
+    const [senseRows, equivalentRows, cardRows] = await Promise.all([
+      all<SenseRow>(
+        db
+          .prepare(
+            `SELECT id, entry_id, gloss, note, position, human_edited, version, created_at, updated_at
+           FROM lexicon_senses
+          WHERE owner_id = ? AND entry_id IN (${placeholders}) AND deleted_at IS NULL
+          ORDER BY position, id`,
+          )
+          .bind(...bindings),
+      ),
+      all<EquivalentRow>(
+        db
+          .prepare(
+            `SELECT q.id, q.sense_id, q.language_tag, q.text, q.fit, q.status, q.note, q.source,
+                q.provenance_json, q.script_data_json, q.human_edited, q.version, q.created_at, q.updated_at
+           FROM lexicon_equivalents q
+           JOIN lexicon_senses s ON s.id = q.sense_id AND s.owner_id = q.owner_id
+          WHERE s.owner_id = ? AND s.entry_id IN (${placeholders})
+            AND s.deleted_at IS NULL AND q.deleted_at IS NULL
+          ORDER BY q.language_tag, q.created_at, q.id`,
+          )
+          .bind(...bindings),
+      ),
+      all<CardMasteryRow>(
+        db
+          .prepare(
+            `SELECT p.equivalent_id, p.direction, p.due_at, p.reps, p.stability
+           FROM lexicon_practice_cards p
+           JOIN lexicon_equivalents q ON q.id = p.equivalent_id AND q.owner_id = p.owner_id
+           JOIN lexicon_senses s ON s.id = q.sense_id AND s.owner_id = q.owner_id
+          WHERE p.owner_id = ? AND s.entry_id IN (${placeholders})
+            AND s.deleted_at IS NULL AND q.deleted_at IS NULL`,
+          )
+          .bind(...bindings),
+      ),
+    ]);
+    senses.push(...senseRows);
+    equivalents.push(...equivalentRows);
+    cards.push(...cardRows);
+  }
+  const mastery = masteryFromRows(cards, now);
+  const equivalentsBySense = new Map<string, EquivalentRow[]>();
+  for (const equivalent of equivalents) {
+    const rows = equivalentsBySense.get(equivalent.sense_id) ?? [];
+    rows.push(equivalent);
+    equivalentsBySense.set(equivalent.sense_id, rows);
+  }
+  const sensesByEntry = new Map<string, Record<string, unknown>[]>();
+  for (const sense of senses) {
+    const rows = sensesByEntry.get(sense.entry_id) ?? [];
+    rows.push({
+      ...mapSense(sense),
+      equivalents: (equivalentsBySense.get(sense.id) ?? []).map((row) =>
+        mapEquivalent(row, mastery),
+      ),
+    });
+    sensesByEntry.set(sense.entry_id, rows);
+  }
+  return entries.map((entry) => ({
+    ...mapEntry(entry),
+    senses: sensesByEntry.get(entry.id) ?? [],
+  }));
+}
+
 async function getEntry(
   db: D1Database,
   ownerId: string,
@@ -1255,6 +1333,10 @@ async function loadMastery(
       )
       .bind(ownerId, id),
   );
+  return masteryFromRows(rows, now);
+}
+
+function masteryFromRows(rows: CardMasteryRow[], now: Date): EquivalentMastery {
   const nowIso = iso(now);
   const mastery: EquivalentMastery = new Map();
   for (const row of rows) {

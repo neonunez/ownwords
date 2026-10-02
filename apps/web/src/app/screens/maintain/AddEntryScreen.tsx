@@ -70,7 +70,9 @@ export function AddEntryScreen() {
   const [typing, setTyping] = useState<LanguageTag | null>(null);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingLabel, setPendingLabel] = useState("Saving entry…");
   const requests = useRef<AbortController | null>(null);
+  const inFlight = useRef(false);
 
   const languages = useAsync(() => client.listLanguages(), [client]);
   const preferences = useAsync(() => client.getPreferences(), [client]);
@@ -123,6 +125,9 @@ export function AddEntryScreen() {
   };
 
   const moveOn = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setPendingLabel("Saving entry…");
     setBusy(true);
     try {
       const entry = await client.createEntry({
@@ -140,12 +145,14 @@ export function AddEntryScreen() {
     } catch (error) {
       showToast(written(error, "That entry was not saved. Try again."));
     }
+    inFlight.current = false;
     setBusy(false);
   };
 
   const backToCapture = async () => {
     requests.current?.abort();
     if (draft) {
+      setPendingLabel("Setting aside draft…");
       setBusy(true);
       try {
         // Nothing has been reviewed yet, so the stored headword goes too.
@@ -190,6 +197,9 @@ export function AddEntryScreen() {
       // Never asked for: nothing to keep.
       return [];
     });
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setPendingLabel("Saving entry…");
     setBusy(true);
     try {
       if (sense && equivalents.length) {
@@ -198,6 +208,7 @@ export function AddEntryScreen() {
       navigate("/maintain/lexicon");
       showToast("Saved to your Lexicon.", { icon: "check" });
     } catch (error) {
+      inFlight.current = false;
       setBusy(false);
       navigate(`/maintain/lexicon/${draft.id}`);
       showToast(
@@ -329,7 +340,11 @@ export function AddEntryScreen() {
             iconRight="arrow-right"
             onClick={() => void moveOn()}
           >
-            {suggest && others.length ? "Translate" : "Next"}
+            {busy
+              ? pendingLabel
+              : suggest && others.length
+                ? "Translate"
+                : "Next"}
           </Button>
         </Screen>
       </>
@@ -417,7 +432,7 @@ export function AddEntryScreen() {
           disabled={busy || waiting}
           onClick={() => void save()}
         >
-          Save entry
+          {busy ? pendingLabel : "Save entry"}
         </Button>
       </Screen>
 

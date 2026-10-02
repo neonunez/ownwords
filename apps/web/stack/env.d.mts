@@ -15,6 +15,8 @@ export declare const USERS: Record<
   | "exporter"
   | "firstrun"
   | "reader"
-  | "settler",
+  | "settler"
+  | "performance"
+  | "peer",
   string
 >;

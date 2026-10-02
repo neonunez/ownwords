@@ -50,6 +50,16 @@ const profile = {
   },
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
 const signedIn = {
   "GET /api/auth/get-session": {
     session: { id: "s" },
@@ -1046,6 +1056,87 @@ describe("the course", () => {
     expect(await client.completeLesson("l2")).toEqual({ lexicon: "pending" });
   });
 
+  it("reuses account/profile/version-scoped course reads but keeps ordered step writes and refreshes progress after them", async () => {
+    const api = fakeApi({
+      ...routes,
+      "PUT /api/v1/learning/courses/russian-zero/versions/2/lessons/l2/progress":
+        { progress: {} },
+      "PUT /api/v1/onboarding": profile,
+    });
+    let now = 0;
+    const client = createHttpClient({ fetch: api.fetch, now: () => now });
+    await client.getSession();
+    api.requests.length = 0;
+    const cold = await client.getCourse();
+    expect(api.requests).toHaveLength(4);
+    cold!.units[0]!.title = "changed locally";
+    api.requests.length = 0;
+    expect((await client.getCourse())!.units[0]!.title).not.toBe(
+      "changed locally",
+    );
+    await client.getLesson("l2");
+    expect(api.requests).toHaveLength(0);
+    await client.completeLessonStep("l2", "l2-a");
+    await client.completeLessonStep("l2", "l2-b");
+    expect(api.requests.map((request) => request.method)).toEqual([
+      "PUT",
+      "PUT",
+    ]);
+    api.requests.length = 0;
+    await client.getCourse();
+    expect(api.requests).toHaveLength(3); // Resolution survives these progress-only writes.
+    expect(
+      api.requests.some((request) =>
+        new URL(request.url).pathname.endsWith("/courses"),
+      ),
+    ).toBe(false);
+    now = 30_001;
+    api.requests.length = 0;
+    await client.getCourse();
+    expect(api.requests).toHaveLength(4);
+    await client.saveOnboarding({
+      languages: [{ code: "ru", kind: "learn", level: "a0" }],
+      preferences: {
+        explanationsIn: "en",
+        audioInCourse: false,
+        suggestTranslations: false,
+      },
+    });
+    api.requests.length = 0;
+    await client.getCourse();
+    expect(api.requests).toHaveLength(4);
+  });
+
+  it("drops course resolution after a version conflict and resolves the new pinned version", async () => {
+    let version = 2;
+    const api = fakeApi({
+      ...routes,
+      "GET /api/v1/learning/courses": () =>
+        Response.json({ courses: [{ ...courses.courses[0], version }] }),
+      "GET /api/v1/learning/courses/russian-zero/versions/3": {
+        course: { ...outline.course, version: 3 },
+      },
+      "GET /api/v1/learning/courses/russian-zero/versions/3/lessons/l2": lesson,
+      "PUT /api/v1/learning/courses/russian-zero/versions/2/lessons/l2/progress":
+        () => {
+          version = 3;
+          return Response.json(
+            { error: { code: "COURSE_VERSION_MISMATCH", message: "changed" } },
+            { status: 409 },
+          );
+        },
+    });
+    const client = createHttpClient({ fetch: api.fetch });
+    await client.getSession();
+    await client.getCourse();
+    await expect(client.completeLessonStep("l2", "l2-b")).rejects.toMatchObject(
+      { code: "COURSE_VERSION_MISMATCH" },
+    );
+    api.requests.length = 0;
+    expect((await client.getCourse())!.version).toBe("3");
+    expect(api.requests).toHaveLength(4);
+  });
+
   it("reads letters from the alphabet references", async () => {
     const api = fakeApi({
       ...routes,
@@ -1087,5 +1178,500 @@ describe("the course", () => {
         sameAsLatin: false,
       },
     ]);
+  });
+});
+
+describe("recent account data and acknowledgement", () => {
+  const page = (entry = wireEntry) => ({
+    data: [entry],
+    page: { limit: 30, nextCursor: null },
+  });
+  async function connected(
+    routes: Record<string, unknown>,
+    now?: () => number,
+  ) {
+    const api = fakeApi({ ...signedIn, ...routes });
+    const client = createHttpClient({
+      fetch: api.fetch,
+      ...(now ? { now } : {}),
+    });
+    await client.getSession();
+    api.requests.length = 0;
+    return { api, client };
+  }
+
+  it("consumes PATCH's updated entry without a redundant GET or an early committed result", async () => {
+    const ack = deferred<Response>();
+    const { api, client } = await connected({
+      "PATCH /api/v1/lexicon/entries/e1": () => ack.promise,
+    });
+    const saved = client.updateEntry("e1", { version: 3, note: "new note" });
+    let finished = false;
+    void saved.then(() => {
+      finished = true;
+    });
+    await vi.waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(finished).toBe(false);
+    ack.resolve(
+      Response.json({ data: { ...wireEntry, version: 4, note: "new note" } }),
+    );
+    expect(await saved).toMatchObject({ version: 4, note: "new note" });
+    expect(api.requests.map((request) => request.method)).toEqual(["PATCH"]);
+  });
+
+  it("reuses recent lists by exact query, clones them, and refetches when their TTL expires", async () => {
+    let now = 0;
+    const { api, client } = await connected(
+      { "GET /api/v1/lexicon/entries": page() },
+      () => now,
+    );
+    const first = await client.listEntries();
+    first.items[0]!.note = "local edit";
+    expect((await client.listEntries()).items[0]!.note).toBe(wireEntry.note);
+    expect(api.requests).toHaveLength(1);
+    await client.listEntries({ language: "es" });
+    expect(api.requests).toHaveLength(2);
+    now = 15_001;
+    await client.listEntries();
+    expect(api.requests).toHaveLength(3);
+  });
+
+  it("does not retain an offline or malformed answer, so retry reaches the backend", async () => {
+    let calls = 0;
+    const { api, client } = await connected({
+      "GET /api/v1/lexicon/entries": () => {
+        calls += 1;
+        if (calls === 1) throw new TypeError("offline");
+        return Response.json(calls === 2 ? { wrong: true } : page());
+      },
+    });
+    await expect(client.listEntries()).rejects.toMatchObject({
+      code: "offline",
+    });
+    await expect(client.listEntries()).rejects.toMatchObject({
+      code: "bad_response",
+    });
+    expect((await client.listEntries()).items).toHaveLength(1);
+    expect(api.requests).toHaveLength(3);
+  });
+
+  it("shares only browser-client in-flight reads and never resurrects an evicted pre-write read", async () => {
+    const stale = deferred<Response>();
+    let calls = 0;
+    const updated = { ...wireEntry, version: 4, note: "acknowledged" };
+    const { api, client } = await connected({
+      "GET /api/v1/lexicon/entries": () =>
+        ++calls === 1 ? stale.promise : Response.json(page(updated)),
+      "PATCH /api/v1/lexicon/entries/e1": { data: updated },
+    });
+    const old = client.listEntries();
+    const concurrent = client.listEntries();
+    await vi.waitFor(() => expect(api.requests).toHaveLength(1));
+    await client.updateEntry("e1", { version: 3, note: "acknowledged" });
+    expect((await client.listEntries()).items[0]!.note).toBe("acknowledged");
+    stale.resolve(Response.json(page()));
+    await Promise.all([old, concurrent]);
+    expect((await client.listEntries()).items[0]!.note).toBe("acknowledged");
+    expect(calls).toBe(2);
+  });
+
+  it("invalidates even a failed write and keeps equivalent POSTs ordered with partial success", async () => {
+    const posted: string[] = [];
+    const firstAck = deferred<Response>();
+    let partial = false;
+    const { api, client } = await connected({
+      "GET /api/v1/lexicon/entries": () =>
+        Response.json(
+          page(
+            partial
+              ? { ...wireEntry, note: "first equivalent kept" }
+              : wireEntry,
+          ),
+        ),
+      "POST /api/v1/lexicon/entries/e1/senses/s1/equivalents": async (
+        request: Request,
+      ) => {
+        const body = (await request.json()) as { languageTag: string };
+        posted.push(body.languageTag);
+        if (body.languageTag === "en") {
+          const response = await firstAck.promise;
+          partial = true;
+          return response;
+        }
+        return Response.json(
+          { error: { code: "VERSION_CONFLICT", message: "conflict" } },
+          { status: 409 },
+        );
+      },
+    });
+    await client.listEntries();
+    const saving = client.addEquivalents("e1", "s1", [
+      { language: "en", text: "one", state: "manual" },
+      { language: "ru", text: "two", state: "manual" },
+      { language: "es", text: "three", state: "manual" },
+    ]);
+    const rejected = expect(saving).rejects.toMatchObject({ status: 409 });
+    await vi.waitFor(() => expect(posted).toEqual(["en"]));
+    firstAck.resolve(Response.json({ data: {} }));
+    await rejected;
+    expect(posted).toEqual(["en", "ru"]);
+    expect(
+      api.requests.filter((request) => request.url.endsWith("/entries/e1")),
+    ).toHaveLength(0);
+    expect((await client.listEntries()).items[0]!.note).toBe(
+      "first equivalent kept",
+    );
+  });
+
+  it("clears data on sign-out, fences late reads and does not mix a later account's profile", async () => {
+    const late = deferred<Response>();
+    let owner = "a";
+    let first = true;
+    const api = fakeApi({
+      ...signedIn,
+      "GET /api/auth/get-session": () =>
+        Response.json({
+          session: { id: owner },
+          user: { id: owner, name: owner, email: `${owner}@example.com` },
+        }),
+      "GET /api/v1/profile": () =>
+        Response.json(
+          owner === "a"
+            ? profile
+            : {
+                data: {
+                  profile: {
+                    ...profile.data.profile,
+                    languages: [
+                      { tag: "es", kind: "maintain", level: "native" },
+                    ],
+                  },
+                },
+              },
+        ),
+      "GET /api/v1/lexicon/entries": () => {
+        if (first) {
+          first = false;
+          return late.promise;
+        }
+        return Response.json(page({ ...wireEntry, note: `owner-${owner}` }));
+      },
+      "POST /api/auth/sign-out": () => new Response(null, { status: 204 }),
+    });
+    const client = createHttpClient({ fetch: api.fetch });
+    await client.getSession();
+    const old = client.listEntries();
+    const stale = expect(old).rejects.toMatchObject({
+      code: "session_changed",
+    });
+    await vi.waitFor(() =>
+      expect(
+        api.requests.some((request) =>
+          new URL(request.url).pathname.endsWith("/entries"),
+        ),
+      ).toBe(true),
+    );
+    await client.signOut();
+    owner = "b";
+    await client.getSession();
+    late.resolve(Response.json(page()));
+    await stale;
+    expect((await client.listEntries()).items[0]!.note).toBe("owner-b");
+    expect(await client.listLanguages()).toEqual([
+      { code: "es", name: "Español", role: "native", level: "native" },
+    ]);
+  });
+
+  it("ignores a late old-account 401 but clears all recent data on the current account's 401", async () => {
+    const late = deferred<Response>();
+    let owner = "a";
+    let first = true;
+    const api = fakeApi({
+      ...signedIn,
+      "GET /api/auth/get-session": () =>
+        Response.json({
+          session: {},
+          user: { id: owner, name: owner, email: `${owner}@example.com` },
+        }),
+      "GET /api/v1/lexicon/entries/e1": () =>
+        first
+          ? ((first = false), late.promise)
+          : Response.json(
+              { error: { code: "unauthorized", message: "ended" } },
+              { status: 401 },
+            ),
+      "GET /api/v1/lexicon/entries": page(),
+    });
+    const client = createHttpClient({ fetch: api.fetch });
+    const ended = vi.fn();
+    client.onSignedOut(ended);
+    await client.getSession();
+    const old = client.getEntry("e1");
+    const failed = expect(old).rejects.toMatchObject({ status: 401 });
+    await vi.waitFor(() =>
+      expect(
+        api.requests.some((request) => request.url.endsWith("/entries/e1")),
+      ).toBe(true),
+    );
+    owner = "b";
+    await client.getSession();
+    await client.listEntries();
+    late.resolve(
+      Response.json(
+        { error: { code: "unauthorized", message: "old session ended" } },
+        { status: 401 },
+      ),
+    );
+    await failed;
+    expect(ended).not.toHaveBeenCalled();
+    await expect(client.getEntry("e1")).rejects.toMatchObject({ status: 401 });
+    expect(ended).toHaveBeenCalledOnce();
+    api.requests.length = 0;
+    await client.listEntries();
+    expect(
+      api.requests.some(
+        (request) =>
+          new URL(request.url).pathname === "/api/v1/lexicon/entries",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not let a late old profile read or save repopulate a later account", async () => {
+    const late = deferred<Response>();
+    let first = true;
+    const api = fakeApi({
+      ...signedIn,
+      "GET /api/v1/profile": () =>
+        first ? ((first = false), late.promise) : Response.json(profile),
+      "POST /api/auth/sign-out": () => new Response(null, { status: 204 }),
+    });
+    const client = createHttpClient({ fetch: api.fetch });
+    const old = client.listLanguages();
+    const failed = expect(old).rejects.toMatchObject({
+      code: "session_changed",
+    });
+    await vi.waitFor(() => expect(api.requests).toHaveLength(1));
+    await client.signOut();
+    await client.getSession();
+    late.resolve(Response.json({ data: { profile: null } }));
+    await failed;
+    expect(await client.listLanguages()).toHaveLength(3);
+  });
+
+  it("clears recent data across same-origin tabs when the verified account changes or sign-out is acknowledged", async () => {
+    const ports = new Set<{
+      onmessage: ((event: MessageEvent) => void) | null;
+    }>();
+    class Channel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor() {
+        ports.add(this);
+      }
+      postMessage(data: unknown) {
+        for (const port of ports)
+          if (port !== this) port.onmessage?.({ data } as MessageEvent);
+      }
+      close() {
+        ports.delete(this);
+      }
+    }
+    vi.stubGlobal("BroadcastChannel", Channel);
+    try {
+      let owner = "a";
+      const api = fakeApi({
+        ...signedIn,
+        "GET /api/auth/get-session": () =>
+          Response.json({
+            session: {},
+            user: { id: owner, name: owner, email: `${owner}@example.com` },
+          }),
+        "GET /api/v1/lexicon/entries": () =>
+          Response.json(page({ ...wireEntry, note: `owner-${owner}` })),
+        "POST /api/auth/sign-out": () => new Response(null, { status: 204 }),
+      });
+      const first = createHttpClient({ fetch: api.fetch });
+      const second = createHttpClient({ fetch: api.fetch });
+      const ended = vi.fn();
+      first.onSignedOut(ended);
+      await first.getSession();
+      await first.listEntries();
+      owner = "b";
+      await second.getSession();
+      expect(ended).toHaveBeenCalledOnce();
+      await first.getSession();
+      expect((await first.listEntries()).items[0]!.note).toBe("owner-b");
+      await second.signOut();
+      expect(ended).toHaveBeenCalledTimes(2);
+      api.requests.length = 0;
+      await first.listEntries();
+      expect(
+        api.requests.some(
+          (request) =>
+            new URL(request.url).pathname === "/api/v1/lexicon/entries",
+        ),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("lets a tab start while another tab announces the same account, and fences a different one", async () => {
+    const ports = new Set<{
+      onmessage: ((event: MessageEvent) => void) | null;
+    }>();
+    class Channel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor() {
+        ports.add(this);
+      }
+      postMessage(data: unknown) {
+        for (const port of ports)
+          if (port !== this) port.onmessage?.({ data } as MessageEvent);
+      }
+      close() {
+        ports.delete(this);
+      }
+    }
+    vi.stubGlobal("BroadcastChannel", Channel);
+    try {
+      let owner = "a";
+      const held = { session: false, profile: false };
+      const waiting: Array<() => void> = [];
+      const hold = (key: keyof typeof held, answer: Response) => {
+        if (!held[key]) return answer;
+        held[key] = false;
+        return new Promise<Response>((resolve) =>
+          waiting.push(() => resolve(answer)),
+        );
+      };
+      const api = fakeApi({
+        ...signedIn,
+        "GET /api/auth/get-session": () =>
+          hold(
+            "session",
+            Response.json({
+              session: {},
+              user: { id: owner, name: owner, email: `${owner}@example.com` },
+            }),
+          ),
+        "GET /api/v1/profile": () => hold("profile", Response.json(profile)),
+      });
+      const first = createHttpClient({ fetch: api.fetch });
+      const second = createHttpClient({ fetch: api.fetch });
+      const release = async (announce: () => Promise<unknown>) => {
+        await vi.waitFor(() => expect(waiting).toHaveLength(1));
+        await announce();
+        waiting.pop()!();
+      };
+
+      held.profile = true;
+      const duringProfile = first.getSession();
+      await release(() => second.getSession());
+      await expect(duringProfile).resolves.toMatchObject({
+        status: "signed-in",
+      });
+
+      held.session = true;
+      const duringSession = first.getSession();
+      await release(() => second.getSession());
+      await expect(duringSession).resolves.toMatchObject({
+        status: "signed-in",
+      });
+
+      held.session = true;
+      const changed = first.getSession();
+      const fenced = expect(changed).rejects.toMatchObject({
+        code: "session_changed",
+      });
+      await release(async () => {
+        owner = "b";
+        await second.getSession();
+      });
+      await fenced;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not publish an old profile save after another session probe, and clears caches even when sign-out fails", async () => {
+    const save = deferred<Response>();
+    const { api, client } = await connected({
+      "GET /api/v1/lexicon/entries": page(),
+      "PUT /api/v1/onboarding": () => save.promise,
+      "POST /api/auth/sign-out": () =>
+        Response.json(
+          {
+            error: {
+              code: "INTERNAL_ERROR",
+              message: "unknown acknowledgement",
+            },
+          },
+          { status: 500 },
+        ),
+    });
+    await client.listEntries();
+    const saving = client.saveOnboarding({
+      languages: [{ code: "es", kind: "maintain", level: "native" }],
+      preferences: {
+        explanationsIn: "es",
+        audioInCourse: false,
+        suggestTranslations: false,
+      },
+    });
+    const stale = expect(saving).rejects.toMatchObject({
+      code: "session_changed",
+    });
+    await vi.waitFor(() =>
+      expect(api.requests.some((request) => request.method === "PUT")).toBe(
+        true,
+      ),
+    );
+    await client.getSession();
+    save.resolve(Response.json({ data: { profile: null } }));
+    await stale;
+    expect(await client.listLanguages()).toHaveLength(3);
+    await client.listEntries();
+    await expect(client.signOut()).rejects.toMatchObject({ status: 500 });
+    api.requests.length = 0;
+    await client.listEntries();
+    expect(
+      api.requests.some(
+        (request) =>
+          new URL(request.url).pathname === "/api/v1/lexicon/entries",
+      ),
+    ).toBe(true);
+  });
+
+  it("reuses recent progress without sharing practice sittings, and invalidates after reviews", async () => {
+    const { api, client } = await connected({
+      "GET /api/v1/lexicon/progress": { data: [] },
+      "GET /api/v1/lexicon/practice/due": { data: [], nextDueAt: null },
+      "POST /api/v1/lexicon/practice/reviews": { data: {} },
+    });
+    await client.getProgress();
+    expect(api.requests).toHaveLength(6);
+    await client.getProgress();
+    expect(api.requests).toHaveLength(6);
+    await client.getDueQueue({
+      mode: "maintain",
+      format: "flashcard",
+      sessionId: "sitting-one",
+    });
+    await client.getDueQueue({
+      mode: "maintain",
+      format: "flashcard",
+      sessionId: "sitting-two",
+    });
+    expect(api.requests).toHaveLength(14);
+    await client.submitReview({
+      cardId: "c",
+      sessionId: "sitting-two",
+      submissionId: "r",
+      rating: "good",
+      format: "flashcard",
+    });
+    api.requests.length = 0;
+    await client.getProgress();
+    expect(api.requests).toHaveLength(6);
   });
 });
