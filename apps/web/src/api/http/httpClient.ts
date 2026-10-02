@@ -610,11 +610,12 @@ export function createHttpClient(
       clearAccount();
       const generation = identityGeneration;
       const profileVersion = profileGeneration;
-      const check = (verifying = {
+      const check: NonNullable<typeof verifying> = {
         generation,
         accountId: null,
         noticed: new Set<string>(),
-      });
+      };
+      verifying = check;
       const session = await json("GET", `${API.auth}/get-session`, {
         quietWhenSignedOut: true,
       });
