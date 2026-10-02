@@ -41,7 +41,11 @@ describe("truthful action feedback", () => {
       client,
     });
     const next = await screen.findByRole("button", { name: "Next" });
-    await userEvent.click(next);
+    // Both activations arrive before React commits the disabled button.
+    act(() => {
+      next.click();
+      next.click();
+    });
     expect(
       screen.getByRole("button", { name: "Saving progress…" }),
     ).toBeDisabled();
@@ -49,12 +53,6 @@ describe("truthful action feedback", () => {
       screen.getByRole("list", { name: "Step 1 of 4" }),
     ).toBeInTheDocument();
     expect(writes).toEqual(["u3s1"]);
-    // Same-frame extra activations cannot start another sequence.
-    act(() => {
-      next.click();
-      next.click();
-    });
-    expect(writes).toHaveLength(1);
     await act(async () => first.resolve());
     await waitFor(() => expect(writes).toEqual(["u3s1", "u3s2"]));
     expect(
