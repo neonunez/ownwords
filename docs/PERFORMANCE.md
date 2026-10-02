@@ -130,12 +130,14 @@ Executable coverage:
   honest failures. Existing search/mastery/ownership tests also run.
 - `apps/web/src/api/http/httpClient.test.ts`: cold/warm request counts, exact
   query keys, TTL, cloning, failed/malformed reads, stale in-flight reads,
-  account/profile/sign-out/401/tab isolation, version conflict, write/review
+  account/profile/sign-out/401/tab isolation (including same-account tab
+  notices during a pending session/profile read), version conflict, write/review
   invalidation and ordered partial equivalent success. PATCH is acknowledgement
   only and makes no GET.
 - `apps/web/src/app/screens/pending.test.tsx`: immediate pending wording,
-  no premature save/advance/finish, duplicate Next suppression, partial-step
-  retries, conflict handling and partial equivalent-save failures.
+  no premature save/advance/finish, same-frame duplicate Next and Add Entry
+  capture/save suppression, partial-step retries, conflict handling and partial
+  equivalent-save failures.
 - `apps/web/stack/performance.spec.ts`: production-build Chromium against real
   Wrangler/D1, warm course resolution, held Next requests with no early advance,
   persisted progress after reload, and real cross-tab account invalidation.
@@ -152,8 +154,7 @@ TTL, then repeat after TTL and writes. Reset only the synthetic local lesson
 progress before another first-Next sequence; trying to move backwards correctly
 returns `INVALID_PROGRESS_SEQUENCE`, and is not a latency sample.
 
-Local validation passed: root `npm run check` (API scripts 57, API 86, web 185,
-Learning 32, Lexicon 38 tests) and `npm run build`; web lint; `test:stack` (24
+Local validation passed: root `npm run check` and `npm run build`; web lint; `test:stack` (24
 passed) and `test:e2e` (94 passed, 4 existing viewport-specific skips), both from
 `apps/web`. The connected stack logged Miniflare broken-pipe warnings during
 network-abort journeys; all assertions passed. No measurement-only

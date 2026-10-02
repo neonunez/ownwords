@@ -255,8 +255,7 @@ export function createHttpClient(
         else if (verifying.accountId === null)
           verifying.noticed.add(message.accountId);
         else if (verifying.accountId !== message.accountId) clearAccount();
-      }
-      else if (
+      } else if (
         message.type === "profile" &&
         typeof message.accountId === "string" &&
         (accountId === null || message.accountId === accountId)
