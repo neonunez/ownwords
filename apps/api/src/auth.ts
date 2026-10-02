@@ -44,7 +44,7 @@ async function schemaFingerprint(db: D1Database): Promise<string> {
       tbl_name: string;
       sql: string | null;
     }>();
-  if (!rows.success) {
+  if (!rows.success || !Array.isArray(rows.results)) {
     throw new Error("The authentication schema could not be checked");
   }
   return JSON.stringify(rows.results);
@@ -58,7 +58,10 @@ export async function createRequestAuth(
   // Configuration is read on every request, including a warm schema verdict.
   loadRuntimeConfig(env);
   const fingerprint = await schemaFingerprint(env.DB);
-  if (validatedSchemas.get(env.DB) === fingerprint) {
+  if (
+    validatedSchemas.has(env.DB) &&
+    validatedSchemas.get(env.DB) === fingerprint
+  ) {
     return buildAuth(env, now, false);
   }
   validatedSchemas.delete(env.DB);

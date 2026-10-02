@@ -17,6 +17,7 @@ function observedDb(db: D1Database, beforeBatch?: () => Promise<void>) {
   const originals = new WeakMap<object, D1PreparedStatement>();
   const sqlByStatement = new WeakMap<object, string>();
   let failRevision = false;
+  let malformedSchema = false;
   const statement = (
     raw: D1PreparedStatement,
     sql: string,
@@ -35,6 +36,11 @@ function observedDb(db: D1Database, beforeBatch?: () => Promise<void>) {
           ) {
             return Promise.reject(new Error("synthetic D1 outage"));
           }
+          if (
+            malformedSchema &&
+            sql.startsWith("SELECT type, name, tbl_name, sql")
+          )
+            return Promise.resolve({ success: true });
           return value.apply(target, args);
         };
       },
@@ -66,6 +72,9 @@ function observedDb(db: D1Database, beforeBatch?: () => Promise<void>) {
     calls,
     failRevision: (value: boolean) => {
       failRevision = value;
+    },
+    malformedSchema: (value: boolean) => {
+      malformedSchema = value;
     },
   };
 }
@@ -115,6 +124,29 @@ describe("request-owned authentication schema validation", () => {
       "synthetic D1 outage",
     );
     observed.failRevision(false);
+    await expect(createRequestAuth(bindings)).resolves.toBeDefined();
+  });
+
+  it("refuses malformed schema metadata cold and warm instead of treating an absent verdict as a match", async () => {
+    const observed = observedDb(env.DB);
+    const bindings = { ...env, DB: observed.db };
+    observed.malformedSchema(true);
+    await expect(createRequestAuth(bindings)).rejects.toThrow(
+      "schema could not be checked",
+    );
+    observed.malformedSchema(false);
+    await createRequestAuth(bindings);
+    observed.malformedSchema(true);
+    expect(
+      (
+        await createApp().request(
+          `${TRUSTED_ORIGIN}/api/auth/get-session`,
+          {},
+          bindings,
+        )
+      ).status,
+    ).toBe(500);
+    observed.malformedSchema(false);
     await expect(createRequestAuth(bindings)).resolves.toBeDefined();
   });
 

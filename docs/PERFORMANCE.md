@@ -152,7 +152,7 @@ TTL, then repeat after TTL and writes. Reset only the synthetic local lesson
 progress before another first-Next sequence; trying to move backwards correctly
 returns `INVALID_PROGRESS_SEQUENCE`, and is not a latency sample.
 
-Local validation passed: root `npm run check` (API scripts 57, API 85, web 185,
+Local validation passed: root `npm run check` (API scripts 57, API 86, web 185,
 Learning 32, Lexicon 38 tests) and `npm run build`; web lint; `test:stack` (24
 passed) and `test:e2e` (94 passed, 4 existing viewport-specific skips), both from
 `apps/web`. The connected stack logged Miniflare broken-pipe warnings during
