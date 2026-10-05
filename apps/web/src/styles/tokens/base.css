@@ -20,9 +20,13 @@ a {
   color: var(--accent);
   text-decoration: none;
 }
-a:hover {
-  color: var(--accent-hover);
-  text-decoration: underline;
+/* Only where hover is real: on a touch screen a tapped link would keep its
+   hover colour and underline until the next tap somewhere else. */
+@media (hover: hover) and (pointer: fine) {
+  a:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
 }
 button,
 input,

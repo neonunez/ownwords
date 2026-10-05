@@ -294,6 +294,7 @@ export function SettingsScreen() {
               <button
                 type="button"
                 onClick={stored.reload}
+                className="ow-press-dim"
                 style={{
                   border: 0,
                   padding: 0,

@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useLongPress } from "../../lib/gestures";
 import { Icon } from "../core/Icon";
 import { StateLabel, type StateKind } from "../core/StateLabel";
 import { MasteryMeter, type MasteryValue } from "./MasteryMeter";
@@ -19,6 +20,12 @@ export interface EntryRowProps {
   languages?: readonly EntryRowLanguage[];
   state?: StateKind | undefined;
   onClick: () => void;
+  /**
+   * The row's options, opened by pressing and holding it, by a right click or
+   * by the keyboard's menu key. Everything in them is also on the entry's own
+   * screen, so this is a shortcut and never the only way.
+   */
+  onOptions?: (() => void) | undefined;
   last?: boolean;
   style?: CSSProperties;
 }
@@ -30,14 +37,21 @@ export function EntryRow({
   languages = [],
   state,
   onClick,
+  onOptions,
   last,
   style,
 }: EntryRowProps) {
+  const { holding, bind } = useLongPress({
+    onLongPress: () => onOptions?.(),
+    enabled: Boolean(onOptions),
+  });
   return (
     <button
       type="button"
       onClick={onClick}
+      {...bind}
       className="ow-row"
+      data-holding={holding || undefined}
       style={{
         display: "grid",
         gridTemplateColumns: "minmax(0, 1fr) auto",

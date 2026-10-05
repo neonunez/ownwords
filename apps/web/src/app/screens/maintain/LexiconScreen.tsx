@@ -16,7 +16,8 @@ import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
 import { useScreen } from "../../shell/useScreen";
 import { useToast } from "../../shell/ToastProvider";
-import { FrameLayer } from "../../shell/OverlayHost";
+import { AppSheet, FrameLayer } from "../../shell/OverlayHost";
+import { OwnwordsError } from "../../../api/client";
 import type {
   Entry,
   EntryQuery,
@@ -74,6 +75,8 @@ export function LexiconScreen() {
   const more = following.after === page.data ? following.pages : [];
   const [loadingMore, setLoadingMore] = useState(false);
   const { showToast } = useToast();
+  // The entry whose options a held row opened.
+  const [options, setOptions] = useState<Entry | null>(null);
 
   const filters = useMemo(() => {
     const byLanguage = (languages.data ?? []).map((language: Language) => ({
@@ -132,6 +135,10 @@ export function LexiconScreen() {
           icon="search"
           type="search"
           name="lexicon-search"
+          enterKeyHint="search"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           ariaLabel="Search your Lexicon"
           placeholder="Search your Lexicon"
           value={search}
@@ -204,6 +211,7 @@ export function LexiconScreen() {
                         }),
                       )}
                       onClick={() => navigate(`/maintain/lexicon/${entry.id}`)}
+                      onOptions={() => setOptions(entry)}
                       last={index === entries.length - 1}
                     />
                   ))}
@@ -270,7 +278,146 @@ export function LexiconScreen() {
           />
         </div>
       </FrameLayer>
+
+      <EntryOptions
+        entry={options}
+        onClose={() => setOptions(null)}
+        onOpen={(entry) => {
+          setOptions(null);
+          navigate(`/maintain/lexicon/${entry.id}`);
+        }}
+        onDeleted={() => {
+          setOptions(null);
+          page.reload();
+        }}
+      />
     </>
+  );
+}
+
+/**
+ * What a held row offers: open it, copy its headword, or delete it. Each is
+ * also on the entry's own screen; this only saves the trip there.
+ */
+function EntryOptions({
+  entry,
+  onClose,
+  onOpen,
+  onDeleted,
+}: {
+  entry: Entry | null;
+  onClose: () => void;
+  onOpen: (entry: Entry) => void;
+  onDeleted: () => void;
+}) {
+  const client = useClient();
+  const { showToast } = useToast();
+  // Kept while the sheet slides away, so its title does not empty mid-exit.
+  const [shown, setShown] = useState<Entry | null>(entry);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (entry && entry !== shown) {
+    setShown(entry);
+    setConfirming(false);
+    setBusy(false);
+  }
+  const canCopy =
+    typeof navigator !== "undefined" &&
+    typeof navigator.clipboard?.writeText === "function";
+
+  const copy = (headword: string) => {
+    onClose();
+    navigator.clipboard.writeText(headword).then(
+      () => showToast(`Copied “${headword}”.`, { icon: "check" }),
+      () => showToast("That could not be copied."),
+    );
+  };
+
+  const remove = async (target: Entry) => {
+    setBusy(true);
+    try {
+      await client.deleteEntry(target.id, target.version);
+      showToast("Deleted from your Lexicon.", { icon: "check" });
+      onDeleted();
+    } catch (error) {
+      setBusy(false);
+      onClose();
+      showToast(
+        error instanceof Error && error.message
+          ? error.message
+          : "That entry was not deleted. Try again.",
+      );
+      // Someone changed it since this list was read: read it again.
+      if (error instanceof OwnwordsError && error.status === 409) onDeleted();
+    }
+  };
+
+  return (
+    <AppSheet
+      open={entry !== null}
+      title={shown?.headword ?? "Entry"}
+      onClose={onClose}
+      footer={
+        <Button variant="ghost" full onClick={onClose}>
+          Cancel
+        </Button>
+      }
+    >
+      {shown && (
+        <div style={{ display: "grid", gap: 8 }}>
+          <Button
+            variant="secondary"
+            full
+            iconRight="arrow-right"
+            onClick={() => onOpen(shown)}
+          >
+            Open the entry
+          </Button>
+          {canCopy && (
+            <Button
+              variant="outline"
+              full
+              icon="copy"
+              onClick={() => copy(shown.headword)}
+            >
+              Copy the headword
+            </Button>
+          )}
+          {confirming ? (
+            <>
+              <p
+                role="status"
+                style={{
+                  margin: 0,
+                  font: "var(--type-body)",
+                  fontSize: ".9375rem",
+                }}
+              >
+                It leaves your Lexicon and its practice. Delete it?
+              </p>
+              <Button
+                full
+                variant="outline"
+                icon="x"
+                disabled={busy}
+                onClick={() => void remove(shown)}
+              >
+                Yes, delete it
+              </Button>
+            </>
+          ) : (
+            <Button
+              full
+              variant="outline"
+              icon="x"
+              onClick={() => setConfirming(true)}
+            >
+              Delete this entry
+            </Button>
+          )}
+        </div>
+      )}
+    </AppSheet>
   );
 }
 

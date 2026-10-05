@@ -13,6 +13,12 @@ export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "ownwords.appearance";
 
+/** `--bg-app` in each theme, for the bars the browser paints around the app. */
+const themeColors: Record<ResolvedTheme, string> = {
+  light: "#f8f8f8",
+  dark: "#0a0a0a",
+};
+
 interface ThemeValue {
   appearance: Appearance;
   theme: ResolvedTheme;
@@ -60,11 +66,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    const meta = document.querySelector<HTMLMetaElement>(
+    // The document carries one theme-color per scheme, keyed by `media`, so
+    // the bars match before this runs. Following the system, each keeps its
+    // own scheme's colour; a chosen appearance paints both with that one,
+    // since the system scheme no longer says which the app is showing.
+    for (const meta of document.querySelectorAll<HTMLMetaElement>(
       'meta[name="theme-color"]',
-    );
-    if (meta) meta.content = theme === "dark" ? "#0a0a0a" : "#f8f8f8";
-  }, [theme]);
+    )) {
+      const scheme =
+        appearance === "system"
+          ? meta.media.includes("dark")
+            ? "dark"
+            : meta.media.includes("light")
+              ? "light"
+              : theme
+          : theme;
+      meta.content = themeColors[scheme];
+    }
+  }, [appearance, theme]);
 
   const setAppearance = useCallback((next: Appearance) => {
     setStoredAppearance(next);

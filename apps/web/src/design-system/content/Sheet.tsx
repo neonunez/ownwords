@@ -1,5 +1,6 @@
-import { useId, useRef, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useDialogBehaviour } from "../../lib/useDialogBehaviour";
+import { settle, useDrag } from "../../lib/gestures";
 
 export interface SheetProps {
   open: boolean;
@@ -16,13 +17,29 @@ export interface SheetProps {
  * closed, which keeps it out of the tab order and out of the accessibility
  * tree. `visibility` changes only once the exit has played, so the sheet is
  * hidden rather than merely moved off the bottom of the screen. While it is
- * open, Escape and the scrim both close it and focus stays inside it.
+ * open, Escape and the scrim both close it and focus stays inside it, and its
+ * head (the grabber and the title) can be dragged down to put it away.
  */
 export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
   useDialogBehaviour(panelRef, open, onClose);
+
+  // Dragged down far enough, or flicked, the sheet goes; otherwise it settles
+  // back. Only the head drags, so the body below still scrolls and its words
+  // can still be selected.
+  const [height, setHeight] = useState(0);
+  const { offset, dragging, bind } = useDrag({
+    axis: "y",
+    direction: 1,
+    enabled: open,
+    onRelease: (release) => {
+      // Unmeasured (nothing laid out), it asks for the longest pull.
+      const distance = height > 0 ? Math.min(160, height * 0.3) : 160;
+      if (settle(release, distance) === 1) onClose();
+    },
+  });
 
   return (
     <div
@@ -65,34 +82,57 @@ export function Sheet({ open, title, onClose, children, footer }: SheetProps) {
           borderRadius: "var(--radius-xl) var(--radius-xl) 0 0",
           boxShadow: "var(--shadow-3)",
           paddingBottom: "var(--safe-bottom)",
-          transform: open ? "translateY(0)" : "translateY(100%)",
-          transition: "transform var(--motion-screen) var(--ease-out)",
+          paddingLeft: "var(--safe-left)",
+          paddingRight: "var(--safe-right)",
+          // Never lifted off the bottom edge: only downward drags move it.
+          transform: open
+            ? `translateY(${Math.max(0, offset)}px)`
+            : "translateY(100%)",
+          transition: dragging
+            ? "none"
+            : "transform var(--motion-screen) var(--ease-out)",
           maxHeight: "90%",
           display: "flex",
           flexDirection: "column",
         }}
       >
-        <span
-          aria-hidden="true"
-          style={{
-            width: 36,
-            height: 5,
-            borderRadius: 99,
-            background: "var(--border-2)",
-            margin: "10px auto 0",
+        <div
+          {...bind}
+          onPointerDown={(event) => {
+            setHeight(panelRef.current?.offsetHeight ?? 0);
+            bind.onPointerDown(event);
           }}
-        />
-        <h2
-          id={titleId}
           style={{
-            margin: 0,
-            font: "var(--type-title)",
-            fontSize: "1.375rem",
-            padding: "14px var(--gutter) 4px",
+            // The head owns the vertical drag; it never scrolls.
+            touchAction: "none",
+            cursor: "grab",
+            userSelect: "none",
+            WebkitUserSelect: "none",
           }}
         >
-          {title}
-        </h2>
+          <span
+            aria-hidden="true"
+            style={{
+              display: "block",
+              width: 36,
+              height: 5,
+              borderRadius: 99,
+              background: "var(--border-2)",
+              margin: "10px auto 0",
+            }}
+          />
+          <h2
+            id={titleId}
+            style={{
+              margin: 0,
+              font: "var(--type-title)",
+              fontSize: "1.375rem",
+              padding: "14px var(--gutter) 4px",
+            }}
+          >
+            {title}
+          </h2>
+        </div>
         <div
           className="ow-scroll"
           style={{ padding: "12px var(--gutter)", overflow: "auto", flex: 1 }}

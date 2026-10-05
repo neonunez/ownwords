@@ -67,7 +67,7 @@ export function Select({
         <select
           ref={ref}
           id={selectId}
-          className="ow-select"
+          className="ow-select ow-press-card"
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
@@ -88,7 +88,7 @@ export function Select({
             cursor: disabled ? "default" : "pointer",
             opacity: disabled ? 0.55 : 1,
             transition:
-              "border-color var(--motion-fast), box-shadow var(--motion-fast)",
+              "border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast) var(--ease-out)",
           }}
           {...rest}
         >

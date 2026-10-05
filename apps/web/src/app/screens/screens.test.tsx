@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderScreen } from "../../test/utils";
 import { createDemoClient } from "../../api/demo/demoClient";
@@ -11,6 +17,9 @@ import { PracticeScreen } from "./PracticeScreen";
 import { AlphabetScreen } from "./learn/AlphabetScreen";
 import { CourseScreen } from "./learn/CourseScreen";
 import { LOADING_DELAY_MS } from "./ScreenState";
+import { LONG_PRESS_MS } from "../../lib/gestures";
+
+const touch = { pointerType: "touch", pointerId: 1, button: 0 } as const;
 
 describe("the Lexicon", () => {
   it("lists the collection and says how much of it is shown", async () => {
@@ -106,6 +115,63 @@ describe("the Lexicon", () => {
         screen.queryByRole("button", { name: /ni de coña/ }),
       ).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("a held Lexicon row", () => {
+  it("opens the entry's options, and a tap still opens the entry", async () => {
+    renderScreen(<LexiconScreen />, { route: "/maintain/lexicon" });
+    const row = await screen.findByRole("button", { name: /sobremesa/ });
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.pointerDown(row, { ...touch, clientX: 20, clientY: 20 });
+      act(() => vi.advanceTimersByTime(LONG_PRESS_MS));
+      fireEvent.pointerUp(row, touch);
+      fireEvent.click(row);
+    } finally {
+      vi.useRealTimers();
+    }
+    const sheet = await screen.findByRole("dialog", { name: "sobremesa" });
+    // The lift that ended the hold did not also open the entry.
+    expect(screen.queryByText("Somewhere else")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(sheet).getByRole("button", { name: "Open the entry" }),
+    );
+    expect(await screen.findByText("Somewhere else")).toBeInTheDocument();
+  });
+
+  it("deletes from the options only after asking", async () => {
+    const client = createDemoClient({ suggestionDelaysMs: {} });
+    renderScreen(<LexiconScreen />, { route: "/maintain/lexicon", client });
+    const row = await screen.findByRole("button", { name: /sobremesa/ });
+
+    // A right click, or the keyboard's menu key, opens the same options.
+    fireEvent.contextMenu(row);
+    const sheet = await screen.findByRole("dialog", { name: "sobremesa" });
+    await userEvent.click(
+      within(sheet).getByRole("button", { name: "Delete this entry" }),
+    );
+    expect(
+      within(sheet).getByText(/It leaves your Lexicon and its practice/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^sobremesa/ }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(sheet).getByRole("button", { name: "Yes, delete it" }),
+    );
+    expect(
+      await screen.findByText("Deleted from your Lexicon."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /^sobremesa/ }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("5 entries")).toBeInTheDocument();
   });
 });
 
@@ -341,6 +407,79 @@ describe("practice", () => {
     expect(
       screen.queryByRole("radiogroup", { name: "Practice format" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("flashcards", () => {
+  const props = {
+    format: "flashcard" as const,
+    allowFormatChange: false,
+    title: "Flashcards",
+    mode: "maintain" as const,
+    modeLabel: "Maintain",
+  };
+
+  function swipe(target: HTMLElement, dx: number) {
+    fireEvent.pointerDown(target, { ...touch, clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(target, {
+      ...touch,
+      clientX: 200 + dx / 2,
+      clientY: 202,
+    });
+    fireEvent.pointerMove(target, {
+      ...touch,
+      clientX: 200 + dx,
+      clientY: 204,
+    });
+    fireEvent.pointerUp(target, { ...touch, clientX: 200 + dx, clientY: 204 });
+  }
+
+  it("takes a swipe right on a turned card as “Got it”", async () => {
+    renderScreen(<PracticeScreen {...props} />, {
+      route: "/maintain/flashcards",
+    });
+    await screen.findByText("1 of 3 due");
+    const card = screen.getByRole("button", { pressed: false });
+
+    // Not turned yet: a swipe grades nothing.
+    swipe(card, 200);
+    expect(screen.getByText("1 of 3 due")).toBeInTheDocument();
+
+    await userEvent.click(card);
+    expect(screen.getByRole("button", { name: "Got it" })).toBeInTheDocument();
+    swipe(screen.getByRole("button", { pressed: true }), 200);
+    expect(await screen.findByText("2 of 3 due")).toBeInTheDocument();
+  });
+
+  it("springs a short swipe back, and keeps both buttons", async () => {
+    renderScreen(<PracticeScreen {...props} />, {
+      route: "/maintain/flashcards",
+    });
+    await screen.findByText("1 of 3 due");
+    await userEvent.click(screen.getByRole("button", { pressed: false }));
+    swipe(screen.getByRole("button", { pressed: true }), 15);
+    expect(screen.getByText("1 of 3 due")).toBeInTheDocument();
+
+    // The swipe was a shortcut: the buttons still answer.
+    await userEvent.click(screen.getByRole("button", { name: "Got it" }));
+    expect(await screen.findByText("2 of 3 due")).toBeInTheDocument();
+  });
+
+  it("takes a swipe left as “Again”, and the card comes back", async () => {
+    renderScreen(<PracticeScreen {...props} />, {
+      route: "/maintain/flashcards",
+    });
+    await screen.findByText("1 of 3 due");
+    const first = screen.getByRole("button", { pressed: false });
+    const headword = first.textContent ?? "";
+    await userEvent.click(first);
+    swipe(screen.getByRole("button", { pressed: true }), -200);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { pressed: false }).textContent,
+      ).not.toBe(headword),
+    );
+    expect(screen.getByText("1 of 3 due")).toBeInTheDocument();
   });
 });
 

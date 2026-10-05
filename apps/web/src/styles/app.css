@@ -1,9 +1,17 @@
 /* Application shell and interaction styles.
    The design system's tokens own every colour, size and duration used here. */
 
+/* The phone layer: what keeps the app from feeling like a page in a browser.
+   - No grey tap flash; every control draws its own :active state instead.
+   - Overscroll is stopped at the root, where the viewport reads it (Chrome
+     takes the root element's value, not the body's), so pulling down never
+     reloads the app mid-practice; inner scrollers contain their own.
+   - No double-tap-to-zoom wait on controls; pinch zoom stays everywhere. */
 html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
 body {
@@ -12,6 +20,31 @@ body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+}
+
+button,
+a,
+select,
+summary,
+label,
+[role="button"],
+[role="switch"],
+[role="radio"] {
+  touch-action: manipulation;
+}
+
+/* A long press on a control is never a text selection or the link callout:
+   it either does nothing or, where a row offers one, opens its options.
+   Controls only; what a person reads stays selectable. */
+button,
+nav a,
+[role="button"],
+[role="switch"],
+[role="radio"],
+.ow-choice {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 #root {
@@ -33,8 +66,14 @@ body {
   background: var(--bg-app);
   color: var(--fg-1);
   font-family: var(--font-body);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* The sign-in gate has no tab bar to clear the home indicator, so its one
+   scrolling screen ends above it instead. */
+.ow-app > .ow-main:only-child {
+  padding-bottom: var(--safe-bottom);
 }
 
 @media (min-width: 680px) {
@@ -100,6 +139,10 @@ body {
 
 .ow-scroll {
   scrollbar-width: none;
+  /* A sheet, the side panel or a row of chips scrolled to its end stops
+     there, rather than handing the scroll to the screen behind it or, sideways,
+     to the browser's back navigation. */
+  overscroll-behavior: contain;
 }
 
 /* ---- screen entrance ---------------------------------------------------- */
@@ -251,6 +294,18 @@ body {
   transform: scale(0.96);
 }
 
+/* Tabs, segments and text buttons dim while held, the way the platform's own
+   bars do, rather than shrinking their label. */
+.ow-press-dim {
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    color var(--motion-fast);
+}
+
+.ow-press-dim:active:not(:disabled) {
+  opacity: 0.6;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .ow-btn[data-variant="primary"]:hover:not(:disabled) {
     background: var(--accent-hover);
@@ -263,6 +318,30 @@ body {
 
 .ow-row:active {
   background: var(--bg-sunken);
+}
+
+/* A row held for its options settles in slightly over the rest of the hold
+   (LONG_PRESS_MS less HOLD_FEEDBACK_MS in lib/gestures.ts), so the finger
+   feels it building before the options open. */
+.ow-row {
+  transition:
+    background var(--motion-fast),
+    transform var(--motion-base) var(--ease-out);
+}
+
+.ow-row[data-holding] {
+  transform: scale(0.98);
+  transition:
+    background var(--motion-fast),
+    transform 300ms var(--ease-out);
+}
+
+/* A surface that owns sideways swipes: the page still scrolls up and down
+   through it, and pinch zoom stays wherever the browser can keep it (the
+   first declaration is for those that cannot read the second). */
+.ow-pan-y {
+  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
 }
 
 .ow-field:focus-within {

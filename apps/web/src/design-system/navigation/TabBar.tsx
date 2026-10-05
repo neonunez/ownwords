@@ -45,6 +45,7 @@ export function TabBar({ tabs, activeKey, onSelect, label }: TabBarProps) {
             href={tab.href}
             aria-current={active ? "page" : undefined}
             onClick={(event) => onSelect(tab.href, event)}
+            className="ow-press-dim"
             style={{
               minHeight: 44,
               display: "grid",
@@ -53,7 +54,6 @@ export function TabBar({ tabs, activeKey, onSelect, label }: TabBarProps) {
               gap: 3,
               color: active ? "var(--accent)" : "var(--fg-3)",
               textDecoration: "none",
-              transition: "color var(--motion-fast)",
             }}
           >
             <span

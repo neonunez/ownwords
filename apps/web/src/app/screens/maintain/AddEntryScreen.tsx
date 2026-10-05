@@ -450,6 +450,7 @@ export function AddEntryScreen() {
           <TextField
             label="Type the equivalent yourself"
             name="typed-equivalent"
+            enterKeyHint="done"
             display
             value={typed}
             onChange={setTyped}

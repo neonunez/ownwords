@@ -9,6 +9,7 @@ import {
 } from "../../design-system";
 import { Section } from "../layout";
 import { useDialogBehaviour } from "../../lib/useDialogBehaviour";
+import { settle, useDrag } from "../../lib/gestures";
 import { useClient } from "./ClientProvider";
 import type { Language } from "../../api/types";
 import type { Mode } from "../navigation";
@@ -111,6 +112,18 @@ export function SidePanel({
 
   useDialogBehaviour(panelRef, open, onClose);
 
+  // A sideways swipe toward the edge it came from puts the panel away, from
+  // anywhere over it or the scrim. Up and down stay the panel's own scroll.
+  const [width, setWidth] = useState(300);
+  const { offset, dragging, bind } = useDrag({
+    axis: "x",
+    direction: -1,
+    enabled: open,
+    onRelease: (release) => {
+      if (settle(release, Math.min(120, width * 0.35)) === -1) onClose();
+    },
+  });
+
   /** Replacing the panel's own history entry closes it on the way. */
   const go = (path: string) => navigate(path, { replace: true, state: null });
 
@@ -123,6 +136,12 @@ export function SidePanel({
   return (
     <div
       inert={!open}
+      {...bind}
+      onPointerDown={(event) => {
+        setWidth(panelRef.current?.offsetWidth || 300);
+        bind.onPointerDown(event);
+      }}
+      className="ow-pan-y"
       style={{
         position: "absolute",
         inset: 0,
@@ -141,8 +160,10 @@ export function SidePanel({
           border: 0,
           padding: 0,
           background: "var(--bg-scrim)",
-          opacity: open ? 1 : 0,
-          transition: "opacity var(--motion-base) var(--ease-out)",
+          opacity: open ? 1 - Math.min(1, -offset / width) * 0.6 : 0,
+          transition: dragging
+            ? "none"
+            : "opacity var(--motion-base) var(--ease-out)",
           cursor: "default",
         }}
       />
@@ -162,8 +183,16 @@ export function SidePanel({
           boxShadow: "var(--shadow-3)",
           paddingTop: "var(--safe-top)",
           paddingBottom: "var(--safe-bottom)",
-          transform: open ? "none" : "translateX(-100%)",
-          transition: "transform var(--motion-screen) var(--ease-out)",
+          paddingLeft: "var(--safe-left)",
+          // Never pulled away from its edge: only drags toward it move it.
+          transform: open
+            ? offset < 0
+              ? `translateX(${offset}px)`
+              : "none"
+            : "translateX(-100%)",
+          transition: dragging
+            ? "none"
+            : "transform var(--motion-screen) var(--ease-out)",
           display: "flex",
           flexDirection: "column",
           borderRadius: "0 var(--radius-xl) var(--radius-xl) 0",

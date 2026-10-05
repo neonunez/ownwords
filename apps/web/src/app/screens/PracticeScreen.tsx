@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   Card,
@@ -16,6 +16,13 @@ import { useClient } from "../shell/ClientProvider";
 import { useScreen } from "../shell/useScreen";
 import { useToast } from "../shell/ToastProvider";
 import { answersMatch, firstWord } from "../../lib/text";
+import {
+  haptic,
+  motionMs,
+  prefersReducedMotion,
+  settle,
+  useDrag,
+} from "../../lib/gestures";
 import { newId } from "../../lib/ids";
 import type { DueQueue, PracticeCard, PracticeFormat } from "../../api/types";
 
@@ -64,6 +71,9 @@ export function PracticeScreen({
   const [flipped, setFlipped] = useState(false);
   // Once the due queue is done, the person may practise what is coming next.
   const [ahead, setAhead] = useState(false);
+  // Counts answers, so each card on screen starts fresh, even the same card
+  // coming straight back after "Again".
+  const [turn, setTurn] = useState(0);
 
   const state = useAsync(
     () => client.getDueQueue({ mode, format, sessionId, ahead }),
@@ -103,6 +113,7 @@ export function PracticeScreen({
     const left = rating === "again" && head ? [...rest, head] : rest;
     setAnswered({ from: state.data, cards: left });
     setPractised(true);
+    setTurn((value) => value + 1);
     if (left.length === 0) {
       // Once every answer is stored, ask the scheduler what comes next.
       const sent = submissions.current;
@@ -295,6 +306,7 @@ export function PracticeScreen({
               />
             ) : (
               <FlashCard
+                key={turn}
                 card={card}
                 flipped={flipped}
                 onFlip={() => setFlipped((value) => !value)}
@@ -444,8 +456,7 @@ function ClozeCard({
           onChange={onTyped}
           lang={card.answerLanguage ?? undefined}
           autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
+          enterKeyHint="done"
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -471,6 +482,9 @@ function ClozeCard({
   );
 }
 
+/** How far a turned card travels before letting go of it grades it. */
+const SWIPE_COMMIT = 0.32;
+
 function FlashCard({
   card,
   flipped,
@@ -484,114 +498,190 @@ function FlashCard({
   onAgain: () => void;
   onGotIt: () => void;
 }) {
+  // Which way a graded card is leaving; it answers once it has left.
+  const [leaving, setLeaving] = useState<-1 | 1 | null>(null);
+  // The card's width as a drag starts: the swipe is measured against it.
+  const [width, setWidth] = useState(320);
+  const commitAt = width * SWIPE_COMMIT;
+
+  // Once turned, the card answers a swipe as well as the two buttons under
+  // it: right is "Got it", left is "Again". Before that, it only turns over.
+  const { offset, dragging, bind } = useDrag({
+    axis: "x",
+    enabled: flipped && leaving === null,
+    onRelease: (release) => {
+      const way = settle(release, commitAt);
+      if (way === 0) return;
+      setLeaving(way);
+    },
+  });
+
+  useEffect(() => {
+    if (leaving === null) return;
+    const answer = leaving === 1 ? onGotIt : onAgain;
+    const timer = setTimeout(answer, motionMs("base"));
+    return () => clearTimeout(timer);
+  }, [leaving, onAgain, onGotIt]);
+
+  // Past the commit distance the card says what letting go will do, and the
+  // phones that can tick once as it crosses.
+  const progress = Math.min(1, Math.abs(offset) / commitAt);
+  const committed = progress >= 1 ? Math.sign(offset) : 0;
+  const crossed = useRef(0);
+  useEffect(() => {
+    if (committed !== 0 && crossed.current !== committed) haptic();
+    crossed.current = committed;
+  }, [committed]);
+
+  const tilt = prefersReducedMotion() ? 0 : offset / 24;
+
   return (
     <div>
-      <div style={{ perspective: 1200 }}>
-        <button
-          type="button"
-          onClick={onFlip}
-          aria-pressed={flipped}
-          style={{
-            display: "block",
-            width: "100%",
-            minHeight: 240,
-            border: 0,
-            padding: 0,
-            background: "transparent",
-            cursor: "pointer",
-            transformStyle: "preserve-3d",
-            transition: "transform var(--motion-slow) var(--ease-spring)",
-            transform: flipped ? "rotateY(180deg)" : "none",
-            position: "relative",
-            font: "inherit",
-            color: "inherit",
-          }}
-        >
-          <span
+      <div
+        {...bind}
+        onPointerDown={(event) => {
+          setWidth(event.currentTarget.offsetWidth || 320);
+          bind.onPointerDown(event);
+        }}
+        // The page still scrolls up and down through the card; only a
+        // sideways swipe is the card's.
+        className="ow-pan-y"
+        style={{
+          position: "relative",
+          transform:
+            leaving !== null
+              ? `translateX(${leaving * 125}%) rotate(${prefersReducedMotion() ? 0 : leaving * 8}deg)`
+              : offset
+                ? `translateX(${offset}px) rotate(${tilt}deg)`
+                : undefined,
+          opacity: leaving === null ? 1 : 0,
+          transition: dragging
+            ? "none"
+            : "transform var(--motion-base) var(--ease-out), opacity var(--motion-base) var(--ease-out)",
+        }}
+      >
+        <SwipeLabel side="left" visible={offset < 0} strength={progress}>
+          Again
+        </SwipeLabel>
+        <SwipeLabel side="right" visible={offset > 0} strength={progress}>
+          Got it
+        </SwipeLabel>
+        <div className="ow-press-card" style={{ perspective: 1200 }}>
+          <button
+            type="button"
+            onClick={onFlip}
+            aria-pressed={flipped}
             style={{
-              position: "absolute",
-              inset: 0,
-              backfaceVisibility: "hidden",
-              borderRadius: "var(--radius-lg)",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border-1)",
-              boxShadow: "var(--shadow-2)",
-              display: "grid",
-              placeContent: "center",
-              gap: 8,
-              padding: 24,
-              textAlign: "center",
+              display: "block",
+              width: "100%",
+              minHeight: 240,
+              border: 0,
+              padding: 0,
+              background: "transparent",
+              cursor: "pointer",
+              transformStyle: "preserve-3d",
+              transition: "transform var(--motion-slow) var(--ease-spring)",
+              transform: flipped ? "rotateY(180deg)" : "none",
+              position: "relative",
+              font: "inherit",
+              color: "inherit",
             }}
           >
             <span
               style={{
-                font: "var(--type-overline)",
-                letterSpacing: "var(--tracking-wide)",
-                textTransform: "uppercase",
-                color: "var(--fg-3)",
+                position: "absolute",
+                inset: 0,
+                backfaceVisibility: "hidden",
+                borderRadius: "var(--radius-lg)",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-1)",
+                boxShadow: "var(--shadow-2)",
+                display: "grid",
+                placeContent: "center",
+                gap: 8,
+                padding: 24,
+                textAlign: "center",
               }}
             >
-              {card.promptLanguage?.toUpperCase() ?? "Meaning"}
+              <span
+                style={{
+                  font: "var(--type-overline)",
+                  letterSpacing: "var(--tracking-wide)",
+                  textTransform: "uppercase",
+                  color: "var(--fg-3)",
+                }}
+              >
+                {card.promptLanguage?.toUpperCase() ?? "Meaning"}
+              </span>
+              <span
+                lang={card.promptLanguage ?? undefined}
+                style={{
+                  font: "var(--type-hero)",
+                  fontSize: "2rem",
+                  letterSpacing: "var(--tracking-display)",
+                }}
+              >
+                {card.headword}
+              </span>
+              <span
+                style={{
+                  font: "var(--type-caption)",
+                  color: "var(--fg-3)",
+                  marginTop: 8,
+                }}
+              >
+                {flipped ? "Tap to see it again" : "Tap to turn it over"}
+              </span>
             </span>
             <span
-              lang={card.promptLanguage ?? undefined}
+              aria-hidden={!flipped}
               style={{
-                font: "var(--type-hero)",
-                fontSize: "2rem",
-                letterSpacing: "var(--tracking-display)",
+                position: "absolute",
+                inset: 0,
+                backfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                borderRadius: "var(--radius-lg)",
+                background: "var(--bg-inverse)",
+                color: "var(--fg-inverse)",
+                display: "grid",
+                placeContent: "center",
+                gap: 8,
+                padding: 24,
+                textAlign: "center",
               }}
             >
-              {card.headword}
+              <span
+                style={{
+                  font: "var(--type-overline)",
+                  letterSpacing: "var(--tracking-wide)",
+                  textTransform: "uppercase",
+                  opacity: 0.6,
+                }}
+              >
+                {card.answerLanguage?.toUpperCase() ?? "Meaning"}
+              </span>
+              <span
+                lang={card.answerLanguage ?? undefined}
+                style={{
+                  font: "var(--type-hero)",
+                  fontSize: "2rem",
+                  letterSpacing: "var(--tracking-display)",
+                }}
+              >
+                {card.answer}
+              </span>
+              <span
+                style={{
+                  font: "var(--type-caption)",
+                  opacity: 0.6,
+                  marginTop: 8,
+                }}
+              >
+                Swipe right if you knew it, left for again
+              </span>
             </span>
-            <span
-              style={{
-                font: "var(--type-caption)",
-                color: "var(--fg-3)",
-                marginTop: 8,
-              }}
-            >
-              {flipped ? "Tap to see it again" : "Tap to turn it over"}
-            </span>
-          </span>
-          <span
-            aria-hidden={!flipped}
-            style={{
-              position: "absolute",
-              inset: 0,
-              backfaceVisibility: "hidden",
-              transform: "rotateY(180deg)",
-              borderRadius: "var(--radius-lg)",
-              background: "var(--bg-inverse)",
-              color: "var(--fg-inverse)",
-              display: "grid",
-              placeContent: "center",
-              gap: 8,
-              padding: 24,
-              textAlign: "center",
-            }}
-          >
-            <span
-              style={{
-                font: "var(--type-overline)",
-                letterSpacing: "var(--tracking-wide)",
-                textTransform: "uppercase",
-                opacity: 0.6,
-              }}
-            >
-              {card.answerLanguage?.toUpperCase() ?? "Meaning"}
-            </span>
-            <span
-              lang={card.answerLanguage ?? undefined}
-              style={{
-                font: "var(--type-hero)",
-                fontSize: "2rem",
-                letterSpacing: "var(--tracking-display)",
-              }}
-            >
-              {card.answer}
-            </span>
-          </span>
-        </button>
+          </button>
+        </div>
       </div>
 
       {flipped && (
@@ -607,15 +697,58 @@ function FlashCard({
             variant="outline"
             size="lg"
             icon="rotate-ccw"
+            disabled={leaving !== null}
             onClick={onAgain}
           >
             Again
           </Button>
-          <Button size="lg" icon="check" onClick={onGotIt}>
+          <Button
+            size="lg"
+            icon="check"
+            disabled={leaving !== null}
+            onClick={onGotIt}
+          >
             Got it
           </Button>
         </div>
       )}
     </div>
+  );
+}
+
+/** What letting go of a dragged card will do, written on the card's corner. */
+function SwipeLabel({
+  side,
+  visible,
+  strength,
+  children,
+}: {
+  side: "left" | "right";
+  visible: boolean;
+  strength: number;
+  children: string;
+}) {
+  const good = side === "right";
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        top: 16,
+        [side === "right" ? "left" : "right"]: 16,
+        zIndex: 1,
+        padding: "4px 12px",
+        borderRadius: "var(--radius-pill)",
+        font: "var(--type-label)",
+        background: good
+          ? "var(--state-confirmed-soft)"
+          : "var(--state-waiting-soft)",
+        color: good ? "var(--state-confirmed)" : "var(--state-waiting)",
+        opacity: visible ? 0.35 + 0.65 * strength : 0,
+        pointerEvents: "none",
+      }}
+    >
+      {children}
+    </span>
   );
 }

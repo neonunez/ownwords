@@ -499,6 +499,7 @@ export function EntryScreen() {
           <TextField
             label="What does it mean in this sense?"
             name="sense-gloss"
+            enterKeyHint="done"
             value={gloss}
             onChange={setGloss}
             placeholder="A short gloss"
@@ -592,6 +593,7 @@ export function EntryScreen() {
                 : "Or type the equivalent yourself"
             }
             name="equivalent"
+            enterKeyHint="done"
             display
             value={typed}
             onChange={setTyped}

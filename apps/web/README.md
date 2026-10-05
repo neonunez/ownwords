@@ -82,7 +82,7 @@ src/
     session/         the sign-in and first-run gate in front of everything
     shell/           the frame, routing, appearance, toasts, overlays
     screens/         one file per screen, grouped by mode
-  lib/               text normalisation, focus handling
+  lib/               text normalisation, focus handling, touch gestures
   pwa/               the manifest and the update prompt
 e2e/                 browser tests of the screens, on a demo build
 stack/               browser journeys of the connected app, and its local server
@@ -123,7 +123,7 @@ Connected to the API, end to end:
 - **Maintain** — Progress (retention per language and direction, whether
   practice is due, and when it comes next, with no card counts), Lexicon
   (search, filters by language, stage, "unverified" and words vs expressions,
-  paging, per-language mastery), entry capture with optional suggestions and a
+  paging, per-language mastery, and a row's options on a press and hold), entry capture with optional suggestions and a
   review step whose every row can be confirmed, retried or typed by hand, the
   entry screen (senses, a new sense only once it has a gloss, equivalents,
   fit labels, translation states, "fix this translation", adding a missing
@@ -270,8 +270,57 @@ it:
 - The phone's back gesture, which works because every screen is a history
   entry.
 - `prefers-reduced-motion` and `prefers-color-scheme`.
-- The `theme-color` meta, which follows the theme so the installed window's
-  bars match it.
+- The `theme-color` meta, one per `prefers-color-scheme` so the first paint
+  already matches; a chosen appearance repaints both, so the installed
+  window's bars follow the theme.
+
+### Feeling native on a phone
+
+The platform layer that separates an installed app from a page in a
+browser, gated by capability (`(hover: hover)`, `pointer`, `env()`,
+`display-mode`), never by user agent or screen width:
+
+- Hover styles live only under `(hover: hover) and (pointer: fine)`, so a tap
+  never leaves one stuck; every control draws its own `:active` instead of
+  the browser's tap flash, which is turned off.
+- Controls take `touch-action: manipulation` (no double-tap-zoom wait) and
+  `user-select: none` with no touch callout; what a person reads stays
+  selectable. Zoom is never disabled; every field is at least 16px instead,
+  so focusing one does not zoom the page.
+- Overscroll stops at the root and inner scrollers contain their own, so a
+  pull never reloads the app or scrolls the screen behind a sheet.
+- `interactive-widget=resizes-content`, so on Android the keyboard shrinks
+  the frame rather than covering the field. iOS ignores it.
+- Fields that take the person's own words (any of their languages) neither
+  capitalise nor autocorrect, and each field's return key says what it does.
+
+Gestures are accelerators for controls already on screen, never the only
+way, and live in `src/lib/gestures.ts` (pointer events, so touch, pen and
+mouse all reach them):
+
+| Gesture | Where | The same thing without it |
+| --- | --- | --- |
+| Press and hold (450ms), right click or the menu key | A Lexicon row: open, copy the headword, delete after asking | The entry's own screen |
+| Swipe right / left on a turned card | Flashcards: "Got it" / "Again" | The two buttons under the card |
+| Drag the head down | Any sheet | The scrim, Escape, the sheet's own buttons |
+| Swipe toward its edge | The side panel | The close button, the scrim, Escape, back |
+
+Each gesture surface sets the `touch-action` that keeps the other axis the
+browser's, so vertical scrolling never stops working over a card or the
+panel. Moving, lifting early or the browser starting a scroll cancels a hold;
+a drag that ends short springs back. Motion uses the shared tokens, so
+reduced motion makes every settle and exit instant. A short vibration
+accompanies a completed hold or a swipe crossing its threshold where the
+browser has `navigator.vibrate`; iOS Safari has none, and nothing depends
+on it.
+
+Tabs do not swipe between each other. The iOS tab bar does not, the
+browser's own edge swipe is back, the Lexicon's filter chips scroll
+sideways, and Flashcards uses the sideways swipe to grade.
+
+Emulation cannot show sticky hover, tap delay, rubber-banding, the safe
+areas or the keyboard. `e2e/touch.spec.ts` drives real touch input in
+Chromium, but the feel of each of these is confirmed on an iPhone.
 
 ## Data
 
