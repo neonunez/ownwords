@@ -448,6 +448,109 @@ describe("authenticated learning routes", () => {
     ).toEqual({ count: 0 });
   });
 
+  it("gives a lesson finished without its cards those cards on a repeat completion", async () => {
+    // The shape an earlier release leaves behind when it completes a lesson
+    // after the carry-over migration ran: completed, with no Learn cards, and
+    // the word practised as a course import in the Lexicon.
+    expect((await completeHello()).status).toBe(200);
+    test.sqlite.exec(
+      "DELETE FROM learning_practice_cards WHERE user_id = 'alice'",
+    );
+    test.sqlite.exec(`
+      INSERT INTO lexicon_entries
+        (id, owner_id, kind, source, provenance_json, human_edited, version, created_at, updated_at)
+      VALUES ('legacy-entry', 'alice', 'word', 'course', '{}', 0, 1, 't', 't');
+      INSERT INTO lexicon_senses
+        (id, owner_id, entry_id, gloss, position, human_edited, version, created_at, updated_at)
+      VALUES ('legacy-sense', 'alice', 'legacy-entry', 'greeting', 0, 0, 1, 't', 't');
+      INSERT INTO lexicon_equivalents
+        (id, owner_id, sense_id, language_tag, text, search_text, fit, status,
+         human_edited, version, created_at, updated_at)
+      VALUES ('legacy-equivalent', 'alice', 'legacy-sense', 'ru', 'привет', 'привет',
+              'exact', 'confirmed', 0, 1, 't', 't');
+      INSERT INTO lexicon_course_imports
+        (owner_id, course_id, course_version, item_id, entry_id, created_at)
+      VALUES ('alice', 'russian-zero', '1', 'privet', 'legacy-entry', 't');
+      INSERT INTO lexicon_practice_cards
+        (id, owner_id, equivalent_id, language_tag, direction, due_at, stability, difficulty,
+         elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review_at,
+         revision, created_at, updated_at)
+      VALUES ('legacy-card', 'alice', 'legacy-equivalent', 'ru', 'recognize',
+              '2026-06-01T00:00:00.000Z', 12.5, 4.25, 3, 3, 0, 3, 0, 2,
+              '2026-01-01T00:00:00.000Z', 3, 't', 't');
+    `);
+
+    const again = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(again.status).toBe(200);
+    expect(
+      test.sqlite
+        .prepare(
+          `SELECT id, due_at, stability, reps, state, revision FROM learning_practice_cards
+           WHERE user_id = 'alice' ORDER BY id`,
+        )
+        .all(),
+    ).toEqual([
+      {
+        id: "russian-zero.1.privet.produce",
+        due_at: "2026-01-03T00:00:00.000Z",
+        stability: 0,
+        reps: 0,
+        state: 0,
+        revision: 0,
+      },
+      {
+        id: "russian-zero.1.privet.recognize",
+        due_at: "2026-06-01T00:00:00.000Z",
+        stability: 12.5,
+        reps: 3,
+        state: 2,
+        revision: 3,
+      },
+    ]);
+  });
+
+  it("neither duplicates nor resets cards on a repeat completion", async () => {
+    expect((await completeHello()).status).toBe(200);
+    const review = await request(
+      "/api/v1/learning/practice/reviews",
+      json("POST", {
+        submissionId: "before-repeat",
+        cardId: "russian-zero.1.privet.recognize",
+        sessionId: "learn-one",
+        rating: 3,
+      }),
+      "alice-token",
+    );
+    expect(review.status).toBe(201);
+    const cards = () =>
+      test.sqlite
+        .prepare(
+          "SELECT * FROM learning_practice_cards WHERE user_id = 'alice' ORDER BY id",
+        )
+        .all();
+    const before = cards();
+    expect(before).toHaveLength(2);
+    expect(before).toContainEqual(
+      expect.objectContaining({
+        id: "russian-zero.1.privet.recognize",
+        reps: 1,
+        revision: 1,
+      }),
+    );
+
+    const again = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(again.status).toBe(200);
+    expect(cards()).toEqual(before);
+  });
+
   it("adds a lesson's words to the Lexicon only when asked, and never twice", async () => {
     expect((await completeHello()).status).toBe(200);
     const added = await request(

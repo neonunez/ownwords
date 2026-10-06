@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { carryoverMigrationSql } from "../src/carryover";
 import { ingestCourseVersion, publishCourseVersion } from "../src/operator";
 import { composedMigrations, fixture, migrationSql, TestD1 } from "./d1";
 
@@ -18,6 +19,14 @@ describe("learning migrations", () => {
       )
       .all();
     expect(tables).toHaveLength(15);
+  });
+
+  it("ships the carry-over migration exactly as the rules completion runs render it", () => {
+    // 0202 is generated output (`npm run migration:carryover`), and its exact
+    // bytes are what the release authorization hashes.
+    expect(migrationSql(composedMigrations.at(-1)!)).toBe(
+      carryoverMigrationSql(),
+    );
   });
 
   it("carries finished lessons into Learn once, keeping each word's Lexicon schedule", async () => {

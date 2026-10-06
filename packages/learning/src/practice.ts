@@ -4,17 +4,13 @@
  *
  * The list is derived from `learning_user_lesson_progress` and nothing else, so
  * a word a lesson introduced is practised in Learn and is never a Lexicon entry.
- * Nothing here reads a Lexicon table: lessons finished before Learn owned its
- * own list were carried over once by migration `0202_learn_practice_carryover`.
+ * Cards are written by the carry-over rules in `carryover.ts` when a lesson is
+ * completed; nothing here reads a Lexicon table.
  */
 
 import { all, first } from "./db";
 import { LearningError } from "./errors";
-import {
-  newLearnCard,
-  scheduleLearnReview,
-  type LearnCardState,
-} from "./scheduler";
+import { scheduleLearnReview, type LearnCardState } from "./scheduler";
 
 export type LearnDirection = "recognize" | "produce";
 
@@ -28,18 +24,6 @@ export const WRONG_ANSWER_DELAY_MS = 5 * 60 * 1000;
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
-
-export interface LearnCardIdentity {
-  courseId: string;
-  version: number;
-  itemId: string;
-  direction: LearnDirection;
-}
-
-/** The handle the client reviews against; stable for one card for good. */
-export function learnCardId(identity: LearnCardIdentity): string {
-  return `${identity.courseId}.${identity.version}.${identity.itemId}.${identity.direction}`;
-}
 
 export function languageTag(raw: string | null): string {
   const value = raw?.trim() ?? "";
@@ -80,68 +64,6 @@ export function limit(raw: string | null): number {
     );
   }
   return value;
-}
-
-/* ---- the word list ------------------------------------------------------- */
-
-/**
- * Cards for the words one finished lesson introduced, ready to join the
- * completion batch. Every card is keyed by its item, so repeating a completion
- * writes nothing twice.
- */
-export function lessonCardStatements(
-  db: D1Database,
-  userId: string,
-  courseId: string,
-  version: number,
-  items: readonly { itemId: string; languageTag: string }[],
-  now: Date,
-): D1PreparedStatement[] {
-  const timestamp = now.toISOString();
-  const initial = newLearnCard(now);
-  const statements: D1PreparedStatement[] = [];
-  for (const item of items) {
-    for (const way of learnDirections) {
-      statements.push(
-        db
-          .prepare(
-            `INSERT INTO learning_practice_cards
-              (user_id, id, course_id, course_version, item_id, language_tag, direction,
-               due_at, stability, difficulty, elapsed_days, scheduled_days, learning_steps,
-               reps, lapses, state, last_review_at, revision, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-             ON CONFLICT(user_id, course_id, course_version, item_id, direction) DO NOTHING`,
-          )
-          .bind(
-            userId,
-            learnCardId({
-              courseId,
-              version,
-              itemId: item.itemId,
-              direction: way,
-            }),
-            courseId,
-            version,
-            item.itemId,
-            item.languageTag,
-            way,
-            initial.dueAt,
-            initial.stability,
-            initial.difficulty,
-            initial.elapsedDays,
-            initial.scheduledDays,
-            initial.learningSteps,
-            initial.reps,
-            initial.lapses,
-            initial.state,
-            initial.lastReviewAt,
-            timestamp,
-            timestamp,
-          ),
-      );
-    }
-  }
-  return statements;
 }
 
 /* ---- the due queue ------------------------------------------------------- */

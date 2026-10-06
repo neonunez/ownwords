@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "content:validate": "tsx tools/content.ts validate"
+    "content:validate": "tsx tools/content.ts validate",
+    "migration:carryover": "tsx tools/carryover-migration.ts"
   },
   "dependencies": {
     "hono": "4.13.8",

@@ -7,11 +7,11 @@ import type {
 } from "./contracts";
 import { all, first, parseJsonObject } from "./db";
 import { errorResponse, LearningError } from "./errors";
+import { lessonCarryoverStatement } from "./carryover";
 import { lexiconCourseImport } from "./lexicon-export";
 import {
   direction as parseDirection,
   languageTag as parseLanguageTag,
-  lessonCardStatements,
   limit as parseLimit,
   readDueQueue,
   sessionId as parseSessionId,
@@ -1026,29 +1026,27 @@ export function createLearningRoutes(
         version,
         lessonId,
       );
-      if (progress.status !== "completed") {
-        const statements: D1PreparedStatement[] = [
-          c.env.DB.prepare(
-            `UPDATE learning_user_lesson_progress
+      // The lesson's words join Learn practice in the same transaction, and
+      // nothing here writes to the Lexicon. A repeated completion writes only
+      // the cards the lesson is still missing.
+      const statements: D1PreparedStatement[] = [
+        c.env.DB.prepare(
+          `UPDATE learning_user_lesson_progress
            SET status = 'completed', completed_at = ?, updated_at = ?
            WHERE user_id = ? AND course_id = ? AND course_version = ? AND lesson_id = ?
              AND status = 'in_progress'`,
-          ).bind(timestamp, timestamp, userId, courseId, version, lessonId),
-          // The lesson's words join Learn practice in the same transaction, and
-          // nothing here writes to the Lexicon.
-          ...lessonCardStatements(
-            c.env.DB,
-            userId,
-            courseId,
-            version,
-            introduced,
-            clock(),
-          ),
-        ];
-        const results = await c.env.DB.batch(statements);
-        if (results.some((result) => !result.success))
-          throw new Error("Completion transaction failed");
-      }
+        ).bind(timestamp, timestamp, userId, courseId, version, lessonId),
+        lessonCarryoverStatement(c.env.DB, {
+          userId,
+          courseId,
+          version,
+          lessonId,
+          now: clock(),
+        }),
+      ];
+      const results = await c.env.DB.batch(statements);
+      if (results.some((result) => !result.success))
+        throw new Error("Completion transaction failed");
       const words = await lessonWords(
         importerFor(c.env),
         userId,

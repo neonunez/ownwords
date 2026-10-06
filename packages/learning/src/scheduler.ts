@@ -1,4 +1,4 @@
-import { State, createEmptyCard, fsrs, type Card, type Grade } from "ts-fsrs";
+import { State, fsrs, type Card, type Grade } from "ts-fsrs";
 
 /**
  * The scheduling state one Learn card holds. The shape and the FSRS parameters
@@ -25,10 +25,6 @@ const scheduler = fsrs({
   maximum_interval: 36500,
   request_retention: 0.9,
 });
-
-export function newLearnCard(now: Date): LearnCardState {
-  return fromFsrsCard(createEmptyCard(now));
-}
 
 export function scheduleLearnReview(
   current: LearnCardState,
