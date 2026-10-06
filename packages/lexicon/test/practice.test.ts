@@ -38,7 +38,7 @@ async function due(
 }
 
 describe("practice eligibility and shared scheduler", () => {
-  it("limits the course-origin queue to course imports without hiding them from Maintain", async () => {
+  it("practises a course import like any other entry, with no origin of its own", async () => {
     const ctx = await context();
     await createVerifiedEntry(ctx);
     const importer = createCourseLexiconImporter({
@@ -99,27 +99,18 @@ describe("practice eligibility and shared scheduler", () => {
       "пока́",
       "приве́т",
     ]);
-    const courseOnly = await jsonRequest(
-      app,
-      `${path}&origin=course`,
-      {},
-      ctx.db,
-    );
-    assert.equal(courseOnly.status, 200);
-    const body = (await courseOnly.json()) as any;
-    assert.deepEqual(
-      body.data.map((item: any) => item.target.text),
-      ["пока́"],
-    );
     assert.ok(course.created);
 
-    const invalid = await jsonRequest(
-      app,
-      `${path}&origin=personal`,
-      {},
-      ctx.db,
+    // Learn practises its own course vocabulary, so an `origin` left over from
+    // the old Learn queue narrows nothing and hides nothing.
+    const ignored = await jsonRequest(app, `${path}&origin=course`, {}, ctx.db);
+    assert.equal(ignored.status, 200);
+    assert.deepEqual(
+      ((await ignored.json()) as any).data
+        .map((item: any) => item.target.text)
+        .sort(),
+      ["пока́", "приве́т"],
     );
-    assert.equal(invalid.status, 400);
   });
 
   it("never schedules false friends or unverified Russian suggestions", async () => {

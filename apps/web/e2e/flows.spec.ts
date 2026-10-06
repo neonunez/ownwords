@@ -109,6 +109,15 @@ test.describe("the core flows", () => {
       page.getByText(/choose the one stressed on the first syllable/i),
     ).toBeVisible();
     await page.getByRole("button", { name: "Finish lesson" }).click();
+    await expect(page.getByText("Lesson finished.")).toBeVisible();
+    await expect(page.getByText(/ready to practise in Learn\./)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Add these words to Lexicon" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Back to the course" })
+      .last()
+      .click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Course" }),
     ).toBeVisible();

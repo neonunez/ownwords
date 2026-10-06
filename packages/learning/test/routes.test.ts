@@ -15,6 +15,8 @@ const users = new Map([
 
 let test: TestD1;
 let importer: LexiconCourseImportService;
+/** The items the fake Lexicon currently holds as live entries. */
+let stored: Set<string>;
 let app: Hono<LearningEnv>;
 
 function request(
@@ -159,11 +161,15 @@ beforeEach(async () => {
     1,
     new Date("2026-01-02T00:00:00Z"),
   );
+  stored = new Set();
   importer = {
-    importCourseEntry: vi.fn(async () => ({
-      entryId: "fixture-entry",
-      created: true,
-    })),
+    importCourseEntry: vi.fn(async (input: { itemId: string }) => {
+      stored.add(input.itemId);
+      return { entryId: "fixture-entry", created: true };
+    }),
+    courseEntriesStored: vi.fn(async (input: { itemIds: readonly string[] }) =>
+      input.itemIds.filter((itemId) => stored.has(itemId)),
+    ),
   };
 });
 
@@ -290,89 +296,419 @@ describe("authenticated learning routes", () => {
     });
   });
 
-  it("persists completion and retries failed Lexicon callbacks without duplicates", async () => {
-    let fail = true;
-    const callback = vi.fn<LexiconCourseImportService["importCourseEntry"]>(
-      async () => {
-        if (fail) throw new Error("synthetic Lexicon outage");
-        return { entryId: "fixture-entry", created: false };
-      },
-    );
-    importer.importCourseEntry = callback;
-    const firstCompletion = await completeHello();
-    expect(firstCompletion.status).toBe(202);
-    expect(await firstCompletion.json()).toMatchObject({
-      completion: { lexiconSync: { status: "pending", pendingItems: 1 } },
+  it("finishes a lesson without writing to the Lexicon, and practises its words in Learn", async () => {
+    const completion = await completeHello();
+    expect(completion.status).toBe(200);
+    expect(await completion.json()).toMatchObject({
+      completion: { lessonId: "hello", words: { total: 1, inLexicon: 0 } },
     });
+    expect(importer.importCourseEntry).not.toHaveBeenCalled();
+    expect(
+      test.sqlite
+        .prepare("SELECT COUNT(*) AS count FROM lexicon_course_imports")
+        .get(),
+    ).toEqual({ count: 0 });
+    expect(
+      test.sqlite
+        .prepare("SELECT COUNT(*) AS count FROM learning_lexicon_sync")
+        .get(),
+    ).toEqual({ count: 0 });
     expect(
       test.sqlite
         .prepare(
-          "SELECT status FROM learning_user_lesson_progress WHERE user_id = 'alice' AND lesson_id = 'hello'",
+          `SELECT id, direction, due_at FROM learning_practice_cards
+           WHERE user_id = 'alice' ORDER BY direction`,
+        )
+        .all(),
+    ).toEqual([
+      {
+        id: "russian-zero.1.privet.produce",
+        direction: "produce",
+        due_at: "2026-01-03T00:00:00.000Z",
+      },
+      {
+        id: "russian-zero.1.privet.recognize",
+        direction: "recognize",
+        due_at: "2026-01-03T00:00:00.000Z",
+      },
+    ]);
+
+    const due = await request(
+      "/api/v1/learning/practice/due?language=ru&direction=recognize&format=flashcard&sessionId=learn-one",
+      {},
+      "alice-token",
+    );
+    expect(await due.json()).toEqual({
+      data: [
+        {
+          card: {
+            id: "russian-zero.1.privet.recognize",
+            languageTag: "ru",
+            direction: "recognize",
+            dueAt: "2026-01-03T00:00:00.000Z",
+          },
+          target: {
+            id: "privet",
+            text: "привет",
+            languageTag: "ru",
+          },
+          prompt: { type: "gloss", text: "synthetic test greeting" },
+          cloze: null,
+          revisit: false,
+        },
+      ],
+      nextDueAt: null,
+    });
+    // The course writes no gaps, so there is nothing to complete in Learn.
+    const cloze = await request(
+      "/api/v1/learning/practice/due?language=ru&direction=produce&format=cloze&sessionId=learn-one",
+      {},
+      "alice-token",
+    );
+    expect(await cloze.json()).toEqual({ data: [], nextDueAt: null });
+  });
+
+  it("keeps a review in Learn out of the Lexicon and serves it again only when due", async () => {
+    expect((await completeHello()).status).toBe(200);
+    const review = await request(
+      "/api/v1/learning/practice/reviews",
+      json("POST", {
+        submissionId: "submit-1",
+        cardId: "russian-zero.1.privet.produce",
+        sessionId: "learn-one",
+        rating: 3,
+      }),
+      "alice-token",
+    );
+    expect(review.status).toBe(201);
+    expect(await review.json()).toMatchObject({
+      replayed: false,
+      data: { cardId: "russian-zero.1.privet.produce", rating: 3 },
+    });
+    // The same submission answers the same card once.
+    const replay = await request(
+      "/api/v1/learning/practice/reviews",
+      json("POST", {
+        submissionId: "submit-1",
+        cardId: "russian-zero.1.privet.produce",
+        sessionId: "learn-one",
+        rating: 3,
+      }),
+      "alice-token",
+    );
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({ replayed: true });
+
+    const due = await request(
+      "/api/v1/learning/practice/due?language=ru&direction=produce&format=flashcard&sessionId=learn-two",
+      {},
+      "alice-token",
+    );
+    const queue = (await due.json()) as {
+      data: unknown[];
+      nextDueAt: string | null;
+    };
+    expect(queue.data).toEqual([]);
+    expect(queue.nextDueAt).not.toBeNull();
+    expect(importer.importCourseEntry).not.toHaveBeenCalled();
+    expect(
+      test.sqlite
+        .prepare("SELECT COUNT(*) AS count FROM learning_lexicon_sync")
+        .get(),
+    ).toEqual({ count: 0 });
+
+    const stranger = await request(
+      "/api/v1/learning/practice/reviews",
+      json("POST", {
+        submissionId: "submit-2",
+        cardId: "russian-zero.1.privet.produce",
+        sessionId: "learn-two",
+        rating: 3,
+      }),
+      "bob-token",
+    );
+    expect(stranger.status).toBe(404);
+  });
+
+  it("never creates a Learn card on a queue read", async () => {
+    await completeHello();
+    test.sqlite.exec(
+      "DELETE FROM learning_practice_cards WHERE user_id = 'alice'",
+    );
+    const queue = await request(
+      "/api/v1/learning/practice/due?language=ru&direction=recognize&format=flashcard&sessionId=read-only",
+      {},
+      "alice-token",
+    );
+    expect(await queue.json()).toEqual({ data: [], nextDueAt: null });
+    expect(
+      test.sqlite
+        .prepare("SELECT COUNT(*) AS count FROM learning_practice_cards")
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("gives a lesson finished without its cards those cards on a repeat completion", async () => {
+    // The shape an earlier release leaves behind when it completes a lesson
+    // after the carry-over migration ran: completed, with no Learn cards, and
+    // the word practised as a course import in the Lexicon.
+    expect((await completeHello()).status).toBe(200);
+    test.sqlite.exec(
+      "DELETE FROM learning_practice_cards WHERE user_id = 'alice'",
+    );
+    test.sqlite.exec(`
+      INSERT INTO lexicon_entries
+        (id, owner_id, kind, source, provenance_json, human_edited, version, created_at, updated_at)
+      VALUES ('legacy-entry', 'alice', 'word', 'course', '{}', 0, 1, 't', 't');
+      INSERT INTO lexicon_senses
+        (id, owner_id, entry_id, gloss, position, human_edited, version, created_at, updated_at)
+      VALUES ('legacy-sense', 'alice', 'legacy-entry', 'greeting', 0, 0, 1, 't', 't');
+      INSERT INTO lexicon_equivalents
+        (id, owner_id, sense_id, language_tag, text, search_text, fit, status,
+         human_edited, version, created_at, updated_at)
+      VALUES ('legacy-equivalent', 'alice', 'legacy-sense', 'ru', 'привет', 'привет',
+              'exact', 'confirmed', 0, 1, 't', 't');
+      INSERT INTO lexicon_course_imports
+        (owner_id, course_id, course_version, item_id, entry_id, created_at)
+      VALUES ('alice', 'russian-zero', '1', 'privet', 'legacy-entry', 't');
+      INSERT INTO lexicon_practice_cards
+        (id, owner_id, equivalent_id, language_tag, direction, due_at, stability, difficulty,
+         elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review_at,
+         revision, created_at, updated_at)
+      VALUES ('legacy-card', 'alice', 'legacy-equivalent', 'ru', 'recognize',
+              '2026-06-01T00:00:00.000Z', 12.5, 4.25, 3, 3, 0, 3, 0, 2,
+              '2026-01-01T00:00:00.000Z', 3, 't', 't');
+    `);
+
+    const again = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(again.status).toBe(200);
+    expect(
+      test.sqlite
+        .prepare(
+          `SELECT id, due_at, stability, reps, state, revision FROM learning_practice_cards
+           WHERE user_id = 'alice' ORDER BY id`,
+        )
+        .all(),
+    ).toEqual([
+      {
+        id: "russian-zero.1.privet.produce",
+        due_at: "2026-01-03T00:00:00.000Z",
+        stability: 0,
+        reps: 0,
+        state: 0,
+        revision: 0,
+      },
+      {
+        id: "russian-zero.1.privet.recognize",
+        due_at: "2026-06-01T00:00:00.000Z",
+        stability: 12.5,
+        reps: 3,
+        state: 2,
+        revision: 3,
+      },
+    ]);
+  });
+
+  it("neither duplicates nor resets cards on a repeat completion", async () => {
+    expect((await completeHello()).status).toBe(200);
+    const review = await request(
+      "/api/v1/learning/practice/reviews",
+      json("POST", {
+        submissionId: "before-repeat",
+        cardId: "russian-zero.1.privet.recognize",
+        sessionId: "learn-one",
+        rating: 3,
+      }),
+      "alice-token",
+    );
+    expect(review.status).toBe(201);
+    const cards = () =>
+      test.sqlite
+        .prepare(
+          "SELECT * FROM learning_practice_cards WHERE user_id = 'alice' ORDER BY id",
+        )
+        .all();
+    const before = cards();
+    expect(before).toHaveLength(2);
+    expect(before).toContainEqual(
+      expect.objectContaining({
+        id: "russian-zero.1.privet.recognize",
+        reps: 1,
+        revision: 1,
+      }),
+    );
+
+    const again = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(again.status).toBe(200);
+    expect(cards()).toEqual(before);
+  });
+
+  it("adds a lesson's words to the Lexicon only when asked, and never twice", async () => {
+    expect((await completeHello()).status).toBe(200);
+    const added = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(added.status).toBe(200);
+    expect(await added.json()).toEqual({
+      lexicon: {
+        total: 1,
+        inLexicon: 1,
+        added: 1,
+        alreadyThere: 0,
+        pending: 0,
+      },
+    });
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
+
+    // Asking again is safe and honest: nothing new is stored, nothing is owed.
+    const again = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({
+      lexicon: { inLexicon: 1, added: 0, alreadyThere: 0, pending: 0 },
+    });
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a deleted word again and adds it back when asked", async () => {
+    expect((await completeHello()).status).toBe(200);
+    const lexicon =
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon";
+    expect(
+      (await request(lexicon, { method: "POST" }, "alice-token")).status,
+    ).toBe(200);
+    // The learner deletes the word in the Lexicon.
+    stored.delete("privet");
+    const reopened = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello",
+      {},
+      "alice-token",
+    );
+    expect(await reopened.json()).toMatchObject({
+      lesson: { words: { total: 1, inLexicon: 0 } },
+    });
+    const again = await request(lexicon, { method: "POST" }, "alice-token");
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({
+      lexicon: {
+        total: 1,
+        inLexicon: 1,
+        added: 1,
+        alreadyThere: 0,
+        pending: 0,
+      },
+    });
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports an unfinished import as pending and retries it without duplicating", async () => {
+    let fail = true;
+    importer.importCourseEntry = vi.fn(async (input) => {
+      if (fail) throw new Error("synthetic Lexicon outage");
+      stored.add(input.itemId);
+      return { entryId: "fixture-entry", created: true };
+    });
+    expect((await completeHello()).status).toBe(200);
+    const first = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(first.status).toBe(202);
+    expect(await first.json()).toMatchObject({
+      lexicon: { inLexicon: 0, added: 0, pending: 1 },
+    });
+    // Learn practice is not waiting on the Lexicon.
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT COUNT(*) AS count FROM learning_practice_cards WHERE user_id = 'alice'",
         )
         .get(),
-    ).toEqual({ status: "completed" });
+    ).toEqual({ count: 2 });
 
     fail = false;
     const retry = await request(
-      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
       { method: "POST" },
       "alice-token",
     );
     expect(retry.status).toBe(200);
-    expect(callback).toHaveBeenCalledTimes(2);
-    expect(callback).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        ownerId: "alice",
-        courseId: "russian-zero",
-        courseVersion: "1",
-        itemId: "privet",
-        senses: [expect.objectContaining({ gloss: "synthetic test greeting" })],
-      }),
-    );
-    const repeated = await request(
-      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/complete",
+    expect(await retry.json()).toMatchObject({
+      lexicon: { inLexicon: 1, added: 1, pending: 0 },
+    });
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to add words from a lesson that is not finished", async () => {
+    await recordLesson("alice-token", "hello", ["hello-hear"]);
+    const early = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
       { method: "POST" },
       "alice-token",
     );
-    expect(repeated.status).toBe(200);
-    expect(callback).toHaveBeenCalledTimes(2);
+    expect(early.status).toBe(409);
+    expect(await early.json()).toMatchObject({
+      error: { code: "LESSON_NOT_FINISHED" },
+    });
   });
 
-  it("reports only the completing lesson's Lexicon export state", async () => {
-    const callback = vi.fn<LexiconCourseImportService["importCourseEntry"]>(
-      async (input) => {
-        if (input.itemId === "privet")
-          throw new Error("synthetic Lexicon outage");
-        return { entryId: "fixture-entry", created: true };
-      },
+  it("reports only the completing lesson's own words", async () => {
+    importer.importCourseEntry = vi.fn(async (input) => {
+      if (input.itemId === "privet")
+        throw new Error("synthetic Lexicon outage");
+      stored.add(input.itemId);
+      return { entryId: "fixture-entry", created: true };
+    });
+    expect((await completeHello()).status).toBe(200);
+    const hello = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
+      { method: "POST" },
+      "alice-token",
     );
-    importer.importCourseEntry = callback;
-    const hello = await completeHello();
     expect(hello.status).toBe(202);
     expect(await hello.json()).toMatchObject({
-      completion: { lexiconSync: { status: "pending", pendingItems: 1 } },
+      lexicon: { total: 1, inLexicon: 0, pending: 1 },
     });
 
     await recordLesson("alice-token", "goodbye", [
       "goodbye-rule",
       "goodbye-use",
     ]);
+    expect(
+      (
+        await request(
+          "/api/v1/learning/courses/russian-zero/versions/1/lessons/goodbye/complete",
+          { method: "POST" },
+          "alice-token",
+        )
+      ).status,
+    ).toBe(200);
     const goodbye = await request(
-      "/api/v1/learning/courses/russian-zero/versions/1/lessons/goodbye/complete",
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/goodbye/lexicon",
       { method: "POST" },
       "alice-token",
     );
     expect(goodbye.status).toBe(200);
     expect(await goodbye.json()).toMatchObject({
-      completion: {
-        lessonId: "goodbye",
-        lexiconSync: { status: "synced", pendingItems: 0 },
-      },
+      lexicon: { total: 1, inLexicon: 1, added: 1, pending: 0 },
     });
-    expect(callback.mock.calls.map(([input]) => input.itemId).sort()).toEqual([
-      "poka",
-      "privet",
-    ]);
+    expect(importer.importCourseEntry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ itemId: "poka" }),
+    );
     expect(
       test.sqlite
         .prepare(
@@ -479,12 +815,22 @@ describe("authenticated learning routes", () => {
       courses: [{ id: "russian-zero", version: 1 }],
     });
     await recordLesson("alice-token", "hello", ["hello-hear"]);
-    const practice = await request(
-      "/api/v1/learning/practice?courseId=russian-zero",
+    expect(
+      (
+        await request(
+          "/api/v1/learning/practice?courseId=russian-zero",
+          {},
+          "alice-token",
+        )
+      ).status,
+    ).toBe(404);
+    // Learn's own practice is the route the app calls.
+    const due = await request(
+      "/api/v1/learning/practice/due?language=ru&direction=recognize&format=flashcard&sessionId=before",
       {},
       "alice-token",
     );
-    expect(practice.status).toBe(404);
+    expect(await due.json()).toEqual({ data: [], nextDueAt: null });
   });
 
   it("resolves a per-request importer against the request's own bindings", async () => {
@@ -495,9 +841,17 @@ describe("authenticated learning routes", () => {
         return importer;
       },
     });
-    const response = await completeHello();
-    expect(response.status).toBe(200);
+    expect((await completeHello()).status).toBe(200);
+    // Completion only asks the Lexicon what it holds; it imports nothing.
     expect(bindings).toEqual([test.db]);
+    expect(importer.importCourseEntry).not.toHaveBeenCalled();
+    const response = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
+      { method: "POST" },
+      "alice-token",
+    );
+    expect(response.status).toBe(200);
+    expect(bindings).toEqual([test.db, test.db]);
     expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
   });
 });
@@ -663,11 +1017,7 @@ describe("course version pinning", () => {
     ).toEqual([{ current_step_id: "hello-use" }]);
   });
 
-  it("imports each course item into Lexicon once across published versions", async () => {
-    const callback = vi.fn<LexiconCourseImportService["importCourseEntry"]>(
-      async () => ({ entryId: "fixture-entry", created: true }),
-    );
-    importer.importCourseEntry = callback;
+  it("keeps a finished lesson's words in Learn once across published versions", async () => {
     expect((await completeHello()).status).toBe(200);
     await publishVersionTwo();
     const otherVersion = await request(
@@ -682,10 +1032,14 @@ describe("course version pinning", () => {
       "alice-token",
     );
     expect(repeated.status).toBe(200);
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(
-      expect.objectContaining({ courseVersion: "1", itemId: "privet" }),
-    );
+    expect(importer.importCourseEntry).not.toHaveBeenCalled();
+    expect(
+      test.sqlite
+        .prepare(
+          "SELECT COUNT(*) AS count FROM learning_practice_cards WHERE user_id = 'alice'",
+        )
+        .get(),
+    ).toEqual({ count: 2 });
   });
 
   it("serves corrected course metadata from the version each user sees", async () => {

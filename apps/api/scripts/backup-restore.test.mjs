@@ -274,7 +274,12 @@ describe("backup export and restore rehearsal", { timeout: 300_000 }, () => {
         api(worker, learner, "POST", `${lesson("hello")}/complete`),
         200,
       );
-      assert.equal(completion.completion.lexiconSync.status, "synced");
+      assert.equal(completion.completion.words.inLexicon, 0);
+      // Keeping the lesson's words is the learner's own decision.
+      await expectStatus(
+        api(worker, learner, "POST", `${lesson("hello")}/lexicon`),
+        200,
+      );
       await expectStatus(
         api(worker, other, "POST", "/api/v1/lexicon/entries", {
           kind: "word",
@@ -369,7 +374,7 @@ describe("backup export and restore rehearsal", { timeout: 300_000 }, () => {
         api(worker, learner, "POST", `${lesson("goodbye")}/complete`),
         200,
       );
-      assert.equal(next.completion.lexiconSync.status, "synced");
+      assert.equal(next.completion.words.inLexicon, 0);
       const triggers = await wrangler([
         "d1",
         "execute",

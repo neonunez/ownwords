@@ -74,6 +74,15 @@ export interface LexiconCourseImportService {
   importCourseEntry(
     input: CourseLexiconImport,
   ): Promise<CourseLexiconImportResult>;
+  /** Which of these course items have a live, not deleted, entry. */
+  courseEntriesStored(input: CourseEntriesStoredQuery): Promise<string[]>;
+}
+
+export interface CourseEntriesStoredQuery {
+  ownerId: string;
+  courseId: string;
+  courseVersion: string;
+  itemIds: readonly string[];
 }
 
 export interface TranslationSuggestion {

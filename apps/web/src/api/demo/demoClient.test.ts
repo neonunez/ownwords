@@ -175,7 +175,11 @@ describe("starting from an empty Lexicon", () => {
     expect(maintain.cards.map((card) => card.headword)).toEqual([
       entry.headword,
     ]);
-    expect(learn.cards.map((card) => card.headword)).toEqual([entry.headword]);
+    // Learn practises the course's own words, which a starter does not touch.
+    expect(learn.cards.map((card) => card.headword)).toEqual([
+      "ко́фе",
+      "спаси́бо",
+    ]);
   });
 
   it("refuses a starter it never offered", async () => {
@@ -265,6 +269,7 @@ describe("practice", () => {
     await client.submitReview({
       cardId: card.cardId,
       rating: "again",
+      mode: "maintain",
       format: "cloze",
       sessionId: "s",
       submissionId: "a",
@@ -288,6 +293,7 @@ describe("practice", () => {
       await client.submitReview({
         cardId: card.cardId,
         rating: "good",
+        mode: "maintain",
         format: "cloze",
         sessionId: "s",
         submissionId: card.cardId,
@@ -315,6 +321,7 @@ describe("practice", () => {
     await client.submitReview({
       cardId: first.cardId,
       rating: "good",
+      mode: "learn",
       format: "cloze",
       sessionId: "s",
       submissionId: "c",
@@ -331,6 +338,7 @@ describe("practice", () => {
     await client.submitReview({
       cardId: card.cardId,
       rating: "good",
+      mode: "maintain",
       format: "cloze",
       sessionId: "s",
       submissionId: "b",
@@ -367,6 +375,7 @@ describe("progress", () => {
       await client.submitReview({
         cardId: card.cardId,
         rating: "good",
+        mode: "maintain",
         format: "cloze",
         sessionId: "s",
         submissionId: card.cardId,

@@ -923,24 +923,14 @@ export function createLexiconRoutes(
       })!,
     );
     const limit = parseLimit(url.searchParams.get("limit"), 20);
-    const origin = optionalEnum(
-      url.searchParams.get("origin"),
-      ["course"] as const,
-      "origin",
-    );
     const now = iso(clock.now());
     const formatCondition =
       format === "cloze"
         ? `AND EXISTS (SELECT 1 FROM lexicon_cloze_items c
                        WHERE c.owner_id = p.owner_id AND c.equivalent_id = p.equivalent_id AND c.deleted_at IS NULL)`
         : "";
-    // Learn-mode practice covers only course-imported entries; personal
-    // vocabulary in the learned language is practised in Maintain.
-    const originCondition =
-      origin === "course"
-        ? `AND EXISTS (SELECT 1 FROM lexicon_course_imports ci
-                       WHERE ci.owner_id = e.owner_id AND ci.entry_id = e.id)`
-        : "";
+    // Learn practises its own course vocabulary on Learning's own route; this
+    // queue is the personal collection, whatever a course once introduced.
     const rows = await all<
       CardRow & EquivalentRow & { gloss: string | null; revisit: number }
     >(
@@ -969,7 +959,6 @@ export function createLexiconRoutes(
                        AND prompt.status IN ('confirmed', 'manual') AND prompt.fit <> 'false_friend'
                        AND prompt.deleted_at IS NULL))
               ${formatCondition}
-              ${originCondition}
             ORDER BY revisit DESC, p.due_at, p.id
             LIMIT ?`,
       ).bind(sessionId, now, ownerId, language, direction, now, limit),
@@ -1012,8 +1001,7 @@ export function createLexiconRoutes(
                        AND prompt.id <> q.id AND prompt.text IS NOT NULL
                        AND prompt.status IN ('confirmed', 'manual') AND prompt.fit <> 'false_friend'
                        AND prompt.deleted_at IS NULL))
-              ${formatCondition}
-              ${originCondition}`,
+              ${formatCondition}`,
       ).bind(ownerId, language, direction, now),
     );
     return c.json({

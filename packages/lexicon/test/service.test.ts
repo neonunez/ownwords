@@ -297,6 +297,61 @@ describe("course integration and transaction failure behavior", () => {
     assert.equal(marker.count, 1);
   });
 
+  it("answers which course items are live and restores a deleted one on import", async () => {
+    const ctx = await context();
+    const importer = createCourseLexiconImporter({
+      db: ctx.db,
+      clock: ctx.clock,
+      idGenerator: ctx.ids,
+    });
+    const query = {
+      ownerId: "user-a",
+      courseId: courseInput.courseId,
+      courseVersion: courseInput.courseVersion,
+      itemIds: [courseInput.itemId, "never-imported"],
+    };
+    assert.deepEqual(await importer.courseEntriesStored(query), []);
+    const imported = await importer.importCourseEntry(courseInput);
+    assert.deepEqual(await importer.courseEntriesStored(query), [
+      courseInput.itemId,
+    ]);
+    assert.deepEqual(
+      await importer.courseEntriesStored({ ...query, ownerId: "user-b" }),
+      [],
+    );
+
+    const app = appFor(ctx, "user-a");
+    const deleted = await jsonRequest(
+      app,
+      `/api/v1/lexicon/entries/${imported.entryId}`,
+      { method: "DELETE", headers: { "If-Match": '"1"' } },
+      ctx.db,
+    );
+    assert.equal(deleted.status, 204);
+    assert.deepEqual(await importer.courseEntriesStored(query), []);
+
+    const restored = await importer.importCourseEntry(courseInput);
+    assert.deepEqual(restored, { entryId: imported.entryId, created: true });
+    assert.deepEqual(await importer.courseEntriesStored(query), [
+      courseInput.itemId,
+    ]);
+    const shown = await jsonRequest(
+      app,
+      `/api/v1/lexicon/entries/${imported.entryId}`,
+      {},
+      ctx.db,
+    );
+    assert.equal(shown.status, 200);
+    assert.deepEqual(await importer.importCourseEntry(courseInput), {
+      entryId: imported.entryId,
+      created: false,
+    });
+    const count = ctx.rawDb.sqlite
+      .prepare("SELECT COUNT(*) AS count FROM lexicon_entries")
+      .get() as { count: number };
+    assert.equal(count.count, 1);
+  });
+
   it("separates the same course identity by owner", async () => {
     const ctx = await context();
     const importer = createCourseLexiconImporter({

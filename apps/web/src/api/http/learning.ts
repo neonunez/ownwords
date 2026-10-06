@@ -14,10 +14,12 @@ import type {
   Course,
   CourseUnit,
   Lesson,
+  LessonCompletion,
   LessonItem,
   LessonStatus,
   LessonStep,
   LessonStepKind,
+  LexiconWords,
   Milestone,
   ReferenceItem,
   UnitState,
@@ -171,14 +173,20 @@ export interface WireLesson {
   title: string;
   steps: WireStep[];
   contentItems: WireContentItem[];
+  words: { total: number; inLexicon: number };
 }
 
 export function readLesson(value: unknown): WireLesson {
   const lesson = object(object(value, "lesson").lesson, "lesson.lesson");
+  const words = object(lesson.words, "lesson.words");
   return {
     id: string(lesson.id, "lesson.id"),
     unitId: string(lesson.unitId, "lesson.unitId"),
     title: string(lesson.title, "lesson.title"),
+    words: {
+      total: number(words.total, "lesson.words.total"),
+      inLexicon: number(words.inLexicon, "lesson.words.inLexicon"),
+    },
     steps: array(lesson.steps, "lesson.steps", (item, path) => {
       const step = object(item, path);
       return {
@@ -243,16 +251,29 @@ export function readReferencePage(value: unknown): {
   };
 }
 
-export function readCompletion(value: unknown): "synced" | "pending" {
+export function readCompletion(value: unknown): LessonCompletion {
   const completion = object(
     object(value, "completion").completion,
     "completion.completion",
   );
-  const sync = object(completion.lexiconSync, "completion.lexiconSync");
-  return oneOf(sync.status, "completion.lexiconSync.status", [
-    "synced",
-    "pending",
-  ] as const);
+  const words = object(completion.words, "completion.words");
+  return {
+    words: {
+      total: number(words.total, "completion.words.total"),
+      inLexicon: number(words.inLexicon, "completion.words.inLexicon"),
+    },
+  };
+}
+
+export function readLexiconWords(value: unknown): LexiconWords {
+  const words = object(object(value, "lexicon").lexicon, "lexicon.lexicon");
+  return {
+    total: number(words.total, "lexicon.total"),
+    inLexicon: number(words.inLexicon, "lexicon.inLexicon"),
+    added: number(words.added, "lexicon.added"),
+    alreadyThere: number(words.alreadyThere, "lexicon.alreadyThere"),
+    pending: number(words.pending, "lexicon.pending"),
+  };
 }
 
 /* ---- the course, as the screens see it ----------------------------------- */
@@ -453,6 +474,7 @@ export function toLesson(lesson: WireLesson, outline: WireOutline): Lesson {
     language: outline.languageTag,
     status: placed?.status ?? "not_started",
     currentStepId: placed?.currentStepId ?? null,
+    words: lesson.words,
     steps: lesson.steps.map((step) => toStep(step, items)),
   };
 }

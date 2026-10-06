@@ -27,8 +27,9 @@ expressions its owner keeps reaching for.
 | Progress | Retention per language, per direction | Can-do milestones along the course |
 | Audio | None | **None.** The first course ships without recordings — see [Audio](#audio) |
 
-Both modes share one collection. Every item learned in the course lands in it, which is how a newly learned
-language eventually joins maintenance.
+Both modes practise with the same scheduler, over different words. A finished lesson's words are Learn practice on
+their own list: they are not Lexicon entries, and the person can keep any of them in the collection with one tap on
+the finished lesson.
 
 ## User jobs
 
@@ -83,6 +84,7 @@ because for months it is the page opened most.
 - **Feedback.** A wrong answer gets a prompt first and the answer second, then returns later in the same session.
 - **Adding an entry.** Capture → optional auto-translation into the configured languages → review each candidate → save. The "what do you mean by it?" note is what keeps false friends out.
 - **Lesson.** Read it first (words written with the stress marked) → a rule of four lines → use it → a contrast drill. Grammar is one tap away and returns to the same step. Nothing is played: the learner reads and says the words aloud.
+- **What a lesson leaves behind.** Its words join Learn practice, not the collection. The finished lesson offers "Add these words to Lexicon", says how many of them are there already, and can be pressed again safely; nothing is imported until it is.
 - **Alphabet.** An introductory module at the head of the course, then a permanent tab, with explicit treatment of letters that look Latin but are not.
 - **Grammar.** Each topic records which unit introduced it, says what is still locked, and offers practice on the spot.
 - **Progress.** Retention per language and what is due next. No streaks, XP or card counts.

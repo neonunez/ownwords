@@ -78,16 +78,30 @@ class TestStatement {
   }
 }
 
+/** The composed schema, in the order a deployment applies it. */
+export const composedMigrations = [
+  "../../lexicon/migrations/0100_lexicon.sql",
+  "../migrations/0200_learning.sql",
+  "../migrations/0201_learn_practice.sql",
+  "../migrations/0202_learn_practice_carryover.sql",
+] as const;
+
+export function migrationSql(migration: string): string {
+  return readFileSync(
+    fileURLToPath(new URL(migration, import.meta.url)),
+    "utf8",
+  );
+}
+
 export class TestD1 {
   readonly sqlite = new DatabaseSync(":memory:");
   readonly db: D1Database;
 
-  constructor() {
+  constructor(migrations: readonly string[] = composedMigrations) {
     this.sqlite.exec("PRAGMA foreign_keys = ON");
-    const migrationPath = fileURLToPath(
-      new URL("../migrations/0200_learning.sql", import.meta.url),
-    );
-    this.sqlite.exec(readFileSync(migrationPath, "utf8"));
+    for (const migration of migrations) {
+      this.sqlite.exec(migrationSql(migration));
+    }
     this.db = {
       prepare: (sql: string) =>
         new TestStatement(this.sqlite, sql) as unknown as D1PreparedStatement,

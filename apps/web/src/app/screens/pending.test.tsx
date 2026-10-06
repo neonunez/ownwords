@@ -101,7 +101,7 @@ describe("truthful action feedback", () => {
 
   it("keeps Finish pending, allows retry on failure, and never claims completion early", async () => {
     const demo = createDemoClient();
-    let finishing = deferred<{ lexicon: "synced" }>();
+    let finishing = deferred<Awaited<ReturnType<typeof demo.completeLesson>>>();
     const client = {
       ...demo,
       getLesson: async (id: string) => ({
@@ -131,12 +131,130 @@ describe("truthful action feedback", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Finish lesson" }),
     );
-    await act(async () => finishing.resolve({ lexicon: "synced" }));
+    await act(async () =>
+      finishing.resolve({ words: { total: 3, inLexicon: 0 } }),
+    );
+    expect(
+      await screen.findByText("Its 3 words are ready to practise in Learn."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("They are not in your Lexicon."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a save to the Lexicon pending until it is acknowledged, and never claims it early", async () => {
+    const demo = createDemoClient();
+    let saving =
+      deferred<Awaited<ReturnType<typeof demo.addLessonWordsToLexicon>>>();
+    const client = {
+      ...demo,
+      getLesson: async (id: string) => ({
+        ...(await demo.getLesson(id)),
+        status: "completed" as const,
+      }),
+      addLessonWordsToLexicon: () => saving.promise,
+    };
+    renderScreen(<LessonScreen />, {
+      route: "/learn/course/u3",
+      path: "/learn/course/:lessonId",
+      client,
+    });
+    const add = await screen.findByRole("button", {
+      name: "Add these words to Lexicon",
+    });
+    await userEvent.click(add);
+    expect(
+      screen.getByRole("button", { name: "Adding to your Lexicon…" }),
+    ).toBeDisabled();
+    expect(screen.queryByText(/added to your Lexicon/)).not.toBeInTheDocument();
+    await act(async () => saving.reject(new Error("offline")));
+    expect(
+      await screen.findByRole("button", {
+        name: "Add these words to Lexicon",
+      }),
+    ).toBeEnabled();
+    expect(
+      await screen.findByText("Your Lexicon was not changed. offline"),
+    ).toBeInTheDocument();
+
+    saving = deferred();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add these words to Lexicon" }),
+    );
+    await act(async () =>
+      saving.resolve({
+        total: 3,
+        inLexicon: 3,
+        added: 3,
+        alreadyThere: 0,
+        pending: 0,
+      }),
+    );
+    expect(
+      await screen.findByText("3 words added to your Lexicon."),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Already in your Lexicon" }),
+    ).toBeDisabled();
+  });
+
+  it("offers no Lexicon save for a finished lesson that introduced no words", async () => {
+    const demo = createDemoClient();
+    const client = {
+      ...demo,
+      getLesson: async (id: string) => ({
+        ...(await demo.getLesson(id)),
+        status: "completed" as const,
+        words: { total: 0, inLexicon: 0 },
+      }),
+    };
+    renderScreen(<LessonScreen />, {
+      route: "/learn/course/u3",
+      path: "/learn/course/:lessonId",
+      client,
+    });
+    expect(
+      await screen.findByText("This lesson introduced no words to practise."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Lexicon/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/in your Lexicon/)).not.toBeInTheDocument();
+  });
+
+  it("says what is still owed when only some words could be saved", async () => {
+    const demo = createDemoClient();
+    const client = {
+      ...demo,
+      getLesson: async (id: string) => ({
+        ...(await demo.getLesson(id)),
+        status: "completed" as const,
+      }),
+      addLessonWordsToLexicon: async () => ({
+        total: 3,
+        inLexicon: 1,
+        added: 1,
+        alreadyThere: 0,
+        pending: 2,
+      }),
+    };
+    renderScreen(<LessonScreen />, {
+      route: "/learn/course/u3",
+      path: "/learn/course/:lessonId",
+      client,
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add these words to Lexicon" }),
+    );
     expect(
       await screen.findByText(
-        "Lesson finished. Its words are in your Lexicon.",
+        "1 word added to your Lexicon. 2 words could not be saved; try again.",
       ),
     ).toBeInTheDocument();
+    // Still offered, because the lesson is not fully kept yet.
+    expect(
+      screen.getByRole("button", { name: "Add these words to Lexicon" }),
+    ).toBeEnabled();
   });
 
   it("shows an entry's pending edit without changing its wording, and reports conflict only after refusal", async () => {

@@ -278,13 +278,28 @@ Core pins Hono `4.13.8`, Better Auth `1.7.5`, and `@better-auth/passkey` `1.7.5`
 - The course-to-Lexicon importer is created per request from that request's D1 binding and injected into Learning
   as a typed factory. Neither package imports the other or writes the other's tables.
 - Learning validates that every item a lesson uses is introduced by exactly one lesson; the Lexicon importer alone
-  owns its field limits. Completing a lesson commits the completion and one pending
-  sync row per introduced item in one D1 batch, then imports each item under its stable
-  `(owner, course, version, item)` key. A failed import returns `202` with `lexiconSync.status: "pending"`; completing
-  the lesson again retries only that lesson's pending items and never duplicates an entry.
-- Learn-mode practice uses the Lexicon scheduler with `origin=course` on `GET /api/v1/lexicon/practice/due`, which
-  limits the queue to course-imported entries. Maintain omits it and practises the whole collection, including personal
-  vocabulary in the learned language. Learning itself serves only core curriculum.
+  owns its field limits. Completing a lesson commits the completion and one Learn practice card per introduced item
+  and direction in one D1 batch, and writes nothing to the Lexicon.
+- A lesson's words reach the Lexicon only through
+  `POST /api/v1/learning/courses/:courseId/versions/:version/lessons/:lessonId/lexicon`, the person's explicit
+  "Add these words to Lexicon". It records one `learning_lexicon_sync` row per item under the Lexicon's stable
+  `(owner, course, version, item)` key and imports each item independently, so it is safe to press again. A failed
+  import returns `202` with `lexicon.pending > 0`; asking again retries only what is still owed, and never
+  duplicates an entry.
+- Learn-mode practice is Learning's own queue on `GET /api/v1/learning/practice/due` and
+  `POST /api/v1/learning/practice/reviews`, scheduled from the vocabulary of finished lessons in
+  `learning_practice_cards`. Maintain practises the whole collection through the Lexicon's own routes, and a card
+  that was a course import before this split is practised in both, on the schedule it already had.
+- Learn cards are written by the carry-over rules in `packages/learning/src/carryover.ts`, which create a finished
+  lesson's missing cards and keep the scheduling state a word already had as that learner's course import in the
+  Lexicon. Every lesson completion runs them for that lesson, including a repeat completion, so a lesson an earlier
+  release completed between the `migrate` and `deploy` stages gains its cards when completed again. Lessons finished
+  before the tables existed were carried over by the migration `0202_learn_practice_carryover.sql`, generated from the
+  same rules; it is an idempotent `INSERT OR IGNORE` that deletes or rewrites nothing, authorized by exact hash in
+  `apps/api/release/database-authorizations.json`. Those rules are Learning's only read of Lexicon tables, keyed by
+  the learner's own owner id; the Learn queue read never touches them. Whether a lesson's words are in the Lexicon
+  comes from the injected importer's `courseEntriesStored`, so a word deleted there is offered again and pressing
+  add restores it.
 - `GET /api/v1/learning/courses/:courseId/versions/:version/licenses` lists each distinct item and recording licence
   once. It is dormant: the authored pack has no recordings and the app calls no attribution surface, because the
   course ships without audio.

@@ -1,4 +1,11 @@
 {
   "comment": "Migrations here that are not backward-compatible additions. A release applies an additive migration on merge with no human step; anything that could destroy or reinterpret data the deployed code already serves stops the release until this file names the exact file and its exact sha256. Editing an authorized migration withdraws its authorization.",
-  "migrations": []
+  "migrations": [
+    {
+      "file": "0202_learn_practice_carryover.sql",
+      "sha256": "a6975997d38fdaacf9c603362d70dd8bba4de916acab128afcf0e22c076777d5",
+      "authorizedBy": "captain",
+      "note": "One-off, idempotent backfill generated from packages/learning/src/carryover.ts: inserts the Learn practice cards each learner is missing for lessons they already finished, seeding each from that learner's own course-imported Lexicon card when one exists. INSERT OR IGNORE only; it deletes and rewrites no existing row."
+    }
+  ]
 }
