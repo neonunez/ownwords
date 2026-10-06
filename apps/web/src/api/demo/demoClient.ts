@@ -158,7 +158,7 @@ export function createDemoClient(
   const learnDue: DemoLearnCard[] = clone(demoLearnDue);
   const learnUpcoming = clone(demoLearnUpcoming);
   // Course words the learner has chosen to keep in their Lexicon.
-  let keptWords = new Set<string>();
+  const keptWords = new Set<string>();
   const reviewed = new Set<string>();
 
   const findEntry = (entryId: string): Entry => {

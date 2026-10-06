@@ -65,7 +65,7 @@ window. `npm run test:stack` runs the phone shape against `stack/serve.mjs`:
 signing in with seeded sessions, the first run (also at a 320px width, from
 the keyboard), invitations, the Google redirect (answered by a stand-in, never
 Google), passkeys on a virtual authenticator, Settings read back after a
-reload, the Lexicon, practice, progress, a lesson through to its Lexicon sync,
+reload, the Lexicon, practice, progress, a lesson through to Learn practice and the optional Lexicon save,
 account isolation, export, sign-out and a cut network. Both use
 the browser Playwright has already installed; if it is missing,
 `npx playwright install chromium` fetches it.
@@ -131,8 +131,8 @@ Connected to the API, end to end:
   with a confirmation), Practice and Flashcards on the real scheduler.
 - **Learn** — Course (resume card, units, can-do milestones), the lesson (its
   steps as the course content writes them, read aloud and chosen from, with
-  no playback control, carrying on from the step reached, finishing into the
-  Lexicon), Learn practice on what the course taught, Alphabet and Reference
+  no playback control, carrying on from the step reached, finishing with an optional "Add these
+  words to Lexicon"), Learn practice on what the course taught, Alphabet and Reference
   as the course publishes them.
 - **Everywhere** — the side panel (the mode, what is up next in either mode,
   the languages, and the way to Settings), light and dark, the installable manifest
