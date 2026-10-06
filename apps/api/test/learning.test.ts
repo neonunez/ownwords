@@ -336,6 +336,49 @@ describe("the Lexicon is the learner's own", () => {
     expect(await courseImportCount(other.id)).toBe(0);
   });
 
+  it("puts a lesson's words back after the learner deleted them from the Lexicon", async () => {
+    const learner = await signedInUser("deleted-learner");
+    const lesson = `${course}/versions/1/lessons/greet`;
+    expect(
+      (await finishLesson(learner, COURSE_ID, 1, "greet", GREET_STEPS)).status,
+    ).toBe(200);
+    await callJson(learner, "POST", `${lesson}/lexicon`, 200);
+    const kept = await callJson(learner, "GET", "/api/v1/lexicon/entries", 200);
+    expect(kept.data).toHaveLength(2);
+    for (const entry of kept.data as Array<{ id: string; version: number }>) {
+      expect(
+        (
+          await call(learner, "DELETE", `/api/v1/lexicon/entries/${entry.id}`, {
+            headers: { "If-Match": `"${entry.version}"` },
+          })
+        ).status,
+      ).toBe(204);
+    }
+    expect(await lexiconTexts(learner)).toEqual([]);
+
+    // The finished lesson no longer claims the words, and offers them again.
+    const reopened = await callJson(learner, "GET", lesson, 200);
+    expect(reopened.lesson.words).toEqual({ total: 2, inLexicon: 0 });
+
+    const restored = await callJson(learner, "POST", `${lesson}/lexicon`, 200);
+    expect(restored.lexicon).toEqual({
+      total: 2,
+      inLexicon: 2,
+      added: 2,
+      alreadyThere: 0,
+      pending: 0,
+    });
+    expect((await lexiconTexts(learner)).sort()).toEqual([
+      "здравствуй",
+      "спасибо",
+    ]);
+    expect(await courseImportCount(learner.id)).toBe(2);
+    expect((await callJson(learner, "GET", lesson, 200)).lesson.words).toEqual({
+      total: 2,
+      inLexicon: 2,
+    });
+  });
+
   it("never reports a failed save as done, and retries without losing or duplicating vocabulary", async () => {
     const learner = await signedInUser("retry-learner");
     await publishCourseVersions(2);
@@ -351,6 +394,7 @@ describe("the Lexicon is the learner's own", () => {
             }
             return real.importCourseEntry(input);
           },
+          courseEntriesStored: (input) => real.courseEntriesStored(input),
         };
       },
     });

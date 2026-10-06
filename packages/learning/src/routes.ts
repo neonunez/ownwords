@@ -9,7 +9,6 @@ import { all, first, parseJsonObject } from "./db";
 import { errorResponse, LearningError } from "./errors";
 import { lexiconCourseImport } from "./lexicon-export";
 import {
-  adoptScheduling,
   direction as parseDirection,
   languageTag as parseLanguageTag,
   lessonCardStatements,
@@ -414,54 +413,41 @@ async function introducedItems(
 
 /**
  * How much of a lesson's vocabulary is in the Lexicon, and how much is not:
- * the words it introduces, and how many of those are already kept there.
+ * the words it introduces, and how many of those the Lexicon still holds.
  */
 async function lessonWords(
-  db: D1Database,
+  importer: LexiconCourseImportService,
   userId: string,
   courseId: string,
   version: number,
-  lessonId: string,
+  introduced: readonly IntroducedItem[],
 ): Promise<{ total: number; inLexicon: number }> {
-  const row = await first<{ total: number; in_lexicon: number }>(
-    db
-      .prepare(
-        `SELECT
-           (SELECT COUNT(DISTINCT link.item_id)
-              FROM learning_step_items link
-              JOIN learning_steps step
-                ON step.course_id = link.course_id
-               AND step.course_version = link.course_version
-               AND step.step_id = link.step_id
-             WHERE link.course_id = ? AND link.course_version = ?
-               AND step.lesson_id = ? AND link.role = 'introduced') AS total,
-           (SELECT COUNT(*)
-              FROM learning_lexicon_sync sync
-             WHERE sync.user_id = ? AND sync.course_id = ? AND sync.course_version = ?
-               AND sync.status = 'synced'
-               AND sync.item_id IN (
-                 SELECT link.item_id
-                   FROM learning_step_items link
-                   JOIN learning_steps step
-                     ON step.course_id = link.course_id
-                    AND step.course_version = link.course_version
-                    AND step.step_id = link.step_id
-                  WHERE link.course_id = ? AND link.course_version = ?
-                    AND step.lesson_id = ? AND link.role = 'introduced')) AS in_lexicon`,
-      )
-      .bind(
-        courseId,
-        version,
-        lessonId,
-        userId,
-        courseId,
-        version,
-        courseId,
-        version,
-        lessonId,
-      ),
+  const stored = await storedItems(
+    importer,
+    userId,
+    courseId,
+    version,
+    introduced,
   );
-  return { total: row?.total ?? 0, inLexicon: row?.in_lexicon ?? 0 };
+  return { total: introduced.length, inLexicon: stored.size };
+}
+
+async function storedItems(
+  importer: LexiconCourseImportService,
+  userId: string,
+  courseId: string,
+  version: number,
+  introduced: readonly IntroducedItem[],
+): Promise<Set<string>> {
+  if (introduced.length === 0) return new Set();
+  return new Set(
+    await importer.courseEntriesStored({
+      ownerId: userId,
+      courseId,
+      courseVersion: String(version),
+      itemIds: introduced.map((item) => item.itemId),
+    }),
+  );
 }
 
 export function createLearningRoutes(
@@ -690,11 +676,11 @@ export function createLearningRoutes(
           // The words this lesson introduced, and how many the learner keeps
           // in their Lexicon, so the finished lesson can say both honestly.
           words: await lessonWords(
-            c.env.DB,
+            importerFor(c.env),
             userId,
             courseId,
             version,
-            lessonId,
+            await introducedItems(c.env.DB, courseId, version, lessonId),
           ),
         },
       });
@@ -1034,13 +1020,13 @@ export function createLearningRoutes(
         );
       }
       const timestamp = clock().toISOString();
+      const introduced = await introducedItems(
+        c.env.DB,
+        courseId,
+        version,
+        lessonId,
+      );
       if (progress.status !== "completed") {
-        const introduced = await introducedItems(
-          c.env.DB,
-          courseId,
-          version,
-          lessonId,
-        );
         const statements: D1PreparedStatement[] = [
           c.env.DB.prepare(
             `UPDATE learning_user_lesson_progress
@@ -1064,11 +1050,11 @@ export function createLearningRoutes(
           throw new Error("Completion transaction failed");
       }
       const words = await lessonWords(
-        c.env.DB,
+        importerFor(c.env),
         userId,
         courseId,
         version,
-        lessonId,
+        introduced,
       );
       return c.json({
         completion: {
@@ -1117,13 +1103,28 @@ export function createLearningRoutes(
         lessonId,
       );
       const timestamp = clock().toISOString();
+      const importer = importerFor(c.env);
+      const stored = await storedItems(
+        importer,
+        userId,
+        courseId,
+        version,
+        introduced,
+      );
+      // A word synced earlier and since deleted in the Lexicon is owed again.
       const statements = introduced.map((item) =>
         c.env.DB.prepare(
           `INSERT INTO learning_lexicon_sync
          (user_id, course_id, course_version, item_id, lesson_id, status,
           attempt_count, last_attempt_at, synced_at)
          VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL)
-         ON CONFLICT(user_id, course_id, course_version, item_id) DO NOTHING`,
+         ON CONFLICT(user_id, course_id, course_version, item_id) ${
+           stored.has(item.itemId)
+             ? "DO NOTHING"
+             : `DO UPDATE SET status = 'pending', synced_at = NULL,
+                  lesson_id = excluded.lesson_id
+                WHERE learning_lexicon_sync.status = 'synced'`
+         }`,
         ).bind(userId, courseId, version, item.itemId, lessonId),
       );
       if (statements.length > 0) {
@@ -1134,18 +1135,18 @@ export function createLearningRoutes(
       const flushed = await flushLexiconSync(
         c.env.DB,
         userId,
-        importerFor(c.env),
+        importer,
         timestamp,
         courseId,
         version,
         lessonId,
       );
       const words = await lessonWords(
-        c.env.DB,
+        importer,
         userId,
         courseId,
         version,
-        lessonId,
+        introduced,
       );
       return c.json(
         {
@@ -1179,7 +1180,6 @@ export function createLearningRoutes(
     if (format === "cloze") {
       return c.json({ data: [], nextDueAt: null });
     }
-    await adoptScheduling(c.env.DB, c.get("userId"), language, clock());
     const queue = await readDueQueue(c.env.DB, {
       userId: c.get("userId"),
       language,

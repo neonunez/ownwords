@@ -254,7 +254,7 @@ function FinishedLesson({
   const [words_, setWords] = useState(completion.words);
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
-  const kept = words_.total > 0 && words_.inLexicon >= words_.total;
+  const kept = words_.inLexicon >= words_.total;
 
   const keep = async () => {
     if (inFlight.current) return;
@@ -325,39 +325,45 @@ function FinishedLesson({
               ? "This lesson introduced no words to practise."
               : `Its ${words(words_.total)} are ready to practise in Learn.`}
           </p>
-          <p
-            style={{
-              margin: "6px 0 0",
-              font: "var(--type-body)",
-              color: "var(--fg-2)",
-            }}
-          >
-            {kept
-              ? "They are in your Lexicon."
-              : words_.inLexicon > 0
-                ? `${words(words_.inLexicon)} of them ${
-                    words_.inLexicon === 1 ? "is" : "are"
-                  } in your Lexicon.`
-                : "They are not in your Lexicon."}
-          </p>
+          {words_.total > 0 ? (
+            <p
+              style={{
+                margin: "6px 0 0",
+                font: "var(--type-body)",
+                color: "var(--fg-2)",
+              }}
+            >
+              {kept
+                ? "They are in your Lexicon."
+                : words_.inLexicon > 0
+                  ? `${words(words_.inLexicon)} of them ${
+                      words_.inLexicon === 1 ? "is" : "are"
+                    } in your Lexicon.`
+                  : "They are not in your Lexicon."}
+            </p>
+          ) : null}
         </Card>
 
         <Spacer />
-        <Button
-          size="lg"
-          full
-          variant="secondary"
-          disabled={saving || kept}
-          icon="plus"
-          onClick={() => void keep()}
-        >
-          {saving
-            ? "Adding to your Lexicon…"
-            : kept
-              ? "Already in your Lexicon"
-              : "Add these words to Lexicon"}
-        </Button>
-        <div style={{ height: 8 }} />
+        {words_.total > 0 ? (
+          <>
+            <Button
+              size="lg"
+              full
+              variant="secondary"
+              disabled={saving || kept}
+              icon="plus"
+              onClick={() => void keep()}
+            >
+              {saving
+                ? "Adding to your Lexicon…"
+                : kept
+                  ? "Already in your Lexicon"
+                  : "Add these words to Lexicon"}
+            </Button>
+            <div style={{ height: 8 }} />
+          </>
+        ) : null}
         <Button size="lg" full variant="outline" onClick={onBack}>
           Back to the course
         </Button>

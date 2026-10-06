@@ -198,6 +198,30 @@ describe("truthful action feedback", () => {
     ).toBeDisabled();
   });
 
+  it("offers no Lexicon save for a finished lesson that introduced no words", async () => {
+    const demo = createDemoClient();
+    const client = {
+      ...demo,
+      getLesson: async (id: string) => ({
+        ...(await demo.getLesson(id)),
+        status: "completed" as const,
+        words: { total: 0, inLexicon: 0 },
+      }),
+    };
+    renderScreen(<LessonScreen />, {
+      route: "/learn/course/u3",
+      path: "/learn/course/:lessonId",
+      client,
+    });
+    expect(
+      await screen.findByText("This lesson introduced no words to practise."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Lexicon/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/in your Lexicon/)).not.toBeInTheDocument();
+  });
+
   it("says what is still owed when only some words could be saved", async () => {
     const demo = createDemoClient();
     const client = {

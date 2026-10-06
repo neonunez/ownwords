@@ -6,7 +6,7 @@ course packs live in [`content/`](content/README.md); `test/fixtures/` holds a t
 ## Integration
 
 Apply `migrations/0200_learning.sql` after core `0001*` and Lexicon `0100*` migrations, then
-`migrations/0201_learn_practice.sql`. Mount the returned Hono app at
+`migrations/0201_learn_practice.sql` and `migrations/0202_learn_practice_carryover.sql`. Mount the returned Hono app at
 `/api/v1/learning` after verified Better Auth middleware has set `c.set("userId", subject)`:
 
 ```ts
@@ -22,10 +22,12 @@ app.route(
 
 `lexiconImporter` structurally matches `@ownwords/lexicon`'s `LexiconCourseImportService`, or is a factory returning
 one; the API passes a factory because Workers expose the D1 binding only per request. The tuple
-`(ownerId, courseId, courseVersion, itemId)` is its stable idempotency key. The importer is used by one route only —
-`POST …/lessons/:lessonId/lexicon`, the person's explicit "Add these words to Lexicon" — and never by completion. It
-records one `learning_lexicon_sync` row per item it is asked to import and then imports each item independently, so
-the same press twice stores nothing twice; a failure returns `202` with `lexicon.pending > 0` and asking again
+`(ownerId, courseId, courseVersion, itemId)` is its stable idempotency key. Only one route imports —
+`POST …/lessons/:lessonId/lexicon`, the person's explicit "Add these words to Lexicon" — and never completion. The
+lesson, completion and add routes ask `courseEntriesStored` which of the lesson's words have a live Lexicon entry and
+report that as `words.inLexicon`, so a word the person deleted is offered again, and pressing add restores it. The add
+route records one `learning_lexicon_sync` row per item it is asked to import, re-owes a synced item whose entry is
+gone, and then imports each item independently, so the same press twice stores nothing twice; a failure returns `202` with `lexicon.pending > 0` and asking again
 retries only what is still owed. Learning marks a row synced only after Lexicon confirms durability. The callback
 must remain idempotent because no transaction spans the two package-owned operations.
 
@@ -38,17 +40,19 @@ practice cards and reviews for the composed account export.
 
 Learn practises the words of finished lessons, in the course's language, in both directions, from
 `learning_practice_cards` (migration `0201_learn_practice.sql`). They are course items, not Lexicon entries: they
-never appear in a Lexicon list, search, count or Maintain queue. `GET /practice/due` writes the cards it is missing
-before reading, so a lesson finished before these tables existed still feeds practice and no data migration has to
-move a row; the insert is keyed by `(item, direction)` and cannot duplicate a card.
+never appear in a Lexicon list, search, count or Maintain queue. Completing a lesson writes its cards, keyed by
+`(item, direction)`, so they cannot be duplicated; `GET /practice/due` only reads.
 
 The FSRS parameters are the Lexicon scheduler's, deliberately kept as a second copy (`src/scheduler.ts`) rather
 than a package import, because the two packages do not depend on each other and the two practice surfaces schedule
-independently. `adoptScheduling` is the single exception to Learning reading Lexicon tables: it carries the
-scheduling state these words already had as course imports, read-only, so somebody who practised them for months is
-not asked to start again.
+independently.
 
-Learning never reads personal Lexicon entries, and it never writes to the Lexicon.
+Lessons finished before Learn owned its own list were carried over once by `0202_learn_practice_carryover.sql`: an
+idempotent `INSERT OR IGNORE` that creates each learner's missing cards and seeds them from that learner's own
+course-imported Lexicon card where one exists, so somebody who practised a word for months is not asked to start
+again. Being a data change, it is authorized by exact hash in `apps/api/release/database-authorizations.json`.
+
+At runtime Learning reads no Lexicon table and never writes to the Lexicon; it only calls the injected importer.
 
 ## Version pinning
 

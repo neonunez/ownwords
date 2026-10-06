@@ -5,9 +5,9 @@ PRAGMA foreign_keys = ON;
 -- the learner asks for it there, so these tables are the only place Learn
 -- scheduling lives and nothing here joins back to a Lexicon entry.
 --
--- Materialising a card is derived from `learning_user_lesson_progress`, so a
--- lesson finished before this migration still feeds Learn practice: the route
--- writes the cards it is missing, keyed by the item, and never duplicates one.
+-- Completing a lesson writes its cards, keyed by the item, so a repeated
+-- completion never duplicates one. Lessons finished before this migration are
+-- carried over once by 0202_learn_practice_carryover.sql.
 CREATE TABLE learning_practice_cards (
   user_id TEXT NOT NULL,
   -- Opaque handle the client reviews against; `course.version.item.direction`.

@@ -62,6 +62,12 @@ interface LexiconCourseImportService {
     provenance: Record<string, unknown>;
     senses: SenseInput[];
   }): Promise<{ entryId: string; created: boolean }>;
+  courseEntriesStored(input: {
+    ownerId: string;
+    courseId: string;
+    courseVersion: string;
+    itemIds: readonly string[];
+  }): Promise<string[]>;
 }
 
 const service = createCourseLexiconImporter({ db, clock?, idGenerator? });
@@ -69,7 +75,9 @@ const service = createCourseLexiconImporter({ db, clock?, idGenerator? });
 
 The tuple `(ownerId, courseId, courseVersion, itemId)` is idempotent. One D1 `batch()` atomically creates the entry,
 senses, equivalents, practice cards, and import marker. Concurrent retries return the winning `entryId`; a failed
-batch rolls back all rows. Learning code owns its course state and calls this interface only—it does not write
+batch rolls back all rows. Importing an item whose entry the owner has since deleted restores that entry and reports
+`created: true`. `courseEntriesStored` answers which of the given items currently have a live (not deleted) entry, so
+Learning can say truthfully whether a finished lesson's words are in the Lexicon without reading Lexicon tables. Learning code owns its course state and calls this interface only—it does not write
 Lexicon tables. It calls it from one route, the person's explicit "Add these words to Lexicon" on a finished lesson:
 finishing a lesson imports nothing. Because D1 cannot atomically span separately owned databases, a caller that
 records learning progress separately must retry the stable tuple until this call succeeds before marking its own

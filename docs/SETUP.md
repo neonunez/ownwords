@@ -290,10 +290,13 @@ Core pins Hono `4.13.8`, Better Auth `1.7.5`, and `@better-auth/passkey` `1.7.5`
   `POST /api/v1/learning/practice/reviews`, scheduled from the vocabulary of finished lessons in
   `learning_practice_cards`. Maintain practises the whole collection through the Lexicon's own routes, and a card
   that was a course import before this split is practised in both, on the schedule it already had.
-- Learn cards are written on demand rather than by a data migration, so a lesson finished before the tables existed
-  still feeds practice. The one statement that carries over Lexicon scheduling state (`adoptScheduling`,
-  `packages/learning/src/practice.ts`) is the only place Learning reads a Lexicon table; it is read-only and can be
-  deleted once the last such learner has reviewed every card.
+- Learn cards are written when a lesson is completed. Lessons finished before the tables existed were carried over
+  once by the migration `0202_learn_practice_carryover.sql`, which creates each learner's missing cards and keeps the
+  scheduling state a word already had as that learner's course import in the Lexicon. It is an idempotent
+  `INSERT OR IGNORE` that deletes or rewrites nothing, authorized by exact hash in
+  `apps/api/release/database-authorizations.json`. At runtime Learning reads no Lexicon table: whether a lesson's
+  words are in the Lexicon comes from the injected importer's `courseEntriesStored`, so a word deleted there is
+  offered again and pressing add restores it.
 - `GET /api/v1/learning/courses/:courseId/versions/:version/licenses` lists each distinct item and recording licence
   once. It is dormant: the authored pack has no recordings and the app calls no attribution surface, because the
   course ships without audio.

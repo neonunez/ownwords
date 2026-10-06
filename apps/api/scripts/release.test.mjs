@@ -215,17 +215,36 @@ test("the tracked template is checked, not assumed", () => {
 
 // Migrations.
 
-test("the repository's own migrations are additive, in composed order", async () => {
+test("the repository's own migrations are additive or exactly authorized, in composed order", async () => {
   const composed = await composeMigrations(repositoryRoot);
   assert.deepEqual(composed, [
     "0001_core.sql",
     "0100_lexicon.sql",
     "0200_learning.sql",
     "0201_learn_practice.sql",
+    "0202_learn_practice_carryover.sql",
   ]);
+  const authorized = new Map(
+    readDatabaseAuthorizations(await read(DATABASE_AUTHORIZATIONS_PATH)).map(
+      (entry) => [entry.file, entry.sha256],
+    ),
+  );
+  assert.deepEqual(
+    [...authorized.keys()],
+    ["0202_learn_practice_carryover.sql"],
+  );
   for (const name of composed) {
     const sql = await read(`.wrangler/migrations/${name}`);
     const classified = classifyMigration({ name, sql });
+    if (authorized.has(name)) {
+      assert.equal(
+        classified.sha256,
+        authorized.get(name),
+        `${name} is authorized only as the exact file that was reviewed`,
+      );
+      assert.notDeepEqual(classified.reasons, []);
+      continue;
+    }
     assert.deepEqual(
       classified.reasons,
       [],
@@ -408,8 +427,10 @@ test("a destructive migration stops the release unless the record names its exac
 
 test("the database record accepts only a complete, exact authorization", async () => {
   assert.deepEqual(
-    readDatabaseAuthorizations(await read(DATABASE_AUTHORIZATIONS_PATH)),
-    [],
+    readDatabaseAuthorizations(await read(DATABASE_AUTHORIZATIONS_PATH)).map(
+      (entry) => entry.file,
+    ),
+    ["0202_learn_practice_carryover.sql"],
   );
   for (const entry of [
     {

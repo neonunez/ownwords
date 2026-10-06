@@ -4,9 +4,8 @@
  *
  * The list is derived from `learning_user_lesson_progress` and nothing else, so
  * a word a lesson introduced is practised in Learn and is never a Lexicon entry.
- * The one exception is `adoptedScheduling` below, a read-time carry-over of the
- * scheduling state these same words already had in the Lexicon for people who
- * practised them before Learn owned its own list.
+ * Nothing here reads a Lexicon table: lessons finished before Learn owned its
+ * own list were carried over once by migration `0202_learn_practice_carryover`.
  */
 
 import { all, first } from "./db";
@@ -143,88 +142,6 @@ export function lessonCardStatements(
     }
   }
   return statements;
-}
-
-/**
- * Writes the cards a person is missing for lessons they finished earlier.
- *
- * This runs on the way into a Learn queue, not as a data migration, for two
- * reasons: a lesson finished before this table existed still feeds practice
- * without anyone redoing it, and no release has to move a row. `INSERT OR
- * IGNORE` on the item key makes it idempotent, so two concurrent reads cannot
- * duplicate a card.
- *
- * `adopted.due_at` and its neighbours carry the scheduling state these words
- * already had as course-imported Lexicon entries, so somebody who has practised
- * them for months continues at their own interval instead of starting over.
- * That is the only thing Learning ever reads from the Lexicon's tables, it is
- * read-only, and it disappears on its own as the last such card is reviewed.
- */
-export async function adoptScheduling(
-  db: D1Database,
-  userId: string,
-  courseLanguage: string,
-  now: Date,
-): Promise<void> {
-  const timestamp = now.toISOString();
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO learning_practice_cards
-         (user_id, id, course_id, course_version, item_id, language_tag, direction,
-          due_at, stability, difficulty, elapsed_days, scheduled_days, learning_steps,
-          reps, lapses, state, last_review_at, revision, created_at, updated_at)
-       SELECT progress.user_id,
-              progress.course_id || '.' || progress.course_version || '.' || item.item_id
-                || '.' || ways.direction,
-              progress.course_id, progress.course_version, item.item_id, item.language_tag,
-              ways.direction,
-              COALESCE(adopted.due_at, ?), COALESCE(adopted.stability, 0),
-              COALESCE(adopted.difficulty, 0), COALESCE(adopted.elapsed_days, 0),
-              COALESCE(adopted.scheduled_days, 0), COALESCE(adopted.learning_steps, 0),
-              COALESCE(adopted.reps, 0), COALESCE(adopted.lapses, 0),
-              COALESCE(adopted.state, 0), adopted.last_review_at,
-              COALESCE(adopted.revision, 0), ?, ?
-         FROM learning_user_lesson_progress progress
-         JOIN learning_courses course
-           ON course.course_id = progress.course_id AND course.language_tag = ?
-         JOIN learning_content_items item
-           ON item.course_id = progress.course_id
-          AND item.course_version = progress.course_version
-         JOIN learning_step_items link
-           ON link.course_id = item.course_id
-          AND link.course_version = item.course_version
-          AND link.item_id = item.item_id AND link.role = 'introduced'
-         JOIN learning_steps step
-           ON step.course_id = link.course_id
-          AND step.course_version = link.course_version
-          AND step.step_id = link.step_id AND step.lesson_id = progress.lesson_id
-         CROSS JOIN (SELECT 'recognize' AS direction UNION ALL SELECT 'produce') AS ways
-         LEFT JOIN (
-              SELECT imported.owner_id, imported.course_id,
-                     CAST(imported.course_version AS INTEGER) AS course_version,
-                     imported.item_id, equivalent.language_tag, card.direction,
-                     card.due_at, card.stability, card.difficulty, card.elapsed_days,
-                     card.scheduled_days, card.learning_steps, card.reps, card.lapses,
-                     card.state, card.last_review_at, card.revision
-                FROM lexicon_course_imports imported
-                JOIN lexicon_senses sense
-                  ON sense.owner_id = imported.owner_id AND sense.entry_id = imported.entry_id
-                JOIN lexicon_equivalents equivalent
-                  ON equivalent.owner_id = sense.owner_id AND equivalent.sense_id = sense.id
-                JOIN lexicon_practice_cards card
-                  ON card.owner_id = equivalent.owner_id
-                 AND card.equivalent_id = equivalent.id
-             ) adopted
-           ON adopted.owner_id = progress.user_id
-          AND adopted.course_id = progress.course_id
-          AND adopted.course_version = progress.course_version
-          AND adopted.item_id = item.item_id
-          AND adopted.language_tag = item.language_tag
-          AND adopted.direction = ways.direction
-        WHERE progress.user_id = ? AND progress.status = 'completed'`,
-    )
-    .bind(timestamp, timestamp, timestamp, courseLanguage, userId)
-    .run();
 }
 
 /* ---- the due queue ------------------------------------------------------- */

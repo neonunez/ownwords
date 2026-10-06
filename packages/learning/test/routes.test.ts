@@ -15,6 +15,8 @@ const users = new Map([
 
 let test: TestD1;
 let importer: LexiconCourseImportService;
+/** The items the fake Lexicon currently holds as live entries. */
+let stored: Set<string>;
 let app: Hono<LearningEnv>;
 
 function request(
@@ -159,11 +161,15 @@ beforeEach(async () => {
     1,
     new Date("2026-01-02T00:00:00Z"),
   );
+  stored = new Set();
   importer = {
-    importCourseEntry: vi.fn(async () => ({
-      entryId: "fixture-entry",
-      created: true,
-    })),
+    importCourseEntry: vi.fn(async (input: { itemId: string }) => {
+      stored.add(input.itemId);
+      return { entryId: "fixture-entry", created: true };
+    }),
+    courseEntriesStored: vi.fn(async (input: { itemIds: readonly string[] }) =>
+      input.itemIds.filter((itemId) => stored.has(itemId)),
+    ),
   };
 });
 
@@ -424,81 +430,22 @@ describe("authenticated learning routes", () => {
     expect(stranger.status).toBe(404);
   });
 
-  it("carries the scheduling state a course word already had in the Lexicon", async () => {
-    // A learner who finished this lesson before Learn owned its own list: the
-    // words were course imports in their Lexicon, with reviews behind them.
-    test.sqlite.exec(
-      `INSERT INTO lexicon_entries
-         (id, owner_id, kind, source, provenance_json, human_edited, version, created_at, updated_at)
-       VALUES ('legacy-entry', 'alice', 'word', 'course', '{}', 0, 1, 't', 't')`,
-    );
-    test.sqlite.exec(
-      `INSERT INTO lexicon_senses
-         (id, owner_id, entry_id, gloss, position, human_edited, version, created_at, updated_at)
-       VALUES ('legacy-sense', 'alice', 'legacy-entry', 'synthetic test greeting', 0, 0, 1, 't', 't')`,
-    );
-    test.sqlite.exec(
-      `INSERT INTO lexicon_equivalents
-         (id, owner_id, sense_id, language_tag, text, search_text, fit, status,
-          human_edited, version, created_at, updated_at)
-       VALUES ('legacy-equivalent', 'alice', 'legacy-sense', 'ru', 'привет', 'привет',
-               'exact', 'confirmed', 0, 1, 't', 't')`,
-    );
-    test.sqlite.exec(
-      `INSERT INTO lexicon_course_imports
-         (owner_id, course_id, course_version, item_id, entry_id, created_at)
-       VALUES ('alice', 'russian-zero', '1', 'privet', 'legacy-entry', 't')`,
-    );
-    test.sqlite.exec(
-      `INSERT INTO lexicon_practice_cards
-         (id, owner_id, equivalent_id, language_tag, direction, due_at, stability, difficulty,
-          elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review_at,
-          revision, created_at, updated_at)
-       VALUES ('legacy-card', 'alice', 'legacy-equivalent', 'ru', 'recognize',
-               '2026-06-01T00:00:00.000Z', 12.5, 4.25, 3, 3, 0, 3, 0, 2,
-               '2026-01-01T00:00:00.000Z', 3, 't', 't')`,
-    );
-    // The lesson progress row a completion would have written.
+  it("never creates a Learn card on a queue read", async () => {
     await completeHello();
-    // The completion itself writes a fresh card; the words already practised in
-    // the Lexicon keep their own schedule from here on.
     test.sqlite.exec(
       "DELETE FROM learning_practice_cards WHERE user_id = 'alice'",
     );
-
     const queue = await request(
-      "/api/v1/learning/practice/due?language=ru&direction=recognize&format=flashcard&sessionId=legacy",
+      "/api/v1/learning/practice/due?language=ru&direction=recognize&format=flashcard&sessionId=read-only",
       {},
       "alice-token",
     );
-    const body = (await queue.json()) as {
-      data: unknown[];
-      nextDueAt: string | null;
-    };
-    expect(body.data).toEqual([]);
-    expect(body.nextDueAt).toBe("2026-06-01T00:00:00.000Z");
+    expect(await queue.json()).toEqual({ data: [], nextDueAt: null });
     expect(
       test.sqlite
-        .prepare(
-          `SELECT stability, difficulty, reps, state, revision FROM learning_practice_cards
-           WHERE user_id = 'alice' AND direction = 'recognize'`,
-        )
+        .prepare("SELECT COUNT(*) AS count FROM learning_practice_cards")
         .get(),
-    ).toEqual({
-      stability: 12.5,
-      difficulty: 4.25,
-      reps: 3,
-      state: 2,
-      revision: 3,
-    });
-    // The other direction was never practised, so it is due at once.
-    expect(
-      test.sqlite
-        .prepare(
-          "SELECT COUNT(*) AS count FROM learning_practice_cards WHERE user_id = 'alice' AND due_at <= '2026-01-03T00:00:00.000Z'",
-        )
-        .get(),
-    ).toEqual({ count: 1 });
+    ).toEqual({ count: 0 });
   });
 
   it("adds a lesson's words to the Lexicon only when asked, and never twice", async () => {
@@ -533,10 +480,42 @@ describe("authenticated learning routes", () => {
     expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
   });
 
+  it("offers a deleted word again and adds it back when asked", async () => {
+    expect((await completeHello()).status).toBe(200);
+    const lexicon =
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon";
+    expect(
+      (await request(lexicon, { method: "POST" }, "alice-token")).status,
+    ).toBe(200);
+    // The learner deletes the word in the Lexicon.
+    stored.delete("privet");
+    const reopened = await request(
+      "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello",
+      {},
+      "alice-token",
+    );
+    expect(await reopened.json()).toMatchObject({
+      lesson: { words: { total: 1, inLexicon: 0 } },
+    });
+    const again = await request(lexicon, { method: "POST" }, "alice-token");
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({
+      lexicon: {
+        total: 1,
+        inLexicon: 1,
+        added: 1,
+        alreadyThere: 0,
+        pending: 0,
+      },
+    });
+    expect(importer.importCourseEntry).toHaveBeenCalledTimes(2);
+  });
+
   it("reports an unfinished import as pending and retries it without duplicating", async () => {
     let fail = true;
-    importer.importCourseEntry = vi.fn(async () => {
+    importer.importCourseEntry = vi.fn(async (input) => {
       if (fail) throw new Error("synthetic Lexicon outage");
+      stored.add(input.itemId);
       return { entryId: "fixture-entry", created: true };
     });
     expect((await completeHello()).status).toBe(200);
@@ -588,6 +567,7 @@ describe("authenticated learning routes", () => {
     importer.importCourseEntry = vi.fn(async (input) => {
       if (input.itemId === "privet")
         throw new Error("synthetic Lexicon outage");
+      stored.add(input.itemId);
       return { entryId: "fixture-entry", created: true };
     });
     expect((await completeHello()).status).toBe(200);
@@ -759,15 +739,16 @@ describe("authenticated learning routes", () => {
       },
     });
     expect((await completeHello()).status).toBe(200);
-    // Completion never asks the Lexicon for anything.
-    expect(bindings).toEqual([]);
+    // Completion only asks the Lexicon what it holds; it imports nothing.
+    expect(bindings).toEqual([test.db]);
+    expect(importer.importCourseEntry).not.toHaveBeenCalled();
     const response = await request(
       "/api/v1/learning/courses/russian-zero/versions/1/lessons/hello/lexicon",
       { method: "POST" },
       "alice-token",
     );
     expect(response.status).toBe(200);
-    expect(bindings).toEqual([test.db]);
+    expect(bindings).toEqual([test.db, test.db]);
     expect(importer.importCourseEntry).toHaveBeenCalledTimes(1);
   });
 });

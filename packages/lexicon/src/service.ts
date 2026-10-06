@@ -4,6 +4,7 @@ import { cryptoIdGenerator, iso, systemClock } from "./runtime.js";
 import { newStoredCard } from "./scheduler.js";
 import type {
   Clock,
+  CourseEntriesStoredQuery,
   CourseLexiconImport,
   CourseLexiconImportResult,
   CreateCourseImporterOptions,
@@ -86,8 +87,22 @@ export function createCourseLexiconImporter(
     ): Promise<CourseLexiconImportResult> {
       const normalized = validateCourseImport(input);
       const existing = await findCourseImport(options.db, normalized);
-      if (existing !== null)
-        return { entryId: existing.entry_id, created: false };
+      if (existing !== null) {
+        // Asking again for a word the owner deleted puts it back.
+        const now = iso(clock.now());
+        const restored = await options.db
+          .prepare(
+            `UPDATE lexicon_entries
+                SET deleted_at = NULL, updated_at = ?, version = version + 1
+              WHERE id = ? AND owner_id = ? AND deleted_at IS NOT NULL`,
+          )
+          .bind(now, existing.entry_id, normalized.ownerId)
+          .run();
+        return {
+          entryId: existing.entry_id,
+          created: (restored.meta.changes ?? 0) > 0,
+        };
+      }
 
       const now = clock.now();
       const entryId = ids.next();
@@ -145,6 +160,30 @@ export function createCourseLexiconImporter(
           return { entryId: winner.entry_id, created: false };
         throw error;
       }
+    },
+    async courseEntriesStored(
+      input: CourseEntriesStoredQuery,
+    ): Promise<string[]> {
+      if (input.itemIds.length === 0) return [];
+      const rows = await options.db
+        .prepare(
+          `SELECT imported.item_id
+             FROM lexicon_course_imports imported
+             JOIN lexicon_entries entry
+               ON entry.id = imported.entry_id AND entry.owner_id = imported.owner_id
+            WHERE imported.owner_id = ? AND imported.course_id = ?
+              AND imported.course_version = ? AND entry.deleted_at IS NULL
+              AND imported.item_id IN (SELECT value FROM json_each(?))
+            ORDER BY imported.item_id`,
+        )
+        .bind(
+          input.ownerId,
+          input.courseId,
+          input.courseVersion,
+          JSON.stringify(input.itemIds),
+        )
+        .all<{ item_id: string }>();
+      return rows.results.map((row) => row.item_id);
     },
   };
 }

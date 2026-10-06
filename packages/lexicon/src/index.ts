@@ -14,6 +14,7 @@ export {
 export { newStoredCard, scheduleReview } from "./scheduler.js";
 export type {
   Clock,
+  CourseEntriesStoredQuery,
   CourseLexiconImport,
   CourseLexiconImportResult,
   CreateCourseImporterOptions,

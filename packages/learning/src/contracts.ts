@@ -52,6 +52,13 @@ export interface LexiconCourseImportService {
     provenance: Record<string, unknown>;
     senses: LexiconSenseInput[];
   }): Promise<{ entryId: string; created: boolean }>;
+  /** Which of these course items have a live, not deleted, Lexicon entry. */
+  courseEntriesStored(input: {
+    ownerId: string;
+    courseId: string;
+    courseVersion: string;
+    itemIds: readonly string[];
+  }): Promise<string[]>;
 }
 
 /**
