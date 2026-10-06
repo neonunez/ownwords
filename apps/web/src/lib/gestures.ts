@@ -46,7 +46,7 @@ const SWALLOW_MS = 300;
 function useClickSwallow() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const armed = useRef<((event: MouseEvent) => void) | null>(null);
-  const disarm = useCallback(() => {
+  const disarm = useCallback(function disarm() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     if (armed.current) {
