@@ -68,6 +68,13 @@ beforeAll(async () => {
     "greet-use",
   ]);
   expect(done.status).toBe(200);
+  // The lesson's words are the learner's to keep or leave.
+  const added = await call(
+    alice,
+    "POST",
+    `/api/v1/learning/courses/${COURSE_ID}/versions/1/lessons/greet/lexicon`,
+  );
+  expect(added.status).toBe(200);
 });
 
 describe("account export", () => {
@@ -121,6 +128,14 @@ describe("account export", () => {
         (row: { status: string }) => row.status === "synced",
       ),
     ).toBe(true);
+    // Learn practice is the learner's own state, exported with the rest.
+    expect(body.learning.practiceCards).toHaveLength(4);
+    expect(body.learning.practiceCards[0]).toMatchObject({
+      courseId: COURSE_ID,
+      courseVersion: 1,
+      itemId: "spasibo",
+    });
+    expect(body.learning.reviewEvents).toEqual([]);
 
     const serialized = JSON.stringify(body);
     for (const secret of [
@@ -152,6 +167,8 @@ describe("account export", () => {
       enrollments: [],
       lessonProgress: [],
       lexiconSync: [],
+      practiceCards: [],
+      reviewEvents: [],
     });
   });
 });

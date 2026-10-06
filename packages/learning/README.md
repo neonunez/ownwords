@@ -5,7 +5,8 @@ course packs live in [`content/`](content/README.md); `test/fixtures/` holds a t
 
 ## Integration
 
-Apply `migrations/0200_learning.sql` after core `0001*` and Lexicon `0100*` migrations. Mount the returned Hono app at
+Apply `migrations/0200_learning.sql` after core `0001*` and Lexicon `0100*` migrations, then
+`migrations/0201_learn_practice.sql`. Mount the returned Hono app at
 `/api/v1/learning` after verified Better Auth middleware has set `c.set("userId", subject)`:
 
 ```ts
@@ -21,19 +22,33 @@ app.route(
 
 `lexiconImporter` structurally matches `@ownwords/lexicon`'s `LexiconCourseImportService`, or is a factory returning
 one; the API passes a factory because Workers expose the D1 binding only per request. The tuple
-`(ownerId, courseId, courseVersion, itemId)` is its stable idempotency key. Completion and Learning's pending import
-row commit atomically in one D1 batch; each item is then imported independently. A failure returns completion with
-`lexiconSync.status: "pending"` (HTTP 202), and repeating that lesson's completion retries only its own pending
-rows, so one stuck item never marks a later lesson unsynced. Learning marks a row
-synced only after Lexicon confirms durability. The callback must remain idempotent because no transaction spans the
-two package-owned operations.
+`(ownerId, courseId, courseVersion, itemId)` is its stable idempotency key. The importer is used by one route only —
+`POST …/lessons/:lessonId/lexicon`, the person's explicit "Add these words to Lexicon" — and never by completion. It
+records one `learning_lexicon_sync` row per item it is asked to import and then imports each item independently, so
+the same press twice stores nothing twice; a failure returns `202` with `lexicon.pending > 0` and asking again
+retries only what is still owed. Learning marks a row synced only after Lexicon confirms durability. The callback
+must remain idempotent because no transaction spans the two package-owned operations.
 
-Content validation refuses items a lesson uses that no lesson introduces, so every published item reaches the
-Lexicon. An item the Lexicon importer refuses stays `pending` and is retried when the lesson is completed again. `exportLearnerData(db, userId)` returns one learner's enrollment, lesson progress, and export state for the
-composed account export.
+Content validation refuses items a lesson uses that no lesson introduces, so every published item reaches Learn
+practice. An item the Lexicon importer refuses stays `pending` and is retried when the person asks again.
+`exportLearnerData(db, userId)` returns one learner's enrollment, lesson progress, Lexicon-add state and Learn
+practice cards and reviews for the composed account export.
 
-Learning serves only core curriculum content. It has no review scheduling tables, no practice route, and never reads
-personal Lexicon entries; personal practice stays in Maintain.
+## Learn practice
+
+Learn practises the words of finished lessons, in the course's language, in both directions, from
+`learning_practice_cards` (migration `0201_learn_practice.sql`). They are course items, not Lexicon entries: they
+never appear in a Lexicon list, search, count or Maintain queue. `GET /practice/due` writes the cards it is missing
+before reading, so a lesson finished before these tables existed still feeds practice and no data migration has to
+move a row; the insert is keyed by `(item, direction)` and cannot duplicate a card.
+
+The FSRS parameters are the Lexicon scheduler's, deliberately kept as a second copy (`src/scheduler.ts`) rather
+than a package import, because the two packages do not depend on each other and the two practice surfaces schedule
+independently. `adoptScheduling` is the single exception to Learning reading Lexicon tables: it carries the
+scheduling state these words already had as course imports, read-only, so somebody who practised them for months is
+not asked to start again.
+
+Learning never reads personal Lexicon entries, and it never writes to the Lexicon.
 
 ## Version pinning
 
@@ -55,7 +70,8 @@ command and its guards. Imports validate the whole pack before one D1 batch, req
 sequential versions, reject unsafe/non-HTTPS URLs and broken links, and carry per-item license/provenance plus
 optional recorded-audio metadata. Published rows are immutable through database triggers as well as application
 checks. Stable item identity is `(courseId, version, itemId)`, and each item may be introduced by only one lesson in a
-version, because that lesson owns the item's Lexicon export and its retries. Course title and description are stored
+version, because that lesson owns the item's place in the Learn word list and the
+Lexicon words it can be asked to keep. Course title and description are stored
 per version, so a new version may correct them; the course language tag is stable and a pack that changes it is
 rejected with `COURSE_IDENTITY_MISMATCH`.
 
@@ -81,7 +97,12 @@ All routes require the verified `userId` Hono variable and emit errors as `{ "er
 - `GET /courses/:courseId/resume`
 - `GET /references?courseId=&version=&category=&limit=&cursor=`
 - `PUT /courses/:courseId/versions/:version/lessons/:lessonId/progress`
-- `POST /courses/:courseId/versions/:version/lessons/:lessonId/complete`
+- `POST /courses/:courseId/versions/:version/lessons/:lessonId/complete` (adds the lesson's words to Learn practice;
+  writes nothing to the Lexicon)
+- `POST /courses/:courseId/versions/:version/lessons/:lessonId/lexicon` (the explicit "Add these words to Lexicon";
+  `202` with `lexicon.pending` when some words are still owed)
+- `GET /practice/due?language=&direction=&format=&sessionId=&limit=` and `POST /practice/reviews` (flashcards only; a
+  cloze request is answered empty because the course writes no gaps)
 
 Progress cannot skip or regress steps. Lesson and reference prerequisites are enforced server-side. Every progress,
 completion, reference-unlock, and pending-sync query is scoped to `userId`.

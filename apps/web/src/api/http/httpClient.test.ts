@@ -573,7 +573,6 @@ describe("practice and progress", () => {
       .map((request) => {
         const query = new URL(request.url).searchParams;
         expect(query.get("sessionId")).toBe("sitting-1");
-        expect(query.get("origin")).toBeNull();
         return `${query.get("language")}:${query.get("direction")}`;
       })
       .sort();
@@ -612,10 +611,10 @@ describe("practice and progress", () => {
     expect(queue.aheadAvailable).toBe(false);
   });
 
-  it("keeps Learn practice to what the course taught, and completes phrases by producing", async () => {
+  it("asks Learn for the course's own practice, and Keep for no phrase at all", async () => {
     const api = fakeApi({
       ...signedIn,
-      "GET /api/v1/lexicon/practice/due": { data: [], nextDueAt: null },
+      "GET /api/v1/learning/practice/due": { data: [], nextDueAt: null },
     });
     const client = createHttpClient({ fetch: api.fetch });
     await client.getSession();
@@ -626,15 +625,20 @@ describe("practice and progress", () => {
     });
     const asked = api.requests
       .filter((request) => request.url.includes("/practice/due"))
-      .map((request) => Object.fromEntries(new URL(request.url).searchParams));
+      .map((request) => ({
+        route: new URL(request.url).pathname,
+        query: Object.fromEntries(new URL(request.url).searchParams),
+      }));
     expect(asked).toEqual([
       {
-        language: "ru",
-        direction: "produce",
-        format: "cloze",
-        sessionId: "s",
-        limit: "20",
-        origin: "course",
+        route: "/api/v1/learning/practice/due",
+        query: {
+          language: "ru",
+          direction: "produce",
+          format: "cloze",
+          sessionId: "s",
+          limit: "20",
+        },
       },
     ]);
   });
@@ -679,22 +683,45 @@ describe("practice and progress", () => {
     ]);
   });
 
-  it("submits a rating as the scheduler's number, with the sitting it belongs to", async () => {
+  it("submits a rating to the scheduler of the mode the card came from", async () => {
     const api = fakeApi({
       "POST /api/v1/lexicon/practice/reviews": { data: {} },
+      "POST /api/v1/learning/practice/reviews": { data: {} },
     });
-    await createHttpClient({ fetch: api.fetch }).submitReview({
+    const client = createHttpClient({ fetch: api.fetch });
+    await client.submitReview({
       cardId: "c1",
       rating: "again",
+      mode: "maintain",
       format: "flashcard",
       sessionId: "sitting",
       submissionId: "r1",
     });
+    expect(new URL(api.requests[0]!.url).pathname).toBe(
+      "/api/v1/lexicon/practice/reviews",
+    );
     expect(await api.requests[0]!.json()).toEqual({
       submissionId: "r1",
       cardId: "c1",
       sessionId: "sitting",
       rating: 1,
+    });
+    await client.submitReview({
+      cardId: "russian-zero.2.poka.produce",
+      rating: "good",
+      mode: "learn",
+      format: "flashcard",
+      sessionId: "sitting",
+      submissionId: "r2",
+    });
+    expect(new URL(api.requests[1]!.url).pathname).toBe(
+      "/api/v1/learning/practice/reviews",
+    );
+    expect(await api.requests[1]!.json()).toEqual({
+      submissionId: "r2",
+      cardId: "russian-zero.2.poka.produce",
+      sessionId: "sitting",
+      rating: 3,
     });
   });
 
@@ -927,6 +954,7 @@ describe("the course", () => {
           audio: { kind: "recorded", url: "https://audio.example/poka.ogg" },
         },
       ],
+      words: { total: 1, inLexicon: 0 },
     },
   };
 
@@ -1032,28 +1060,41 @@ describe("the course", () => {
     });
   });
 
-  it("records a step, and says when finishing left words to sync", async () => {
+  it("records a step, reports the lesson's words, and keeps them only when asked", async () => {
     const api = fakeApi({
       ...routes,
       "PUT /api/v1/learning/courses/russian-zero/versions/2/lessons/l2/progress":
         { progress: {} },
       "POST /api/v1/learning/courses/russian-zero/versions/2/lessons/l2/complete":
-        () =>
-          Response.json(
-            {
-              completion: {
-                lexiconSync: { status: "pending", pendingItems: 1 },
-              },
-            },
-            { status: 202 },
-          ),
+        {
+          completion: { words: { total: 1, inLexicon: 0 } },
+        },
+      "POST /api/v1/learning/courses/russian-zero/versions/2/lessons/l2/lexicon":
+        {
+          lexicon: {
+            total: 1,
+            inLexicon: 1,
+            added: 1,
+            alreadyThere: 0,
+            pending: 0,
+          },
+        },
     });
     const client = createHttpClient({ fetch: api.fetch });
     await client.getSession();
     await client.completeLessonStep("l2", "l2-b");
     const put = api.requests.find((request) => request.method === "PUT")!;
     expect(await put.json()).toEqual({ stepId: "l2-b" });
-    expect(await client.completeLesson("l2")).toEqual({ lexicon: "pending" });
+    expect(await client.completeLesson("l2")).toEqual({
+      words: { total: 1, inLexicon: 0 },
+    });
+    expect(await client.addLessonWordsToLexicon("l2")).toEqual({
+      total: 1,
+      inLexicon: 1,
+      added: 1,
+      alreadyThere: 0,
+      pending: 0,
+    });
   });
 
   it("reuses account/profile/version-scoped course reads but keeps ordered step writes and refreshes progress after them", async () => {
@@ -1668,6 +1709,7 @@ describe("recent account data and acknowledgement", () => {
       sessionId: "sitting-two",
       submissionId: "r",
       rating: "good",
+      mode: "maintain",
       format: "flashcard",
     });
     api.requests.length = 0;

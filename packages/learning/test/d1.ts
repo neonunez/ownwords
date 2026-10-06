@@ -84,10 +84,21 @@ export class TestD1 {
 
   constructor() {
     this.sqlite.exec("PRAGMA foreign_keys = ON");
-    const migrationPath = fileURLToPath(
-      new URL("../migrations/0200_learning.sql", import.meta.url),
-    );
-    this.sqlite.exec(readFileSync(migrationPath, "utf8"));
+    // The composed schema, in the order a deployment applies it: the Lexicon
+    // tables exist before Learning's, and Learning's practice tables are the
+    // last step.
+    for (const migration of [
+      "../../lexicon/migrations/0100_lexicon.sql",
+      "../migrations/0200_learning.sql",
+      "../migrations/0201_learn_practice.sql",
+    ]) {
+      this.sqlite.exec(
+        readFileSync(
+          fileURLToPath(new URL(migration, import.meta.url)),
+          "utf8",
+        ),
+      );
+    }
     this.db = {
       prepare: (sql: string) =>
         new TestStatement(this.sqlite, sql) as unknown as D1PreparedStatement,

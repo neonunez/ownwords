@@ -88,6 +88,7 @@ export function PracticeScreen({
         .submitReview({
           cardId: card.cardId,
           rating,
+          mode,
           format,
           sessionId,
           submissionId: newId(),

@@ -1,0 +1,557 @@
+/**
+ * Learn's own practice: the words a finished lesson introduced, and the
+ * scheduling state that keeps them coming back.
+ *
+ * The list is derived from `learning_user_lesson_progress` and nothing else, so
+ * a word a lesson introduced is practised in Learn and is never a Lexicon entry.
+ * The one exception is `adoptedScheduling` below, a read-time carry-over of the
+ * scheduling state these same words already had in the Lexicon for people who
+ * practised them before Learn owned its own list.
+ */
+
+import { all, first } from "./db";
+import { LearningError } from "./errors";
+import {
+  newLearnCard,
+  scheduleLearnReview,
+  type LearnCardState,
+} from "./scheduler";
+
+export type LearnDirection = "recognize" | "produce";
+
+export const learnDirections: readonly LearnDirection[] = [
+  "recognize",
+  "produce",
+];
+
+/** A card missed in a sitting comes back inside it, as it does in Maintain. */
+export const WRONG_ANSWER_DELAY_MS = 5 * 60 * 1000;
+
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 20;
+
+export interface LearnCardIdentity {
+  courseId: string;
+  version: number;
+  itemId: string;
+  direction: LearnDirection;
+}
+
+/** The handle the client reviews against; stable for one card for good. */
+export function learnCardId(identity: LearnCardIdentity): string {
+  return `${identity.courseId}.${identity.version}.${identity.itemId}.${identity.direction}`;
+}
+
+export function languageTag(raw: string | null): string {
+  const value = raw?.trim() ?? "";
+  if (
+    value.length < 2 ||
+    value.length > 35 ||
+    !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/u.test(value)
+  ) {
+    throw new LearningError(400, "INVALID_LANGUAGE", "Language is invalid");
+  }
+  return value;
+}
+
+export function direction(raw: string | null): LearnDirection {
+  const value = raw ?? "";
+  if (!learnDirections.includes(value as LearnDirection)) {
+    throw new LearningError(400, "INVALID_DIRECTION", "Direction is invalid");
+  }
+  return value as LearnDirection;
+}
+
+export function sessionId(raw: string | null): string {
+  const value = raw?.trim() ?? "";
+  if (!/^[A-Za-z0-9_.:-]{1,200}$/u.test(value)) {
+    throw new LearningError(400, "INVALID_SESSION", "Session is invalid");
+  }
+  return value;
+}
+
+export function limit(raw: string | null): number {
+  if (raw === null) return DEFAULT_LIMIT;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_LIMIT) {
+    throw new LearningError(
+      400,
+      "INVALID_LIMIT",
+      `Limit must be between 1 and ${MAX_LIMIT}`,
+    );
+  }
+  return value;
+}
+
+/* ---- the word list ------------------------------------------------------- */
+
+/**
+ * Cards for the words one finished lesson introduced, ready to join the
+ * completion batch. Every card is keyed by its item, so repeating a completion
+ * writes nothing twice.
+ */
+export function lessonCardStatements(
+  db: D1Database,
+  userId: string,
+  courseId: string,
+  version: number,
+  items: readonly { itemId: string; languageTag: string }[],
+  now: Date,
+): D1PreparedStatement[] {
+  const timestamp = now.toISOString();
+  const initial = newLearnCard(now);
+  const statements: D1PreparedStatement[] = [];
+  for (const item of items) {
+    for (const way of learnDirections) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO learning_practice_cards
+              (user_id, id, course_id, course_version, item_id, language_tag, direction,
+               due_at, stability, difficulty, elapsed_days, scheduled_days, learning_steps,
+               reps, lapses, state, last_review_at, revision, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+             ON CONFLICT(user_id, course_id, course_version, item_id, direction) DO NOTHING`,
+          )
+          .bind(
+            userId,
+            learnCardId({
+              courseId,
+              version,
+              itemId: item.itemId,
+              direction: way,
+            }),
+            courseId,
+            version,
+            item.itemId,
+            item.languageTag,
+            way,
+            initial.dueAt,
+            initial.stability,
+            initial.difficulty,
+            initial.elapsedDays,
+            initial.scheduledDays,
+            initial.learningSteps,
+            initial.reps,
+            initial.lapses,
+            initial.state,
+            initial.lastReviewAt,
+            timestamp,
+            timestamp,
+          ),
+      );
+    }
+  }
+  return statements;
+}
+
+/**
+ * Writes the cards a person is missing for lessons they finished earlier.
+ *
+ * This runs on the way into a Learn queue, not as a data migration, for two
+ * reasons: a lesson finished before this table existed still feeds practice
+ * without anyone redoing it, and no release has to move a row. `INSERT OR
+ * IGNORE` on the item key makes it idempotent, so two concurrent reads cannot
+ * duplicate a card.
+ *
+ * `adopted.due_at` and its neighbours carry the scheduling state these words
+ * already had as course-imported Lexicon entries, so somebody who has practised
+ * them for months continues at their own interval instead of starting over.
+ * That is the only thing Learning ever reads from the Lexicon's tables, it is
+ * read-only, and it disappears on its own as the last such card is reviewed.
+ */
+export async function adoptScheduling(
+  db: D1Database,
+  userId: string,
+  courseLanguage: string,
+  now: Date,
+): Promise<void> {
+  const timestamp = now.toISOString();
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO learning_practice_cards
+         (user_id, id, course_id, course_version, item_id, language_tag, direction,
+          due_at, stability, difficulty, elapsed_days, scheduled_days, learning_steps,
+          reps, lapses, state, last_review_at, revision, created_at, updated_at)
+       SELECT progress.user_id,
+              progress.course_id || '.' || progress.course_version || '.' || item.item_id
+                || '.' || ways.direction,
+              progress.course_id, progress.course_version, item.item_id, item.language_tag,
+              ways.direction,
+              COALESCE(adopted.due_at, ?), COALESCE(adopted.stability, 0),
+              COALESCE(adopted.difficulty, 0), COALESCE(adopted.elapsed_days, 0),
+              COALESCE(adopted.scheduled_days, 0), COALESCE(adopted.learning_steps, 0),
+              COALESCE(adopted.reps, 0), COALESCE(adopted.lapses, 0),
+              COALESCE(adopted.state, 0), adopted.last_review_at,
+              COALESCE(adopted.revision, 0), ?, ?
+         FROM learning_user_lesson_progress progress
+         JOIN learning_courses course
+           ON course.course_id = progress.course_id AND course.language_tag = ?
+         JOIN learning_content_items item
+           ON item.course_id = progress.course_id
+          AND item.course_version = progress.course_version
+         JOIN learning_step_items link
+           ON link.course_id = item.course_id
+          AND link.course_version = item.course_version
+          AND link.item_id = item.item_id AND link.role = 'introduced'
+         JOIN learning_steps step
+           ON step.course_id = link.course_id
+          AND step.course_version = link.course_version
+          AND step.step_id = link.step_id AND step.lesson_id = progress.lesson_id
+         CROSS JOIN (SELECT 'recognize' AS direction UNION ALL SELECT 'produce') AS ways
+         LEFT JOIN (
+              SELECT imported.owner_id, imported.course_id,
+                     CAST(imported.course_version AS INTEGER) AS course_version,
+                     imported.item_id, equivalent.language_tag, card.direction,
+                     card.due_at, card.stability, card.difficulty, card.elapsed_days,
+                     card.scheduled_days, card.learning_steps, card.reps, card.lapses,
+                     card.state, card.last_review_at, card.revision
+                FROM lexicon_course_imports imported
+                JOIN lexicon_senses sense
+                  ON sense.owner_id = imported.owner_id AND sense.entry_id = imported.entry_id
+                JOIN lexicon_equivalents equivalent
+                  ON equivalent.owner_id = sense.owner_id AND equivalent.sense_id = sense.id
+                JOIN lexicon_practice_cards card
+                  ON card.owner_id = equivalent.owner_id
+                 AND card.equivalent_id = equivalent.id
+             ) adopted
+           ON adopted.owner_id = progress.user_id
+          AND adopted.course_id = progress.course_id
+          AND adopted.course_version = progress.course_version
+          AND adopted.item_id = item.item_id
+          AND adopted.language_tag = item.language_tag
+          AND adopted.direction = ways.direction
+        WHERE progress.user_id = ? AND progress.status = 'completed'`,
+    )
+    .bind(timestamp, timestamp, timestamp, courseLanguage, userId)
+    .run();
+}
+
+/* ---- the due queue ------------------------------------------------------- */
+
+interface DueRow {
+  id: string;
+  language_tag: string;
+  direction: LearnDirection;
+  due_at: string;
+  item_id: string;
+  display_text: string;
+  gloss: string;
+  revisit: number;
+}
+
+export interface DueQueue {
+  data: Record<string, unknown>[];
+  nextDueAt: string | null;
+}
+
+export async function readDueQueue(
+  db: D1Database,
+  input: {
+    userId: string;
+    language: string;
+    direction: LearnDirection;
+    sessionId: string;
+    limit: number;
+    now: Date;
+  },
+): Promise<DueQueue> {
+  const now = input.now.toISOString();
+  const rows = await all<DueRow>(
+    db
+      .prepare(
+        `SELECT card.id, card.language_tag, card.direction, card.due_at,
+                item.item_id, item.display_text, item.gloss,
+                CASE WHEN revisit.item_id IS NULL THEN 0 ELSE 1 END AS revisit
+           FROM learning_practice_cards card
+           JOIN learning_content_items item
+             ON item.course_id = card.course_id
+            AND item.course_version = card.course_version
+            AND item.item_id = card.item_id
+           LEFT JOIN learning_wrong_revisits revisit
+             ON revisit.user_id = card.user_id AND revisit.session_id = ?
+            AND revisit.completed_at IS NULL AND revisit.due_at <= ?
+            AND revisit.course_id = card.course_id
+            AND revisit.course_version = card.course_version
+            AND revisit.item_id = card.item_id
+            AND revisit.direction = card.direction
+          WHERE card.user_id = ? AND card.language_tag = ? AND card.direction = ?
+            AND (card.due_at <= ? OR revisit.item_id IS NOT NULL)
+          ORDER BY revisit DESC, card.due_at, card.id
+          LIMIT ?`,
+      )
+      .bind(
+        input.sessionId,
+        now,
+        input.userId,
+        input.language,
+        input.direction,
+        now,
+        input.limit,
+      ),
+  );
+  const next = await first<{ due_at: string }>(
+    db
+      .prepare(
+        `SELECT MIN(card.due_at) AS due_at
+           FROM learning_practice_cards card
+          WHERE card.user_id = ? AND card.language_tag = ? AND card.direction = ?
+            AND card.due_at > ?`,
+      )
+      .bind(input.userId, input.language, input.direction, now),
+  );
+  return {
+    data: rows.map((row) => ({
+      card: {
+        id: row.id,
+        languageTag: row.language_tag,
+        direction: row.direction,
+        dueAt: row.due_at,
+      },
+      // The practised word, and the meaning that asks for it. Learn cards are
+      // never cloze: the course writes no gaps to complete.
+      target: {
+        id: row.item_id,
+        text: row.display_text,
+        languageTag: row.language_tag,
+      },
+      prompt: { type: "gloss", text: row.gloss },
+      cloze: null,
+      revisit: row.revisit === 1,
+    })),
+    nextDueAt: rows.length === 0 ? (next?.due_at ?? null) : null,
+  };
+}
+
+/* ---- reviews ------------------------------------------------------------- */
+
+interface ReviewCardRow {
+  user_id: string;
+  course_id: string;
+  course_version: number;
+  item_id: string;
+  language_tag: string;
+  direction: LearnDirection;
+  due_at: string;
+  stability: number;
+  difficulty: number;
+  elapsed_days: number;
+  scheduled_days: number;
+  learning_steps: number;
+  reps: number;
+  lapses: number;
+  state: number;
+  last_review_at: string | null;
+  revision: number;
+}
+
+interface ReviewEventRow {
+  card_id: string;
+  session_id: string;
+  rating: number;
+  result_json: string;
+}
+
+export interface ReviewResult {
+  value: Record<string, unknown>;
+  replayed: boolean;
+}
+
+export type SubmitOutcome =
+  { ok: ReviewResult } | { conflict: true } | { notFound: true };
+
+/**
+ * Applies one rating, exactly once per submission id. The review event row and
+ * the card's new state commit in one batch, guarded by the card's revision, so a
+ * repeated submission replays the stored answer instead of scheduling twice.
+ */
+export async function submitReview(
+  db: D1Database,
+  input: {
+    userId: string;
+    submissionId: string;
+    cardId: string;
+    sessionId: string;
+    rating: 1 | 2 | 3 | 4;
+    now: Date;
+  },
+): Promise<SubmitOutcome> {
+  const reviewedAt = input.now;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const previous = await first<ReviewEventRow>(
+      db
+        .prepare(
+          `SELECT event.course_id || '.' || event.course_version || '.' || event.item_id
+                    || '.' || event.direction AS card_id,
+                  event.session_id, event.rating, event.result_json
+             FROM learning_review_events event
+            WHERE event.user_id = ? AND event.submission_id = ?`,
+        )
+        .bind(input.userId, input.submissionId),
+    );
+    if (previous !== null) {
+      if (
+        previous.card_id !== input.cardId ||
+        previous.session_id !== input.sessionId ||
+        previous.rating !== input.rating
+      ) {
+        return { conflict: true };
+      }
+      return {
+        ok: {
+          value: JSON.parse(previous.result_json) as Record<string, unknown>,
+          replayed: true,
+        },
+      };
+    }
+    const card = await first<ReviewCardRow>(
+      db
+        .prepare(
+          `SELECT user_id, course_id, course_version, item_id, language_tag, direction,
+                  due_at, stability, difficulty, elapsed_days, scheduled_days, learning_steps,
+                  reps, lapses, state, last_review_at, revision
+             FROM learning_practice_cards WHERE user_id = ? AND id = ?`,
+        )
+        .bind(input.userId, input.cardId),
+    );
+    if (card === null) return { notFound: true };
+    const scheduled = scheduleLearnReview(
+      toLearnCardState(card),
+      input.rating,
+      reviewedAt,
+    );
+    const eventId = crypto.randomUUID();
+    const value: Record<string, unknown> = {
+      eventId,
+      submissionId: input.submissionId,
+      cardId: input.cardId,
+      sessionId: input.sessionId,
+      rating: input.rating,
+      reviewedAt: reviewedAt.toISOString(),
+      priorRevision: card.revision,
+      resultingRevision: card.revision + 1,
+      card: { ...scheduled, revision: card.revision + 1 },
+    };
+    const timestamp = reviewedAt.toISOString();
+    const results = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO learning_review_events
+             (id, user_id, submission_id, course_id, course_version, item_id, direction,
+              session_id, rating, reviewed_at, prior_revision, resulting_revision, result_json)
+           SELECT ?, ?, ?, course_id, course_version, item_id, direction, ?, ?, ?, ?, ?, ?
+             FROM learning_practice_cards
+            WHERE user_id = ? AND id = ? AND revision = ?
+           ON CONFLICT(user_id, submission_id) DO NOTHING`,
+        )
+        .bind(
+          eventId,
+          input.userId,
+          input.submissionId,
+          input.sessionId,
+          input.rating,
+          timestamp,
+          card.revision,
+          card.revision + 1,
+          JSON.stringify(value),
+          input.userId,
+          input.cardId,
+          card.revision,
+        ),
+      db
+        .prepare(
+          `UPDATE learning_practice_cards
+              SET due_at = ?, stability = ?, difficulty = ?, elapsed_days = ?,
+                  scheduled_days = ?, learning_steps = ?, reps = ?, lapses = ?, state = ?,
+                  last_review_at = ?, revision = revision + 1, updated_at = ?
+            WHERE user_id = ? AND id = ? AND revision = ?
+              AND EXISTS (SELECT 1 FROM learning_review_events
+                           WHERE id = ? AND user_id = ? AND submission_id = ?)`,
+        )
+        .bind(
+          scheduled.dueAt,
+          scheduled.stability,
+          scheduled.difficulty,
+          scheduled.elapsedDays,
+          scheduled.scheduledDays,
+          scheduled.learningSteps,
+          scheduled.reps,
+          scheduled.lapses,
+          scheduled.state,
+          scheduled.lastReviewAt,
+          timestamp,
+          input.userId,
+          input.cardId,
+          card.revision,
+          eventId,
+          input.userId,
+          input.submissionId,
+        ),
+      input.rating === 1
+        ? db
+            .prepare(
+              `INSERT INTO learning_wrong_revisits
+                 (user_id, session_id, course_id, course_version, item_id, direction,
+                  due_at, completed_at)
+               SELECT ?, ?, course_id, course_version, item_id, direction, ?, NULL
+                 FROM learning_practice_cards
+                WHERE user_id = ? AND id = ?
+                  AND EXISTS (SELECT 1 FROM learning_review_events
+                               WHERE id = ? AND user_id = ? AND submission_id = ?)
+                ON CONFLICT(user_id, session_id, course_id, course_version, item_id, direction)
+                DO UPDATE SET due_at = excluded.due_at, completed_at = NULL`,
+            )
+            .bind(
+              input.userId,
+              input.sessionId,
+              new Date(
+                reviewedAt.getTime() + WRONG_ANSWER_DELAY_MS,
+              ).toISOString(),
+              input.userId,
+              input.cardId,
+              eventId,
+              input.userId,
+              input.submissionId,
+            )
+        : db
+            .prepare(
+              `UPDATE learning_wrong_revisits SET completed_at = ?
+                WHERE user_id = ? AND session_id = ? AND course_id = ?
+                  AND course_version = ? AND item_id = ? AND direction = ?
+                  AND completed_at IS NULL
+                  AND EXISTS (SELECT 1 FROM learning_review_events
+                               WHERE id = ? AND user_id = ?)`,
+            )
+            .bind(
+              timestamp,
+              input.userId,
+              input.sessionId,
+              card.course_id,
+              card.course_version,
+              card.item_id,
+              card.direction,
+              eventId,
+              input.userId,
+            ),
+    ]);
+    if (results[0]?.meta.changes !== 0 || results[1]?.meta.changes !== 0) {
+      return { ok: { value, replayed: false } };
+    }
+  }
+  throw new Error("Concurrent review retry limit exceeded");
+}
+
+function toLearnCardState(row: ReviewCardRow): LearnCardState {
+  return {
+    dueAt: row.due_at,
+    stability: row.stability,
+    difficulty: row.difficulty,
+    elapsedDays: row.elapsed_days,
+    scheduledDays: row.scheduled_days,
+    learningSteps: row.learning_steps,
+    reps: row.reps,
+    lapses: row.lapses,
+    state: row.state,
+    lastReviewAt: row.last_review_at,
+  };
+}

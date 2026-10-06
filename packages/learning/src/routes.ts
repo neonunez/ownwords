@@ -8,6 +8,16 @@ import type {
 import { all, first, parseJsonObject } from "./db";
 import { errorResponse, LearningError } from "./errors";
 import { lexiconCourseImport } from "./lexicon-export";
+import {
+  adoptScheduling,
+  direction as parseDirection,
+  languageTag as parseLanguageTag,
+  lessonCardStatements,
+  limit as parseLimit,
+  readDueQueue,
+  sessionId as parseSessionId,
+  submitReview,
+} from "./practice";
 
 const routeId = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
 const category = z.enum([
@@ -20,6 +30,16 @@ const category = z.enum([
   "course_vocabulary",
 ]);
 const progressBody = z.object({ stepId: routeId }).strict();
+/** The same character set the Lexicon accepts for a practice submission. */
+const handle = z.string().regex(/^[A-Za-z0-9_.:-]{1,200}$/);
+const reviewBody = z
+  .object({
+    submissionId: handle,
+    cardId: handle,
+    sessionId: handle,
+    rating: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  })
+  .strict();
 
 interface LessonRow {
   lesson_id: string;
@@ -252,6 +272,19 @@ interface SyncRow {
   audio_json: string | null;
 }
 
+/** What one "add these words to my Lexicon" did, and what is still owed. */
+interface LexiconFlush {
+  pending: number;
+  added: number;
+  alreadyThere: number;
+}
+
+/**
+ * Imports the rows a caller has already recorded as asked for. Each item is
+ * imported on its own under the Lexicon's stable `(owner, course, version,
+ * item)` key, so retrying is safe, and a row is marked synced only once the
+ * Lexicon has confirmed it.
+ */
 async function flushLexiconSync(
   db: D1Database,
   userId: string,
@@ -260,7 +293,9 @@ async function flushLexiconSync(
   courseId: string,
   version: number,
   lessonId: string,
-): Promise<number> {
+): Promise<LexiconFlush> {
+  let added = 0;
+  let alreadyThere = 0;
   const pending = await all<SyncRow>(
     db
       .prepare(
@@ -282,7 +317,7 @@ async function flushLexiconSync(
 
   for (const row of pending) {
     try {
-      await importer.importCourseEntry(
+      const imported = await importer.importCourseEntry(
         lexiconCourseImport(userId, row.course_id, row.course_version, {
           itemId: row.item_id,
           kind: row.kind,
@@ -296,6 +331,8 @@ async function flushLexiconSync(
           audio: row.audio_json ? parseJsonObject(row.audio_json) : null,
         }),
       );
+      if (imported.created) added += 1;
+      else alreadyThere += 1;
       const result = await db
         .prepare(
           `UPDATE learning_lexicon_sync
@@ -337,7 +374,94 @@ async function flushLexiconSync(
       )
       .bind(userId, courseId, version, lessonId),
   );
-  return remaining?.count ?? 0;
+  return { pending: remaining?.count ?? 0, added, alreadyThere };
+}
+
+/** The distinct words one lesson introduces, in item order. */
+interface IntroducedItem {
+  itemId: string;
+  languageTag: string;
+}
+
+async function introducedItems(
+  db: D1Database,
+  courseId: string,
+  version: number,
+  lessonId: string,
+): Promise<IntroducedItem[]> {
+  const rows = await all<{ item_id: string; language_tag: string }>(
+    db
+      .prepare(
+        `SELECT DISTINCT link.item_id, item.language_tag
+           FROM learning_step_items link
+           JOIN learning_steps step
+             ON step.course_id = link.course_id AND step.course_version = link.course_version
+            AND step.step_id = link.step_id
+           JOIN learning_content_items item
+             ON item.course_id = link.course_id AND item.course_version = link.course_version
+            AND item.item_id = link.item_id
+          WHERE link.course_id = ? AND link.course_version = ? AND step.lesson_id = ?
+            AND link.role = 'introduced'
+          ORDER BY link.item_id`,
+      )
+      .bind(courseId, version, lessonId),
+  );
+  return rows.map((row) => ({
+    itemId: row.item_id,
+    languageTag: row.language_tag,
+  }));
+}
+
+/**
+ * How much of a lesson's vocabulary is in the Lexicon, and how much is not:
+ * the words it introduces, and how many of those are already kept there.
+ */
+async function lessonWords(
+  db: D1Database,
+  userId: string,
+  courseId: string,
+  version: number,
+  lessonId: string,
+): Promise<{ total: number; inLexicon: number }> {
+  const row = await first<{ total: number; in_lexicon: number }>(
+    db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(DISTINCT link.item_id)
+              FROM learning_step_items link
+              JOIN learning_steps step
+                ON step.course_id = link.course_id
+               AND step.course_version = link.course_version
+               AND step.step_id = link.step_id
+             WHERE link.course_id = ? AND link.course_version = ?
+               AND step.lesson_id = ? AND link.role = 'introduced') AS total,
+           (SELECT COUNT(*)
+              FROM learning_lexicon_sync sync
+             WHERE sync.user_id = ? AND sync.course_id = ? AND sync.course_version = ?
+               AND sync.status = 'synced'
+               AND sync.item_id IN (
+                 SELECT link.item_id
+                   FROM learning_step_items link
+                   JOIN learning_steps step
+                     ON step.course_id = link.course_id
+                    AND step.course_version = link.course_version
+                    AND step.step_id = link.step_id
+                  WHERE link.course_id = ? AND link.course_version = ?
+                    AND step.lesson_id = ? AND link.role = 'introduced')) AS in_lexicon`,
+      )
+      .bind(
+        courseId,
+        version,
+        lessonId,
+        userId,
+        courseId,
+        version,
+        courseId,
+        version,
+        lessonId,
+      ),
+  );
+  return { total: row?.total ?? 0, inLexicon: row?.in_lexicon ?? 0 };
 }
 
 export function createLearningRoutes(
@@ -563,6 +687,15 @@ export function createLearningRoutes(
               })),
           })),
           contentItems: contentItems.map(contentItemResponse),
+          // The words this lesson introduced, and how many the learner keeps
+          // in their Lexicon, so the finished lesson can say both honestly.
+          words: await lessonWords(
+            c.env.DB,
+            userId,
+            courseId,
+            version,
+            lessonId,
+          ),
         },
       });
     },
@@ -902,6 +1035,12 @@ export function createLearningRoutes(
       }
       const timestamp = clock().toISOString();
       if (progress.status !== "completed") {
+        const introduced = await introducedItems(
+          c.env.DB,
+          courseId,
+          version,
+          lessonId,
+        );
         const statements: D1PreparedStatement[] = [
           c.env.DB.prepare(
             `UPDATE learning_user_lesson_progress
@@ -909,34 +1048,90 @@ export function createLearningRoutes(
            WHERE user_id = ? AND course_id = ? AND course_version = ? AND lesson_id = ?
              AND status = 'in_progress'`,
           ).bind(timestamp, timestamp, userId, courseId, version, lessonId),
+          // The lesson's words join Learn practice in the same transaction, and
+          // nothing here writes to the Lexicon.
+          ...lessonCardStatements(
+            c.env.DB,
+            userId,
+            courseId,
+            version,
+            introduced,
+            clock(),
+          ),
         ];
-        const introduced = await all<{ item_id: string }>(
-          c.env.DB.prepare(
-            `SELECT DISTINCT link.item_id
-           FROM learning_step_items link
-           JOIN learning_steps step
-             ON step.course_id = link.course_id AND step.course_version = link.course_version
-            AND step.step_id = link.step_id
-           WHERE link.course_id = ? AND link.course_version = ? AND step.lesson_id = ?
-             AND link.role = 'introduced' ORDER BY link.item_id`,
-          ).bind(courseId, version, lessonId),
-        );
-        for (const item of introduced) {
-          statements.push(
-            c.env.DB.prepare(
-              `INSERT INTO learning_lexicon_sync
-             (user_id, course_id, course_version, item_id, lesson_id, status,
-              attempt_count, last_attempt_at, synced_at)
-             VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL)
-             ON CONFLICT(user_id, course_id, course_version, item_id) DO NOTHING`,
-            ).bind(userId, courseId, version, item.item_id, lessonId),
-          );
-        }
         const results = await c.env.DB.batch(statements);
         if (results.some((result) => !result.success))
           throw new Error("Completion transaction failed");
       }
-      const pendingItems = await flushLexiconSync(
+      const words = await lessonWords(
+        c.env.DB,
+        userId,
+        courseId,
+        version,
+        lessonId,
+      );
+      return c.json({
+        completion: {
+          courseId,
+          version,
+          lessonId,
+          completedAt: progress.completed_at ?? timestamp,
+          words,
+        },
+      });
+    },
+  );
+
+  /**
+   * The learner's own decision to keep a lesson's words in their Lexicon. The
+   * words are already in Learn practice by then; nothing is imported until this
+   * is called, and calling it again retries only what is still owed.
+   */
+  app.post(
+    "/courses/:courseId/versions/:version/lessons/:lessonId/lexicon",
+    async (c) => {
+      const courseId = parseRouteId(c.req.param("courseId"), "Course id");
+      const lessonId = parseRouteId(c.req.param("lessonId"), "Lesson id");
+      const version = parseVersion(c.req.param("version"));
+      const userId = c.get("userId");
+      await requireCourseVersion(c.env.DB, userId, courseId, version);
+      await requireLesson(c.env.DB, courseId, version, lessonId);
+      await requireUnlocked(c.env.DB, userId, courseId, version, lessonId);
+      const progress = await first<{ status: string }>(
+        c.env.DB.prepare(
+          `SELECT status FROM learning_user_lesson_progress
+         WHERE user_id = ? AND course_id = ? AND course_version = ? AND lesson_id = ?`,
+        ).bind(userId, courseId, version, lessonId),
+      );
+      if (progress?.status !== "completed") {
+        throw new LearningError(
+          409,
+          "LESSON_NOT_FINISHED",
+          "Finish the lesson before adding its words to the Lexicon",
+        );
+      }
+      const introduced = await introducedItems(
+        c.env.DB,
+        courseId,
+        version,
+        lessonId,
+      );
+      const timestamp = clock().toISOString();
+      const statements = introduced.map((item) =>
+        c.env.DB.prepare(
+          `INSERT INTO learning_lexicon_sync
+         (user_id, course_id, course_version, item_id, lesson_id, status,
+          attempt_count, last_attempt_at, synced_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL)
+         ON CONFLICT(user_id, course_id, course_version, item_id) DO NOTHING`,
+        ).bind(userId, courseId, version, item.itemId, lessonId),
+      );
+      if (statements.length > 0) {
+        const results = await c.env.DB.batch(statements);
+        if (results.some((result) => !result.success))
+          throw new Error("Lexicon request transaction failed");
+      }
+      const flushed = await flushLexiconSync(
         c.env.DB,
         userId,
         importerFor(c.env),
@@ -945,23 +1140,88 @@ export function createLearningRoutes(
         version,
         lessonId,
       );
+      const words = await lessonWords(
+        c.env.DB,
+        userId,
+        courseId,
+        version,
+        lessonId,
+      );
       return c.json(
         {
-          completion: {
-            courseId,
-            version,
-            lessonId,
-            completedAt: progress.completed_at ?? timestamp,
-            lexiconSync: {
-              status: pendingItems === 0 ? "synced" : "pending",
-              pendingItems,
-            },
+          lexicon: {
+            ...words,
+            added: flushed.added,
+            alreadyThere: flushed.alreadyThere,
+            pending: flushed.pending,
           },
         },
-        pendingItems === 0 ? 200 : 202,
+        flushed.pending === 0 ? 200 : 202,
       );
     },
   );
+
+  /**
+   * What is due in Learn. The queue is the vocabulary of finished lessons, in
+   * the language of the course; a cloze request is answered empty, because the
+   * course writes no gaps to complete.
+   */
+  app.get("/practice/due", async (c) => {
+    const url = new URL(c.req.url);
+    const language = parseLanguageTag(url.searchParams.get("language"));
+    const way = parseDirection(url.searchParams.get("direction"));
+    const session = parseSessionId(url.searchParams.get("sessionId"));
+    const size = parseLimit(url.searchParams.get("limit"));
+    const format = url.searchParams.get("format") ?? "flashcard";
+    if (format !== "flashcard" && format !== "cloze") {
+      throw new LearningError(400, "INVALID_FORMAT", "Format is invalid");
+    }
+    if (format === "cloze") {
+      return c.json({ data: [], nextDueAt: null });
+    }
+    await adoptScheduling(c.env.DB, c.get("userId"), language, clock());
+    const queue = await readDueQueue(c.env.DB, {
+      userId: c.get("userId"),
+      language,
+      direction: way,
+      sessionId: session,
+      limit: size,
+      now: clock(),
+    });
+    return c.json(queue);
+  });
+
+  app.post("/practice/reviews", async (c) => {
+    const parsed = reviewBody.safeParse(await parseJsonBody(c.req.raw));
+    if (!parsed.success)
+      throw new LearningError(400, "INVALID_REVIEW", "Review is invalid");
+    const outcome = await submitReview(c.env.DB, {
+      userId: c.get("userId"),
+      submissionId: parsed.data.submissionId,
+      cardId: parsed.data.cardId,
+      sessionId: parsed.data.sessionId,
+      rating: parsed.data.rating,
+      now: clock(),
+    });
+    if ("notFound" in outcome) {
+      throw new LearningError(
+        404,
+        "CARD_NOT_FOUND",
+        "That card is no longer part of your Learn practice",
+      );
+    }
+    if ("conflict" in outcome) {
+      throw new LearningError(
+        409,
+        "IDEMPOTENCY_CONFLICT",
+        "submissionId was already used for different review data",
+      );
+    }
+    return c.json(
+      { data: outcome.ok.value, replayed: outcome.ok.replayed },
+      outcome.ok.replayed ? 200 : 201,
+    );
+  });
 
   app.notFound((c) =>
     c.json(

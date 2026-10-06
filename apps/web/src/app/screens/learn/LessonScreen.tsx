@@ -1,13 +1,25 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button, Card, Chip, IconButton, TopBar } from "../../../design-system";
+import {
+  Button,
+  Card,
+  Chip,
+  IconButton,
+  Mascot,
+  TopBar,
+} from "../../../design-system";
 import { Screen, Spacer } from "../../layout";
 import { Failed, Loading } from "../ScreenState";
 import { useAsync } from "../../shell/useAsync";
 import { useClient } from "../../shell/ClientProvider";
 import { useToast } from "../../shell/ToastProvider";
 import { OwnwordsError } from "../../../api/client";
-import type { Lesson, LessonItem, LessonStep } from "../../../api/types";
+import type {
+  Lesson,
+  LessonCompletion,
+  LessonItem,
+  LessonStep,
+} from "../../../api/types";
 
 /** Where a lesson opens: the step recorded last time, or the first. */
 function openingIndex(lesson: Lesson): number {
@@ -18,11 +30,19 @@ function openingIndex(lesson: Lesson): number {
   return Math.max(0, index);
 }
 
+/** "1 word", "5 words": the app counts in words, so the noun follows. */
+function words(count: number): string {
+  return `${count} ${count === 1 ? "word" : "words"}`;
+}
+
 /**
  * Read it first, then a rule of four lines, then use it, then a perception
  * drill. Reaching a step is recorded as the person moves on, in order, so the
  * course picks up where they left it; finishing records the lesson and puts
- * the words it introduced into the Lexicon.
+ * the words it introduced into Learn practice.
+ *
+ * A finished lesson offers to keep those words in the Lexicon, and never does
+ * it unasked.
  *
  * Every step is reading, meaning and choice. The course ships no recordings,
  * so there is no playback control anywhere in it.
@@ -82,11 +102,28 @@ function LessonSteps({
   );
   const [choice, setChoice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set when the lesson is finished: what its words are, and what the learner
+  // has chosen to keep in the Lexicon. A lesson opened after it was finished
+  // opens here too.
+  const [finished, setFinished] = useState<LessonCompletion | null>(() =>
+    lesson.status === "completed" ? { words: lesson.words } : null,
+  );
   const inFlight = useRef(false);
 
   const step = lesson.steps[index];
   if (!step) return null;
   const last = index === lesson.steps.length - 1;
+
+  if (finished) {
+    return (
+      <FinishedLesson
+        lesson={lesson}
+        completion={finished}
+        onReadAgain={() => setFinished(null)}
+        onBack={onBack}
+      />
+    );
+  }
 
   /** Records every step up to `target` that is not recorded yet, in order. */
   const recordThrough = async (target: number) => {
@@ -105,14 +142,8 @@ function LessonSteps({
     try {
       if (last) {
         await recordThrough(index);
-        const { lexicon } = await client.completeLesson(lesson.id);
-        onBack();
-        showToast(
-          lexicon === "synced"
-            ? "Lesson finished. Its words are in your Lexicon."
-            : "Lesson finished. Some of its words have not reached your Lexicon yet; finishing it again retries them.",
-          { icon: "check" },
-        );
+        const completion = await client.completeLesson(lesson.id);
+        setFinished(completion);
         return;
       }
       await recordThrough(index + 1);
@@ -195,6 +226,144 @@ function LessonSteps({
             : last
               ? "Finish lesson"
               : "Next"}
+        </Button>
+      </Screen>
+    </>
+  );
+}
+
+/**
+ * The lesson is finished. Its words are in Learn practice now, whatever the
+ * learner decides about their Lexicon; keeping them there is one tap, and
+ * asking twice never stores a word twice.
+ */
+function FinishedLesson({
+  lesson,
+  completion,
+  onReadAgain,
+  onBack,
+}: {
+  lesson: Lesson;
+  completion: LessonCompletion;
+  onReadAgain: () => void;
+  onBack: () => void;
+}) {
+  const client = useClient();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [words_, setWords] = useState(completion.words);
+  const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+  const kept = words_.total > 0 && words_.inLexicon >= words_.total;
+
+  const keep = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      const stored = await client.addLessonWordsToLexicon(lesson.id);
+      setWords({ total: stored.total, inLexicon: stored.inLexicon });
+      if (stored.pending > 0) {
+        showToast(
+          `${words(stored.added)} added to your Lexicon. ${words(
+            stored.pending,
+          )} could not be saved; try again.`,
+        );
+        return;
+      }
+      showToast(
+        stored.added > 0
+          ? `${words(stored.added)} added to your Lexicon.`
+          : "These words are already in your Lexicon.",
+        { icon: "check" },
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error && error.message
+          ? `Your Lexicon was not changed. ${error.message}`
+          : "Your Lexicon was not changed. Try again.",
+      );
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <TopBar
+        title={`Unit ${lesson.unitNumber} · ${lesson.title}`}
+        onBack={onBack}
+        backLabel="Back to the course"
+        trailing={
+          <IconButton
+            name="book-open"
+            label="Open the grammar for this step"
+            onClick={() => navigate("/learn/reference/grammar")}
+          />
+        }
+      />
+      <Screen>
+        <Card tone="soft" padding={24} style={{ textAlign: "center" }}>
+          <Mascot
+            expression="happy"
+            size={80}
+            bob
+            style={{ margin: "0 auto 12px" }}
+          />
+          <p style={{ margin: 0, font: "var(--type-title)" }}>
+            Lesson finished.
+          </p>
+          <p
+            style={{
+              margin: "6px 0 0",
+              font: "var(--type-body)",
+              color: "var(--fg-2)",
+            }}
+          >
+            {words_.total === 0
+              ? "This lesson introduced no words to practise."
+              : `Its ${words(words_.total)} are ready to practise in Learn.`}
+          </p>
+          <p
+            style={{
+              margin: "6px 0 0",
+              font: "var(--type-body)",
+              color: "var(--fg-2)",
+            }}
+          >
+            {kept
+              ? "They are in your Lexicon."
+              : words_.inLexicon > 0
+                ? `${words(words_.inLexicon)} of them ${
+                    words_.inLexicon === 1 ? "is" : "are"
+                  } in your Lexicon.`
+                : "They are not in your Lexicon."}
+          </p>
+        </Card>
+
+        <Spacer />
+        <Button
+          size="lg"
+          full
+          variant="secondary"
+          disabled={saving || kept}
+          icon="plus"
+          onClick={() => void keep()}
+        >
+          {saving
+            ? "Adding to your Lexicon…"
+            : kept
+              ? "Already in your Lexicon"
+              : "Add these words to Lexicon"}
+        </Button>
+        <div style={{ height: 8 }} />
+        <Button size="lg" full variant="outline" onClick={onBack}>
+          Back to the course
+        </Button>
+        <div style={{ height: 8 }} />
+        <Button variant="ghost" full onClick={onReadAgain}>
+          Read the lesson again
         </Button>
       </Screen>
     </>

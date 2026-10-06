@@ -21,6 +21,7 @@ import type {
   Language,
   Lesson,
   LessonCompletion,
+  LexiconWords,
   NewEntry,
   NewEquivalent,
   Onboarding,
@@ -166,8 +167,17 @@ export interface OwnwordsClient {
   getLesson(lessonId: string): Promise<Lesson>;
   /** Records that the person reached a step. Steps are recorded in order. */
   completeLessonStep(lessonId: string, stepId: string): Promise<void>;
-  /** Finishes a lesson whose every step was reached; its items join the Lexicon. */
+  /**
+   * Finishes a lesson whose every step was reached. Its words join Learn
+   * practice and stay out of the Lexicon.
+   */
   completeLesson(lessonId: string): Promise<LessonCompletion>;
+  /**
+   * Keeps a finished lesson's words in the Lexicon. Safe to press again: a
+   * word already stored is not stored twice, and `pending` says what is still
+   * owed.
+   */
+  addLessonWordsToLexicon(lessonId: string): Promise<LexiconWords>;
   getAlphabet(): Promise<AlphabetLetter[]>;
   listReferenceTopics(): Promise<ReferenceTopic[]>;
 

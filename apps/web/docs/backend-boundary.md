@@ -62,12 +62,13 @@ Paths below are relative to `/api/v1` unless they start with `/api/auth`.
 | `addEquivalents`                         | `POST /lexicon/entries/:entryId/senses/:senseId/equivalents`, one per reviewed language                                                          |
 | `updateEquivalent`                       | `PATCH /lexicon/entries/:entryId/senses/:senseId/equivalents/:equivalentId` with `version`                                                       |
 | `addSense`                               | `POST /lexicon/entries/:entryId/senses`, repeating the headword so the sense can be translated                                                   |
-| `getDueQueue`                            | `GET /lexicon/practice/due` per language and direction (Learn adds `origin=course`)                                                              |
-| `submitReview`                           | `POST /lexicon/practice/reviews`                                                                                                                 |
+| `getDueQueue`                            | `GET /lexicon/practice/due` in Maintain, `GET /learning/practice/due` in Learn, per language and direction                                       |
+| `submitReview`                           | `POST /lexicon/practice/reviews` in Maintain, `POST /learning/practice/reviews` in Learn                                                         |
 | `getProgress`                            | `GET /lexicon/progress` per language, plus the Maintain due queue for what is due now                                                            |
 | `getCourse`                              | `GET /learning/courses`, `GET /learning/courses/:courseId/versions/:version`, `GET …/resume`, and the resume lesson                              |
 | `getLesson`                              | `GET …/versions/:version/lessons/:lessonId` and the outline                                                                                      |
 | `completeLessonStep`, `completeLesson`   | `PUT …/lessons/:lessonId/progress`, `POST …/lessons/:lessonId/complete`                                                                          |
+| `addLessonWordsToLexicon`                | `POST …/lessons/:lessonId/lexicon`, only when the person asks for the lesson's words in their Lexicon                                            |
 | `getAlphabet`, `listReferenceTopics`     | `GET /learning/references` per category, every page                                                                                              |
 | `listStarters`, `addStarter`             | no route: the backend defines no starter expressions, so the HTTP client offers none                                                             |
 
@@ -112,7 +113,8 @@ It is a bounded, authored A0 script-and-stress and early-A1 greeting sequence,
 not a synthetic fixture or a complete syllabus. The local stack publishes that
 pack through `apps/api/scripts/local-content.ts` (the supported
 `ingestCourseVersion` / `publishCourseVersion` path) and exercises rendering,
-lesson completion, Lexicon export, and the alphabet/reference. The pack was
+lesson completion, Learn practice, the optional Lexicon save, and the
+alphabet/reference. The pack was
 reviewed by a qualified Russian-language teacher and carries per-item
 provenance/licensing in `packages/learning/content/README.md`. It ships
 without recordings, so the app shows no playback, no listening step and no
@@ -176,5 +178,8 @@ for timing methodology, regression tests and remaining waits.
   The backend enforces it at the integration boundary; the front end says so.
 - Progress is retention and can-do milestones. `GET /progress` returns no card
   counts, and no screen computes one.
-- Course items land in the Lexicon through the course-import interface when a
-  lesson is finished, not by the front end writing Lexicon rows.
+- Course items never enter the Lexicon by themselves. They land there through
+  the course-import interface only when the person presses "Add these words to
+  Lexicon" on the finished lesson, not by the front end writing Lexicon rows.
+- Learn practice and Maintain practice are different queues with different
+  backends; a card is reviewed against the one that served it.

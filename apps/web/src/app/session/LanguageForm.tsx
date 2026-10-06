@@ -385,7 +385,7 @@ export function LanguageForm({
         icon="graduation-cap"
         mode="Learn"
         title="A new language, from zero"
-        lead="Start at the alphabet, with nothing assumed. Short units each end in something you can say, and what you learn joins your Lexicon."
+        lead="Start at the alphabet, with nothing assumed. Short units each end in something you can say, and each one leaves you words to practise."
       >
         <Select
           label="Language to learn"

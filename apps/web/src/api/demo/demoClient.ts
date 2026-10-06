@@ -24,6 +24,8 @@ import type {
   LanguageProgress,
   LanguageTag,
   Lesson,
+  LessonItem,
+  LexiconWords,
   MasteryBand,
   NewEntry,
   NewEquivalent,
@@ -49,6 +51,8 @@ import {
   demoDue,
   demoEntries,
   demoLanguages,
+  demoLearnDue,
+  demoLearnUpcoming,
   demoLesson,
   demoPreferences,
   demoReferenceTopics,
@@ -56,6 +60,7 @@ import {
   demoSuggestions,
   demoUpcoming,
   type DemoCard,
+  type DemoLearnCard,
 } from "./fixtures";
 
 export interface DemoClientOptions {
@@ -149,6 +154,11 @@ export function createDemoClient(
   let preferences: Preferences = clone(demoPreferences);
   const due: DemoCard[] = clone(demoDue);
   const upcoming = clone(demoUpcoming);
+  // Learn keeps its own course vocabulary; none of it is a Lexicon entry.
+  const learnDue: DemoLearnCard[] = clone(demoLearnDue);
+  const learnUpcoming = clone(demoLearnUpcoming);
+  // Course words the learner has chosen to keep in their Lexicon.
+  let keptWords = new Set<string>();
   const reviewed = new Set<string>();
 
   const findEntry = (entryId: string): Entry => {
@@ -212,9 +222,67 @@ export function createDemoClient(
     hint: card.hint,
   });
 
+  /** The words the demo lesson introduced, in lesson order. */
+  const lessonWords = (): {
+    id: string;
+    text: string;
+    meaning: string;
+    language: LanguageTag;
+  }[] =>
+    demoLesson.steps
+      .flatMap((step) => step.items ?? [])
+      .map((item) => ({
+        id: item.id,
+        text: item.text,
+        meaning: item.meaning,
+        language: demoLesson.language,
+      }));
+
+  /** How many of a lesson's words are in the Lexicon, out of all of them. */
+  const wordsKept = (total: number) => ({
+    total,
+    inLexicon: Math.min(keptWords.size, total),
+  });
+
+  const lessonWord = (wordId: string): LessonItem => {
+    const word = demoLesson.steps
+      .flatMap((step) => step.items ?? [])
+      .find((item) => item.id === wordId);
+    if (!word) {
+      throw new OwnwordsError(
+        "not_found",
+        "That word is not in the course.",
+        404,
+      );
+    }
+    return word;
+  };
+
+  const toLearnCard = (card: DemoLearnCard): PracticeCard => ({
+    cardId: card.cardId,
+    headword: lessonWord(card.wordId).text,
+    language: card.language,
+    promptLanguage: null,
+    answerLanguage: card.language,
+    direction: card.direction,
+    prompt: card.prompt,
+    answer: card.answer,
+    accepted: [],
+    hint: card.hint,
+  });
+
   const toUpcoming = (card: DemoCard & { when: string }): UpcomingItem => ({
     when: card.when,
     headword: findEntry(card.entryId).headword,
+    language: card.language,
+    direction: card.direction,
+  });
+
+  const toLearnUpcoming = (
+    card: DemoLearnCard & { when: string },
+  ): UpcomingItem => ({
+    when: card.when,
+    headword: lessonWord(card.wordId).text,
     language: card.language,
     direction: card.direction,
   });
@@ -534,6 +602,24 @@ export function createDemoClient(
     },
 
     async getDueQueue(scope): Promise<DueQueue> {
+      // Learn practises the lesson's own words; Maintain practises the
+      // personal collection, and only what is still in it.
+      if (scope.mode === "learn") {
+        const waiting = scope.ahead ? learnUpcoming : learnDue;
+        const cards = waiting
+          .filter((card) => !reviewed.has(card.cardId))
+          .map(toLearnCard);
+        return {
+          cards,
+          estimate: estimateFor(cards.length),
+          comingUp: scope.ahead
+            ? []
+            : learnUpcoming
+                .filter((card) => !reviewed.has(card.cardId))
+                .map(toLearnUpcoming),
+          aheadAvailable: true,
+        };
+      }
       const coming = pending(upcoming, scope.mode);
       const cards = (scope.ahead ? coming : pending(due, scope.mode)).map(
         toPracticeCard,
@@ -602,8 +688,63 @@ export function createDemoClient(
       // The demo keeps no course progress.
     },
 
-    async completeLesson() {
-      return { lexicon: "synced" as const };
+    async completeLesson(lessonId) {
+      if (lessonId !== demoLesson.id) {
+        throw new OwnwordsError(
+          "not_found",
+          "That lesson is not in the course yet.",
+          404,
+        );
+      }
+      return { words: wordsKept(lessonWords().length) };
+    },
+
+    async addLessonWordsToLexicon(): Promise<LexiconWords> {
+      const lesson = lessonWords();
+      const alreadyThere = lesson.filter((word) =>
+        keptWords.has(word.id),
+      ).length;
+      // A word already stored is never stored twice.
+      for (const word of lesson.filter(
+        (candidate) => !keptWords.has(candidate.id),
+      )) {
+        const entry: Entry = {
+          id: localId("e"),
+          headword: word.text,
+          note: "From the course.",
+          kind: "word",
+          language: word.language,
+          version: 1,
+          createdAt: new Date().toISOString(),
+          senses: [
+            {
+              id: localId("s"),
+              gloss: word.meaning,
+              equivalents: [
+                {
+                  id: localId("q"),
+                  language: word.language,
+                  text: word.text,
+                  fit: "exact",
+                  state: "confirmed",
+                  courseItemId: word.id,
+                  version: 1,
+                },
+              ],
+            },
+          ],
+          mastery: {},
+        };
+        entries = [entry, ...entries];
+        keptWords.add(word.id);
+      }
+      return {
+        total: lesson.length,
+        inLexicon: keptWords.size,
+        added: lesson.length - alreadyThere,
+        alreadyThere,
+        pending: 0,
+      };
     },
 
     async getAlphabet(): Promise<AlphabetLetter[]> {

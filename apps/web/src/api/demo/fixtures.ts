@@ -36,6 +36,23 @@ export interface DemoCard {
   hint: string | null;
 }
 
+/**
+ * A Learn card as the demo holds it: one direction of one course word. It has
+ * no Lexicon entry behind it, which is the whole point of Learn's own list.
+ */
+export interface DemoLearnCard {
+  cardId: string;
+  /** The lesson word this card practises. */
+  wordId: string;
+  /** The course language the answer is written in. */
+  language: string;
+  direction: PracticeCard["direction"];
+  /** The gloss that asks for the word, or the word that asks for its gloss. */
+  prompt: string;
+  answer: string;
+  hint: string | null;
+}
+
 export const demoLanguages: Language[] = [
   { code: "en", name: "English", role: "native", level: "native" },
   { code: "es", name: "Español", role: "maintained", level: "intermediate" },
@@ -291,6 +308,42 @@ export const demoEntries: Entry[] = [
   },
 ];
 
+/** The course vocabulary the demo lesson introduced, ready to practise. */
+export const demoLearnDue: DemoLearnCard[] = [
+  {
+    cardId: "l1",
+    wordId: "i1",
+    language: "ru",
+    direction: "recognise",
+    prompt: "coffee",
+    answer: "ко́фе",
+    hint: "The stressed first syllable.",
+  },
+  {
+    cardId: "l2",
+    wordId: "i3",
+    language: "ru",
+    direction: "produce",
+    prompt: "thank you",
+    answer: "спаси́бо",
+    hint: null,
+  },
+];
+
+/** What Learn will offer next, soonest first. */
+export const demoLearnUpcoming: (DemoLearnCard & { when: string })[] = [
+  {
+    cardId: "l3",
+    wordId: "i2",
+    language: "ru",
+    direction: "produce",
+    prompt: "please",
+    answer: "пожа́луйста",
+    hint: null,
+    when: "tomorrow",
+  },
+];
+
 /** The cards the scheduler has picked, in the order it picked them. */
 export const demoDue: DemoCard[] = [
   {
@@ -512,6 +565,7 @@ export const demoLesson: Lesson = {
   language: "ru",
   status: "in_progress",
   currentStepId: null,
+  words: { total: 3, inLexicon: 0 },
   steps: [
     {
       id: "u3s1",

@@ -214,6 +214,8 @@ export type ReviewRating = "again" | "hard" | "good" | "easy";
 export interface ReviewSubmission {
   cardId: string;
   rating: ReviewRating;
+  /** Which mode's queue the card came from; each has its own scheduler. */
+  mode: PracticeScope["mode"];
   format: PracticeFormat;
   /** The practice sitting the card was answered in. */
   sessionId: string;
@@ -325,16 +327,33 @@ export interface Lesson {
   status: LessonStatus;
   /** The step the person reached last time, to carry on from; `null` to start. */
   currentStepId: string | null;
+  /** The words this lesson introduces, and how many are in the Lexicon. */
+  words: { total: number; inLexicon: number };
   steps: LessonStep[];
 }
 
-/** What finishing a lesson did to the Lexicon. */
+/** What finishing a lesson did to the word lists. */
 export interface LessonCompletion {
   /**
-   * `synced`: every item the lesson introduced is in the Lexicon. `pending`:
-   * some are not yet; finishing the lesson again retries them.
+   * The words the lesson introduced, and how many of them the learner has
+   * chosen to keep in the Lexicon. Finishing a lesson puts them in Learn
+   * practice and nowhere else.
    */
-  lexicon: "synced" | "pending";
+  words: { total: number; inLexicon: number };
+}
+
+/** What "add these words to my Lexicon" did. */
+export interface LexiconWords {
+  /** Words the lesson introduced. */
+  total: number;
+  /** How many are in the Lexicon now, added now or earlier. */
+  inLexicon: number;
+  /** How many this call stored. */
+  added: number;
+  /** How many were already there; a retry never counts these as added. */
+  alreadyThere: number;
+  /** Words that could not be stored; asking again retries them. */
+  pending: number;
 }
 
 export interface AlphabetLetter {

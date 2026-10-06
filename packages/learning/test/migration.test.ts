@@ -7,7 +7,7 @@ afterEach(() => {
   while (databases.length > 0) databases.pop()?.close();
 });
 
-describe("0200 learning migration", () => {
+describe("learning migrations", () => {
   it("loads with foreign keys intact", () => {
     const test = new TestD1();
     databases.push(test);
@@ -17,7 +17,7 @@ describe("0200 learning migration", () => {
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'learning_%' ORDER BY name",
       )
       .all();
-    expect(tables).toHaveLength(12);
+    expect(tables).toHaveLength(15);
   });
 
   it("protects every published content layer against update, insert, and delete", async () => {

@@ -39,9 +39,9 @@ card (`mastered` means stability of at least 21 days). The list `mastery` filter
 `mastered`) matches eligible equivalents in the optional `language`, and the optional `direction` scopes it to
 `recognize` or `produce`; `direction` without `mastery` is rejected.
 
-`GET /practice/due` accepts an optional `origin=course`, which limits the queue to entries created by the course
-importer. Learn-mode practice uses it so personal vocabulary is practised only in Maintain; without it the queue
-covers the whole collection.
+`GET /practice/due` serves the whole collection: every practice-eligible equivalent in the requested language and
+direction, whether it was typed by hand or imported from a course. Learn-mode practice is not served here — the
+Learning package schedules the vocabulary of finished lessons on its own tables — so there is no origin filter.
 
 `exportLexiconOwnerData(db, ownerId)` returns every Lexicon row one owner keeps, including soft-deleted rows and
 review history, for the composed account export. It omits the translation cache and session-scoped revisit markers.
@@ -70,8 +70,10 @@ const service = createCourseLexiconImporter({ db, clock?, idGenerator? });
 The tuple `(ownerId, courseId, courseVersion, itemId)` is idempotent. One D1 `batch()` atomically creates the entry,
 senses, equivalents, practice cards, and import marker. Concurrent retries return the winning `entryId`; a failed
 batch rolls back all rows. Learning code owns its course state and calls this interface only—it does not write
-Lexicon tables. Because D1 cannot atomically span separately owned databases, a caller that records learning
-progress separately must retry the stable tuple until this call succeeds before marking its own operation complete.
+Lexicon tables. It calls it from one route, the person's explicit "Add these words to Lexicon" on a finished lesson:
+finishing a lesson imports nothing. Because D1 cannot atomically span separately owned databases, a caller that
+records learning progress separately must retry the stable tuple until this call succeeds before marking its own
+operation complete.
 
 Course imports accept only verified, non-false-friend equivalents. This makes accidental practice of unreviewed
 Russian suggestions impossible at the integration boundary.

@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { api, onboard, signIn } from "./helpers";
 
 // The backend holds the authored Russian Foundations course. These journeys
-// check that a real pack is rendered, completed, and carried into the Lexicon.
+// check that a real pack is rendered, completed, practised in Learn, and kept
+// in the Lexicon only because the person asked for it.
 test.describe("Learn, against the real backend", () => {
   test("finishes a lesson, carries on from the next, and practises what it taught", async ({
     page,
@@ -52,9 +53,18 @@ test.describe("Learn, against the real backend", () => {
       page.getByRole("heading", { name: /Unit 1 · Which word is/ }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Finish lesson" }).click();
-    await expect(
-      page.getByText("Lesson finished. Its words are in your Lexicon."),
-    ).toBeVisible();
+    await expect(page.getByText("Lesson finished.")).toBeVisible();
+    // The lesson's words are Learn practice; keeping them is offered, not done.
+    await expect(page.getByText("They are not in your Lexicon.")).toBeVisible();
+    await page
+      .getByRole("button", { name: "Add these words to Lexicon" })
+      .click();
+    await expect(page.getByText(/added to your Lexicon\./)).toBeVisible();
+    await expect(page.getByText("They are in your Lexicon.")).toBeVisible();
+    await page
+      .getByRole("button", { name: "Back to the course" })
+      .last()
+      .click();
     await expect(
       page.getByRole("button", { name: /Continue · Unit 1/ }),
     ).toContainText("Letters that look familiar");

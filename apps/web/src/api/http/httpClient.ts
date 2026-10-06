@@ -65,6 +65,7 @@ import {
   readCompletion,
   readCourses,
   readLesson,
+  readLexiconWords,
   readOutline,
   readReferencePage,
   readResume,
@@ -492,13 +493,16 @@ export function createHttpClient(
           sessionId: scope.sessionId,
           limit: "20",
         });
-        if (scope.mode === "learn") query.set("origin", "course");
-        return {
-          lane,
-          queue: readDueQueue(
-            await json("GET", `${lexicon}/practice/due?${query}`),
+        // Learn practises the vocabulary of finished lessons, which the
+        // Learning package schedules on its own; Maintain practises the
+        // personal collection the Lexicon package schedules.
+        const queue = readDueQueue(
+          await json(
+            "GET",
+            `${scope.mode === "learn" ? learning : lexicon}/practice/due?${query}`,
           ),
-        };
+        );
+        return { lane, queue };
       }),
     );
     const now = Date.now();
@@ -1013,14 +1017,18 @@ export function createHttpClient(
     },
 
     async submitReview(submission) {
-      await json("POST", `${lexicon}/practice/reviews`, {
-        body: {
-          submissionId: submission.submissionId,
-          cardId: submission.cardId,
-          sessionId: submission.sessionId,
-          rating: ratingToWire[submission.rating],
+      await json(
+        "POST",
+        `${submission.mode === "learn" ? learning : lexicon}/practice/reviews`,
+        {
+          body: {
+            submissionId: submission.submissionId,
+            cardId: submission.cardId,
+            sessionId: submission.sessionId,
+            rating: ratingToWire[submission.rating],
+          },
         },
-      });
+      );
     },
 
     async getProgress() {
@@ -1117,11 +1125,16 @@ export function createHttpClient(
 
     async completeLesson(lessonId) {
       const course = await requireCourse();
-      return {
-        lexicon: readCompletion(
-          await json("POST", `${lessonPath(course, lessonId)}/complete`),
-        ),
-      };
+      return readCompletion(
+        await json("POST", `${lessonPath(course, lessonId)}/complete`),
+      );
+    },
+
+    async addLessonWordsToLexicon(lessonId) {
+      const course = await requireCourse();
+      return readLexiconWords(
+        await json("POST", `${lessonPath(course, lessonId)}/lexicon`),
+      );
     },
 
     async getAlphabet(): Promise<AlphabetLetter[]> {

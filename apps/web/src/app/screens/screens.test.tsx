@@ -363,6 +363,7 @@ describe("progress", () => {
       await client.submitReview({
         cardId: card.cardId,
         rating: "good",
+        mode: "maintain",
         format: "cloze",
         sessionId: "s",
         submissionId: card.cardId,

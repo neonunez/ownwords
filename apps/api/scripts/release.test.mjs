@@ -221,6 +221,7 @@ test("the repository's own migrations are additive, in composed order", async ()
     "0001_core.sql",
     "0100_lexicon.sql",
     "0200_learning.sql",
+    "0201_learn_practice.sql",
   ]);
   for (const name of composed) {
     const sql = await read(`.wrangler/migrations/${name}`);

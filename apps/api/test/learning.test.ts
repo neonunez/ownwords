@@ -229,8 +229,8 @@ describe("content licences for Settings", () => {
   });
 });
 
-describe("course-to-Lexicon export", () => {
-  it("exports each introduced item once, with licence and provenance, only to the learner", async () => {
+describe("the Lexicon is the learner's own", () => {
+  it("keeps a finished lesson out of the Lexicon until the learner asks for it", async () => {
     const learner = await signedInUser("export-learner");
     const other = await signedInUser("export-other");
     const version = 2;
@@ -247,13 +247,29 @@ describe("course-to-Lexicon export", () => {
     await expect(completed.json()).resolves.toMatchObject({
       completion: {
         lessonId: "greet",
-        lexiconSync: { status: "synced", pendingItems: 0 },
+        words: { total: 2, inLexicon: 0 },
       },
     });
+    expect(await lexiconTexts(learner)).toEqual([]);
+    expect(await courseImportCount(learner.id)).toBe(0);
 
+    const added = await callJson(
+      learner,
+      "POST",
+      `${course}/versions/${version}/lessons/greet/lexicon`,
+      200,
+    );
+    expect(added.lexicon).toEqual({
+      total: 2,
+      inLexicon: 2,
+      added: 2,
+      alreadyThere: 0,
+      pending: 0,
+    });
     const texts = await lexiconTexts(learner);
     expect(texts.sort()).toEqual(["здравствуй", "спасибо"]);
     expect(await lexiconTexts(other)).toEqual([]);
+    expect(await courseImportCount(learner.id)).toBe(2);
 
     const imported = await callJson(
       learner,
@@ -279,16 +295,23 @@ describe("course-to-Lexicon export", () => {
       },
     });
 
-    // Completing again is idempotent: no duplicate vocabulary.
-    const again = await call(
+    // Asking again is safe: nothing is stored twice, and the answer is honest.
+    const again = await callJson(
       learner,
       "POST",
-      `${course}/versions/${version}/lessons/greet/complete`,
+      `${course}/versions/${version}/lessons/greet/lexicon`,
+      200,
     );
-    expect(again.status).toBe(200);
+    expect(again.lexicon).toEqual({
+      total: 2,
+      inLexicon: 2,
+      added: 0,
+      alreadyThere: 0,
+      pending: 0,
+    });
     expect(await courseImportCount(learner.id)).toBe(2);
 
-    // The next lesson reviews spasibo but only exports what it introduces.
+    // The next lesson reviews spasibo but only offers what it introduces.
     const part = await finishLesson(
       learner,
       COURSE_ID,
@@ -297,6 +320,13 @@ describe("course-to-Lexicon export", () => {
       PART_STEPS,
     );
     expect(part.status).toBe(200);
+    const offered = await callJson(
+      learner,
+      "POST",
+      `${course}/versions/${version}/lessons/part/lexicon`,
+      200,
+    );
+    expect(offered.lexicon).toMatchObject({ total: 1, added: 1 });
     expect((await lexiconTexts(learner)).sort()).toEqual([
       "до свидания",
       "здравствуй",
@@ -306,7 +336,7 @@ describe("course-to-Lexicon export", () => {
     expect(await courseImportCount(other.id)).toBe(0);
   });
 
-  it("never reports a failed export as synced and retries without losing or duplicating vocabulary", async () => {
+  it("never reports a failed save as done, and retries without losing or duplicating vocabulary", async () => {
     const learner = await signedInUser("retry-learner");
     await publishCourseVersions(2);
     let failures = 1;
@@ -347,15 +377,19 @@ describe("course-to-Lexicon export", () => {
         ).status,
       ).toBe(200);
     }
+    expect(
+      (await request("POST", `${course}/versions/2/lessons/greet/complete`))
+        .status,
+    ).toBe(200);
     const first = await request(
       "POST",
-      `${course}/versions/2/lessons/greet/complete`,
+      `${course}/versions/2/lessons/greet/lexicon`,
     );
     expect(first.status).toBe(202);
     await expect(first.json()).resolves.toMatchObject({
-      completion: { lexiconSync: { status: "pending", pendingItems: 1 } },
+      lexicon: { inLexicon: 1, added: 1, pending: 1 },
     });
-    // Completion committed; the successful item landed and the failed one is still owed.
+    // The one that worked landed; the one that failed is still owed.
     expect(await lexiconTexts(learner)).toEqual(["здравствуй"]);
     const pending = await env.DB.prepare(
       "SELECT item_id AS itemId, status, attempt_count AS attempts FROM learning_lexicon_sync WHERE user_id = ? ORDER BY item_id",
@@ -369,11 +403,11 @@ describe("course-to-Lexicon export", () => {
 
     const retry = await request(
       "POST",
-      `${course}/versions/2/lessons/greet/complete`,
+      `${course}/versions/2/lessons/greet/lexicon`,
     );
     expect(retry.status).toBe(200);
     await expect(retry.json()).resolves.toMatchObject({
-      completion: { lexiconSync: { status: "synced", pendingItems: 0 } },
+      lexicon: { inLexicon: 2, added: 1, pending: 0 },
     });
     expect((await lexiconTexts(learner)).sort()).toEqual([
       "здравствуй",
@@ -383,7 +417,56 @@ describe("course-to-Lexicon export", () => {
   });
 });
 
-describe("core curriculum only in Learn", () => {
+describe("Learn practises the course, Maintain the collection", () => {
+  it("serves lesson words in Learn practice and keeps them out of the Lexicon", async () => {
+    const learner = await signedInUser("practice-learner");
+    await publishCourseVersions(2);
+    await callJson(learner, "POST", "/api/v1/lexicon/entries", 201, {
+      body: personalEntry,
+    });
+    expect(
+      (await finishLesson(learner, COURSE_ID, 2, "greet", GREET_STEPS)).status,
+    ).toBe(200);
+
+    const due = (path: string) =>
+      callJson(learner, "GET", path, 200) as Promise<{
+        data: Array<{ target: { text: string } }>;
+        nextDueAt: string | null;
+      }>;
+    for (const direction of ["recognize", "produce"]) {
+      const learn = await due(
+        `/api/v1/learning/practice/due?language=ru&direction=${direction}&format=flashcard&sessionId=learn`,
+      );
+      expect(learn.data.map((item) => item.target.text).sort()).toEqual([
+        "здравствуй",
+        "спасибо",
+      ]);
+      expect(learn.nextDueAt).toBeNull();
+    }
+    // A review is Learn's own: it schedules a Learn card and imports nothing.
+    const card = (
+      await due(
+        "/api/v1/learning/practice/due?language=ru&direction=recognize&format=flashcard&sessionId=learn",
+      )
+    ).data[0] as unknown as { card: { id: string } };
+    await callJson(learner, "POST", "/api/v1/learning/practice/reviews", 201, {
+      body: {
+        submissionId: "practice-1",
+        cardId: card.card.id,
+        sessionId: "learn",
+        rating: 3,
+      },
+    });
+    expect(await courseImportCount(learner.id)).toBe(0);
+
+    // The personal collection keeps its own queue, and the lesson's words are
+    // not in it until the learner asks for them there.
+    const maintain = await due(
+      "/api/v1/lexicon/practice/due?language=ru&direction=produce&format=flashcard&sessionId=learn",
+    );
+    expect(maintain.data.map((item) => item.target.text)).toEqual(["пока́"]);
+  });
+
   it("serves lessons, references, and resume from course content, never personal vocabulary", async () => {
     const learner = await signedInUser("curriculum-learner");
     await publishCourseVersions(2);
@@ -420,37 +503,6 @@ describe("core curriculum only in Learn", () => {
       `/api/v1/learning/practice?courseId=${COURSE_ID}`,
     );
     expect(practice.status).toBe(404);
-  });
-
-  it("scopes Learn practice to course items while Maintain practice keeps personal vocabulary", async () => {
-    const learner = await signedInUser("scope-learner");
-    await publishCourseVersions(2);
-    await callJson(learner, "POST", "/api/v1/lexicon/entries", 201, {
-      body: personalEntry,
-    });
-    expect(
-      (await finishLesson(learner, COURSE_ID, 2, "greet", GREET_STEPS)).status,
-    ).toBe(200);
-
-    const due = (origin: string) =>
-      callJson(
-        learner,
-        "GET",
-        `/api/v1/lexicon/practice/due?language=ru&direction=produce&format=flashcard&sessionId=scope${origin}`,
-        200,
-      );
-    const learn = await due("&origin=course");
-    expect(
-      learn.data
-        .map((item: { target: { text: string } }) => item.target.text)
-        .sort(),
-    ).toEqual(["здравствуй", "спасибо"]);
-    const maintain = await due("");
-    expect(
-      maintain.data
-        .map((item: { target: { text: string } }) => item.target.text)
-        .sort(),
-    ).toEqual(["здравствуй", "пока́", "спасибо"]);
   });
 });
 
