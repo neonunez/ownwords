@@ -59,6 +59,10 @@ test.describe("on a touch screen", () => {
     await touch(page, at, at, { steps: 0, holdMs: 700 });
     const sheet = page.getByRole("dialog", { name: "sobremesa" });
     await expect(sheet).toBeVisible();
+    // The click the lift makes lands on the sheet's scrim, not the row: it
+    // must not close the sheet it just opened.
+    await page.waitForTimeout(500);
+    await expect(sheet).toBeVisible();
     await expect(page).toHaveURL(/\/maintain\/lexicon$/);
     await expect(
       sheet.getByRole("button", { name: "Open the entry" }),
@@ -112,6 +116,11 @@ test.describe("on a touch screen", () => {
     await page.getByRole("button", { name: "Open the side panel" }).tap();
     const panel = page.getByRole("dialog", { name: "Ownwórds" });
     await expect(panel).toBeVisible();
+    // Visible as soon as it starts sliding in: measured mid-slide, the
+    // heading is still off the screen's edge, where no finger can land.
+    await expect
+      .poll(async () => (await panel.boundingBox())?.x)
+      .toBeGreaterThanOrEqual(0);
     const at = await centre(panel.getByRole("heading", { name: "Ownwórds" }));
 
     await touch(page, at, { x: at.x - 220, y: at.y });

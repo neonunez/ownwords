@@ -37,19 +37,35 @@ export const HOLD_FEEDBACK_MS = 150;
  */
 const SWALLOW_MS = 300;
 
-/** A flag that swallows the next click, for a short while only. */
+/**
+ * Swallows the next click, for a short while only. Caught on the way down
+ * from the window, since the click may land on whatever the gesture put under
+ * the finger (the scrim of the sheet a hold just opened), not the control. A
+ * new press anywhere is a new tap of its own, so it lets that tap through.
+ */
 function useClickSwallow() {
-  const armed = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armed = useRef<((event: MouseEvent) => void) | null>(null);
   const disarm = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    armed.current = false;
+    if (armed.current) {
+      window.removeEventListener("click", armed.current, true);
+      window.removeEventListener("pointerdown", disarm, true);
+    }
+    armed.current = null;
   }, []);
   useEffect(() => disarm, [disarm]);
   const arm = useCallback(() => {
     disarm();
-    armed.current = true;
+    const swallow = (event: MouseEvent) => {
+      disarm();
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    armed.current = swallow;
+    window.addEventListener("click", swallow, true);
+    window.addEventListener("pointerdown", disarm, true);
   }, [disarm]);
   /** Called as the finger lifts: the click, if any, comes within moments. */
   const expire = useCallback(() => {
@@ -57,16 +73,7 @@ function useClickSwallow() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(disarm, SWALLOW_MS);
   }, [disarm]);
-  const onClickCapture = useCallback(
-    (event: ReactMouseEvent<HTMLElement>) => {
-      if (!armed.current) return;
-      disarm();
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [disarm],
-  );
-  return { arm, expire, disarm, onClickCapture };
+  return { arm, expire, disarm };
 }
 
 /**
@@ -122,7 +129,6 @@ export interface LongPressBindings {
   onPointerCancel: () => void;
   onPointerLeave: () => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>) => void;
-  onClickCapture: (event: ReactMouseEvent<HTMLElement>) => void;
 }
 
 /**
@@ -207,7 +213,6 @@ export function useLongPress({
       cancel();
       callback.current();
     },
-    onClickCapture: swallow.onClickCapture,
   };
 
   return { holding, bind };
@@ -257,7 +262,6 @@ export interface DragBindings {
   onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   onPointerCancel: () => void;
-  onClickCapture: (event: ReactMouseEvent<HTMLElement>) => void;
 }
 
 interface Track {
@@ -370,7 +374,6 @@ export function useDrag({
       onRelease({ offset: final, velocity });
     },
     onPointerCancel: reset,
-    onClickCapture: swallow.onClickCapture,
   };
 
   // A gesture switched off part-way (the card it moved has gone) lets go.
