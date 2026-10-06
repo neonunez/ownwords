@@ -25,6 +25,7 @@ export function Switch({
         : { "aria-label": label })}
       disabled={disabled}
       onClick={() => onChange?.(!checked)}
+      className="ow-press-chip"
       style={{
         width: 58,
         height: 44,

@@ -95,6 +95,7 @@ export function SegmentedControl<T extends string>({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.value)}
             onKeyDown={move}
+            className="ow-press-dim"
             style={{
               position: "relative",
               border: 0,
@@ -103,7 +104,6 @@ export function SegmentedControl<T extends string>({
               font: "var(--type-label)",
               color: selected ? "var(--fg-1)" : "var(--fg-2)",
               cursor: "pointer",
-              transition: "color var(--motion-fast)",
               minHeight: 44,
               padding: "0 6px",
               minWidth: 0,

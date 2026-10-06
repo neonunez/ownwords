@@ -73,6 +73,12 @@ export function TextField({
           rows={multiline ? 3 : undefined}
           aria-label={label ? undefined : ariaLabel}
           aria-describedby={hint ? hintId : undefined}
+          // A word the person owns is in any of their languages, so the
+          // phone's keyboard must not capitalise or "correct" it into the
+          // interface language. A caller can still ask otherwise.
+          {...(display
+            ? { autoCapitalize: "none", autoCorrect: "off", spellCheck: false }
+            : {})}
           style={{
             flex: 1,
             minWidth: 0,

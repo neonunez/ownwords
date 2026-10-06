@@ -1,5 +1,11 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   MemoryRouter,
@@ -228,6 +234,30 @@ describe("the side panel", () => {
     );
     await screen.findByRole("dialog", { name: "Ownwórds" });
     expect(document.querySelector("main")).toHaveAttribute("inert");
+  });
+
+  it("is put away by a swipe toward its edge, and keeps its rows tappable", async () => {
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Open the side panel" }),
+    );
+    const panel = await screen.findByRole("dialog", { name: "Ownwórds" });
+    const row = within(panel).getByRole("button", { name: /^Learn/ });
+    const touch = { pointerType: "touch", pointerId: 1, button: 0 } as const;
+
+    // Started on a row, a swipe toward the edge closes the panel and does not
+    // also choose the row it began on.
+    fireEvent.pointerDown(row, { ...touch, clientX: 200, clientY: 300 });
+    fireEvent.pointerMove(row, { ...touch, clientX: 150, clientY: 302 });
+    fireEvent.pointerMove(row, { ...touch, clientX: 40, clientY: 304 });
+    fireEvent.pointerUp(row, { ...touch, clientX: 40, clientY: 304 });
+    fireEvent.click(row);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Maintain" }),
+    ).toBeInTheDocument();
   });
 
   it("is the only way across to the other mode", async () => {

@@ -4,14 +4,25 @@
     <meta charset="utf-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>Ownwords</title>
     <meta
       name="description"
       content="Practise the words you actually use, and learn a new language in the same app."
     />
-    <meta name="theme-color" content="#f8f8f8" />
+    <!-- One per scheme, so the first paint matches before any script runs;
+         ThemeProvider repoints both when Appearance overrides the system. -->
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#f8f8f8"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0a0a0a"
+    />
     <meta name="color-scheme" content="light dark" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

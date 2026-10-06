@@ -26,10 +26,31 @@ test.describe("light and dark", () => {
 
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
-      "content",
-      "#0a0a0a",
-    );
+    // A chosen appearance outranks the system scheme, so both of the
+    // per-scheme theme-colors paint the bars dark, even under a light system.
+    const metas = page.locator('meta[name="theme-color"]');
+    await expect(metas).toHaveCount(2);
+    for (const meta of await metas.all()) {
+      await expect(meta).toHaveAttribute("content", "#0a0a0a");
+    }
+  });
+
+  test("keeps one theme-color per scheme while following the system", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/maintain/progress");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(
+      page.locator(
+        'meta[name="theme-color"][media="(prefers-color-scheme: light)"]',
+      ),
+    ).toHaveAttribute("content", "#f8f8f8");
+    await expect(
+      page.locator(
+        'meta[name="theme-color"][media="(prefers-color-scheme: dark)"]',
+      ),
+    ).toHaveAttribute("content", "#0a0a0a");
   });
 
   test("paints a real background in both themes, never a borrowed one", async ({

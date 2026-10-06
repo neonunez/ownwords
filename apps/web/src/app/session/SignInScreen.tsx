@@ -176,6 +176,10 @@ export function SignInScreen({
               name="invitation-email"
               type="email"
               autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
               value={email}
               onChange={setEmail}
               hint="The address the invitation was sent to."
@@ -184,6 +188,8 @@ export function SignInScreen({
               label="Invitation code"
               name="invitation-code"
               autoComplete="off"
+              autoCapitalize="none"
+              enterKeyHint="go"
               autoCorrect="off"
               spellCheck={false}
               value={code}

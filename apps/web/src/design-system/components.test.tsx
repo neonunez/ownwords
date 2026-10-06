@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Button } from "./core/Button";
 import { Chip } from "./core/Chip";
@@ -11,6 +11,7 @@ import { SegmentedControl } from "./navigation/SegmentedControl";
 import { TabBar } from "./navigation/TabBar";
 import { TopBar } from "./navigation/TopBar";
 import { Card } from "./content/Card";
+import { Sheet } from "./content/Sheet";
 
 describe("state is always written in words", () => {
   it("writes a false friend out, and does not rely on colour", () => {
@@ -227,5 +228,47 @@ describe("navigation", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     rerender(<TopBar title="Entry" onBack={() => {}} />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+});
+
+describe("a sheet", () => {
+  const touch = { pointerType: "touch", pointerId: 1, button: 0 } as const;
+
+  function drag(target: HTMLElement, dy: number) {
+    fireEvent.pointerDown(target, { ...touch, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(target, {
+      ...touch,
+      clientX: 101,
+      clientY: 100 + dy / 2,
+    });
+    fireEvent.pointerMove(target, {
+      ...touch,
+      clientX: 102,
+      clientY: 100 + dy,
+    });
+    fireEvent.pointerUp(target, { ...touch, clientX: 102, clientY: 100 + dy });
+  }
+
+  it("is put away by dragging its head down", () => {
+    const onClose = vi.fn();
+    render(
+      <Sheet open title="Options" onClose={onClose}>
+        <p>Body</p>
+      </Sheet>,
+    );
+    drag(screen.getByRole("heading", { name: "Options" }), 220);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles back after a short drag, and its body never drags it", () => {
+    const onClose = vi.fn();
+    render(
+      <Sheet open title="Options" onClose={onClose}>
+        <p>Body</p>
+      </Sheet>,
+    );
+    drag(screen.getByRole("heading", { name: "Options" }), 15);
+    drag(screen.getByText("Body"), 300);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
