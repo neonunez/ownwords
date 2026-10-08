@@ -73,6 +73,15 @@ test("the API runs before the asset fallback, so the shell never answers for it"
   assert.ok(first.includes("/health"));
 });
 
+test("the Worker runs beside the production database, not the reader", () => {
+  // Production D1 runs in ENAM; every API request makes several sequential D1
+  // calls, so the Worker must sit next to it. Assets stay at the nearest edge.
+  assert.deepEqual(template.placement, {
+    mode: "targeted",
+    region: "aws:us-east-1",
+  });
+});
+
 test("deploying this template publishes no hostname of its own", () => {
   assert.equal(template.workers_dev, false);
   assert.equal(template.routes, undefined);

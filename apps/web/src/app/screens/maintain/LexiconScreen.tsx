@@ -61,10 +61,14 @@ export function LexiconScreen() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
 
-  const languages = useAsync(() => client.listLanguages(), [client]);
+  const languages = useAsync(() => client.listLanguages(), [client], {
+    client,
+    key: "languages",
+  });
   const page = useAsync(
     () => client.listEntries(queryFor(filter, search)),
     [client, filter, search],
+    { client, key: `entries:${JSON.stringify(queryFor(filter, search))}` },
   );
   // Pages read after the first one, for a collection larger than a page.
   // They belong to the first page they followed, so a new search drops them.

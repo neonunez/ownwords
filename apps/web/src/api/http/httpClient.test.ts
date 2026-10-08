@@ -1241,6 +1241,24 @@ describe("recent account data and acknowledgement", () => {
     return { api, client };
   }
 
+  it("names a read scope only for a verified account, and a new one when it changes", async () => {
+    const api = fakeApi({
+      ...signedIn,
+      "POST /api/auth/sign-out": () => new Response(null, { status: 204 }),
+    });
+    const client = createHttpClient({ fetch: api.fetch });
+    expect(client.readScope?.()).toBeNull();
+    await client.getSession();
+    const first = client.readScope?.();
+    expect(first).toEqual(expect.any(String));
+    expect(client.readScope?.()).toBe(first);
+    // Verifying again is a new identity generation, even for the same account.
+    await client.getSession();
+    expect(client.readScope?.()).not.toBe(first);
+    await client.signOut();
+    expect(client.readScope?.()).toBeNull();
+  });
+
   it("consumes PATCH's updated entry without a redundant GET or an early committed result", async () => {
     const ack = deferred<Response>();
     const { api, client } = await connected({

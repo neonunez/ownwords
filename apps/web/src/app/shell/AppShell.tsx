@@ -61,6 +61,7 @@ function ShellBody({
   const languages = useAsync(
     () => client.listLanguages(),
     [client, session?.onboarding],
+    { client, key: "languages" },
   );
 
   const openPanel = useCallback(() => {

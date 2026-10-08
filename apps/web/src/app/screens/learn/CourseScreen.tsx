@@ -45,7 +45,10 @@ export function CourseScreen() {
   const navigate = useNavigate();
   const { openPanel } = useScreen();
   const session = useSession();
-  const state = useAsync(() => client.getCourse(), [client]);
+  const state = useAsync(() => client.getCourse(), [client], {
+    client,
+    key: "course",
+  });
 
   const header = (
     <TopBar title="Course" large mode="Learn · Русский" onMenu={openPanel} />

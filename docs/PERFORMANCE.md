@@ -161,6 +161,25 @@ network-abort journeys; all assertions passed. No measurement-only
 instrumentation or production switch remains in the app. The separate
 no-mistakes/CI gate must validate the committed delivery head before shipping.
 
+## Production geography and screen reopening (2026-10-08)
+
+The owner reported a visible spinner of about a second on every tab in the
+installed app. Live evidence: production D1 runs in **ENAM** with read replicas
+off (`wrangler d1 info`), and requests from Argentina reach the **EZE**
+(Buenos Aires) edge (`cf-ray`). An unauthenticated `GET /api/auth/get-session`
+took **646–828 ms** there, against **274 ms** for the static shell, because the
+Worker ran at EZE and each of its sequential D1 calls crossed to ENAM; a signed-in
+read makes more of them (8 warm / 11 cold above). Two changes:
+
+- The production template sets targeted placement (`aws:us-east-1`) so the Worker
+  runs beside D1: one long round trip per request, local D1 calls. Smart
+  Placement was not used because it needs steady traffic from several places.
+  Assets are still served from the nearest edge. Check `cf-placement` and re-time
+  `get-session` after the release; no post-deploy figure is claimed here.
+- Read-only screens keep their last answer for the verified scope and show it
+  while they read again (stale-while-revalidate). See the backend boundary's
+  "Online-first and recent reads". Practice sittings still read fresh.
+
 ## Remaining bottlenecks and unmeasured limits
 
 - Every actual request still verifies the session and invitation grant. Schema
@@ -176,8 +195,8 @@ no-mistakes/CI gate must validate the committed delivery head before shipping.
   `401`s and app-managed account changes invalidate immediately. There is no
   shared personalized cache, persistent data cache or offline queue.
 - Provider latency, large scheduler histories, rapid uncached search traffic,
-  Worker/D1 serving geography and cold bundle/connection costs remain possible
-  contributors. No new index, placement, replica or cloud-setting claim is made.
+  and cold bundle/connection costs remain possible contributors. Worker/D1
+  geography is addressed by placement above; replicas remain off.
 - No signed-in production iPhone/Safari/Home Screen timing, physical input INP,
   background/foreground behavior or live D1/Worker timing was measured. The
   prior public unsigned-session median (~636 ms) is investigation evidence,

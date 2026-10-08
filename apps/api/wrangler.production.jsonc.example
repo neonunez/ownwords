@@ -18,6 +18,15 @@
   "compatibility_date": "2026-09-15",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  // Run the Worker beside its database, not beside the reader. Production D1 is
+  // in ENAM (`wrangler d1 info`), and a request makes several sequential D1
+  // calls (session, schema verdict, the read itself); from an edge far away,
+  // such as Buenos Aires, each one crossed the continent, so one API read took
+  // about a second. Placed here, the reader pays one long round trip per
+  // request and the D1 calls are local. Static assets are unaffected: they are
+  // always served from the edge nearest the reader. Smart Placement is not
+  // used because it needs steady traffic from several places to decide.
+  "placement": { "mode": "targeted", "region": "aws:us-east-1" },
   "assets": {
     // The app's own production build, `npm run build --workspace @ownwords/web`.
     // Never `../web/demo-dist`: that is the sample-data demo.

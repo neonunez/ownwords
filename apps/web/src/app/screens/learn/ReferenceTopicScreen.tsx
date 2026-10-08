@@ -10,7 +10,10 @@ export function ReferenceTopicScreen() {
   const { topicId = "" } = useParams();
   const client = useClient();
   const navigate = useNavigate();
-  const state = useAsync(() => client.listReferenceTopics(), [client]);
+  const state = useAsync(() => client.listReferenceTopics(), [client], {
+    client,
+    key: "reference",
+  });
   const back = () => navigate(-1);
   const topic = state.data?.find((candidate) => candidate.id === topicId);
   const header = (
