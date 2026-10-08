@@ -24,7 +24,10 @@ export function AlphabetScreen() {
   const { openPanel } = useScreen();
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<AlphabetLetter | null>(null);
-  const state = useAsync(() => client.getAlphabet(), [client]);
+  const state = useAsync(() => client.getAlphabet(), [client], {
+    client,
+    key: "alphabet",
+  });
 
   const header = (
     <TopBar title="Alphabet" large mode="Learn · Русский" onMenu={openPanel} />

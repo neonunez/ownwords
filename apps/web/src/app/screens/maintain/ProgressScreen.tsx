@@ -47,17 +47,21 @@ export function ProgressScreen() {
   const client = useClient();
   const navigate = useNavigate();
   const { openPanel } = useScreen();
-  const state = useAsync(async () => {
-    const [progress, languages] = await Promise.all([
-      client.getProgress(),
-      client.listLanguages(),
-    ]);
-    return {
-      progress,
-      languages,
-      rows: rowsFor(languages, progress.perLanguage),
-    };
-  }, [client]);
+  const state = useAsync(
+    async () => {
+      const [progress, languages] = await Promise.all([
+        client.getProgress(),
+        client.listLanguages(),
+      ]);
+      return {
+        progress,
+        languages,
+        rows: rowsFor(languages, progress.perLanguage),
+      };
+    },
+    [client],
+    { client, key: "progress" },
+  );
 
   if (state.loading && !state.data) {
     return (

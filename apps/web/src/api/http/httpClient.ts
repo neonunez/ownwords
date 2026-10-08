@@ -606,6 +606,11 @@ export function createHttpClient(
       signedOutListeners.add(listener);
       return () => signedOutListeners.delete(listener);
     },
+    readScope() {
+      return accountId === null
+        ? null
+        : JSON.stringify([identityGeneration, accountId, profileGeneration]);
+    },
 
     /* ---- the account ---- */
 
@@ -1228,9 +1233,13 @@ export function createHttpClient(
   for (const [name, candidate] of Object.entries(client)) {
     if (
       typeof candidate !== "function" ||
-      ["onSignedOut", "getSession", "signOut", "signInWithPasskey"].includes(
-        name,
-      )
+      [
+        "onSignedOut",
+        "readScope",
+        "getSession",
+        "signOut",
+        "signInWithPasskey",
+      ].includes(name)
     )
       continue;
     const operation = candidate as (...args: unknown[]) => Promise<unknown>;

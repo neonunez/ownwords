@@ -98,6 +98,13 @@ export interface OwnwordsClient {
    * app can ask the person to sign in again. Returns the unsubscribe.
    */
   onSignedOut(listener: () => void): () => void;
+  /**
+   * The verified account and profile the answers currently belong to, or
+   * `null` before one is verified. A screen may show what it last read under
+   * the same scope while it reads again; any other scope must never see it.
+   * A client without the method has nothing a screen may keep.
+   */
+  readScope?(): string | null;
 
   /* ---- the collection -------------------------------------------------- */
 

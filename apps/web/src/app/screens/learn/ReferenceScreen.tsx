@@ -12,7 +12,10 @@ export function ReferenceScreen() {
   const client = useClient();
   const { openPanel } = useScreen();
   const navigate = useNavigate();
-  const state = useAsync(() => client.listReferenceTopics(), [client]);
+  const state = useAsync(() => client.listReferenceTopics(), [client], {
+    client,
+    key: "reference",
+  });
 
   const header = (
     <TopBar title="Reference" large mode="Learn · Русский" onMenu={openPanel} />

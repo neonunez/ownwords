@@ -158,6 +158,14 @@ are never reused across sittings; individual entry reads remain fresh. Expired
 reads revalidate through the API, and failures are not retained. This is bounded
 recent-data reuse in a running tab, not an offline fallback or persistent cache.
 
+Screens that only show what they read (progress, course outline, alphabet,
+reference, Lexicon list and the languages) also open again on the answer they
+last showed in this tab, then replace it when a fresh read arrives
+(`useAsync`'s `remember`). That memory is per client, bound to `readScope()` —
+the verified identity generation, account and profile generation — and dropped
+whenever the scope changes or is `null`; an answer read under another scope is
+never kept. Practice sittings, lessons, entries and forms do not opt in.
+
 Profile/session changes, sign-out (even a failed attempt) and current-account
 `401`s clear cached data. Writes clear affected reads before and after the
 request, including failures and partial successes; old in-flight answers cannot
